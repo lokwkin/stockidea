@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -43,10 +42,16 @@ function formatPercent(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`
 }
 
+interface Snp500Price {
+  date: string
+  price: number
+}
+
 interface ChartDataPoint {
   date: string
   dateRaw: string
   balance: number
+  snp500Balance?: number
   investments: Investment[]
   rebalanceIndex?: number
 }
@@ -60,13 +65,22 @@ function CustomTooltip(props: any) {
 
   const data = payload[0].payload as ChartDataPoint
   const investments = data.investments || []
+  
+  // Find S&P 500 value from payload
+  const snp500Payload = payload.find((p: any) => p.dataKey === "snp500Balance")
+  const snp500Balance = snp500Payload?.value
 
   return (
     <div className="rounded-lg border bg-card p-3 shadow-lg">
       <p className="font-semibold mb-2 text-sm">{label}</p>
       <p className="text-sm mb-2">
-        Balance: <span className="font-medium">{formatCurrency(data.balance)}</span>
+        Portfolio Balance: <span className="font-medium">{formatCurrency(data.balance)}</span>
       </p>
+      {snp500Balance !== undefined && (
+        <p className="text-sm mb-2">
+          S&P 500: <span className="font-medium">{formatCurrency(snp500Balance)}</span>
+        </p>
+      )}
       {investments.length > 0 && (
         <div className="mt-2 pt-2 border-t">
           <div className="space-y-1.5">
@@ -109,6 +123,7 @@ export function SimulationView() {
     column: null,
     direction: null,
   })
+  const [snp500Prices, setSnp500Prices] = useState<Snp500Price[]>([])
 
   // Load available simulations
   useEffect(() => {
@@ -146,6 +161,30 @@ export function SimulationView() {
       setSelectedSimulation(urlFile)
     }
   }, [urlFile, simulations, selectedSimulation, navigate])
+
+  // Load S&P 500 price data
+  useEffect(() => {
+    let cancelled = false
+
+    fetch("/api/snp500")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load S&P 500 data")
+        return res.json()
+      })
+      .then((data: Snp500Price[]) => {
+        if (!cancelled) {
+          setSnp500Prices(data)
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load S&P 500 data:", err)
+        // Don't set error state, just log it - S&P 500 is optional
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Load simulation data when selected simulation changes
   useEffect(() => {
@@ -361,16 +400,96 @@ export function SimulationView() {
 
   const chartData = useMemo(() => {
     if (!simulationData) return []
+    
+    // Helper function to normalize date strings (remove time component if present)
+    const normalizeDate = (dateStr: string): string => {
+      return dateStr.split('T')[0]
+    }
+    
+    // Find the S&P 500 price on the start date to normalize
+    const startDate = normalizeDate(simulationData.date_start)
+    let startSnp500Price: number | undefined
+    
+    // Try exact match first
+    const exactStartMatch = snp500Prices.find(p => normalizeDate(p.date) === startDate)
+    if (exactStartMatch) {
+      startSnp500Price = exactStartMatch.price
+    } else {
+      // Find the nearest price before or on the start date
+      const startDateParsed = new Date(startDate)
+      const pricesBeforeStart = snp500Prices.filter(p => {
+        const pDate = new Date(p.date)
+        return pDate <= startDateParsed
+      })
+      if (pricesBeforeStart.length > 0) {
+        // Prices are sorted oldest first, so get the last one
+        startSnp500Price = pricesBeforeStart[pricesBeforeStart.length - 1].price
+      }
+    }
+    
+    // If we still don't have a start price, find the closest date
+    if (!startSnp500Price && snp500Prices.length > 0) {
+      const startDateParsed = new Date(startDate)
+      // Find the closest date (before or after)
+      let closestPrice = snp500Prices[0]
+      let minDiff = Math.abs(new Date(closestPrice.date).getTime() - startDateParsed.getTime())
+      
+      for (const price of snp500Prices) {
+        const diff = Math.abs(new Date(price.date).getTime() - startDateParsed.getTime())
+        if (diff < minDiff) {
+          minDiff = diff
+          closestPrice = price
+        }
+      }
+      startSnp500Price = closestPrice.price
+    }
+    
     return simulationData.rebalance_history.map((rebalance, index) => {
+      // Find S&P 500 price for this rebalance date (or nearest before)
+      let snp500Price: number | undefined
+      const rebalanceDate = normalizeDate(rebalance.date)
+      
+      // Try exact match first
+      const exactMatch = snp500Prices.find(p => normalizeDate(p.date) === rebalanceDate)
+      if (exactMatch) {
+        snp500Price = exactMatch.price
+      } else {
+        // Find the nearest price before this date
+        const rebalanceDateParsed = new Date(rebalanceDate)
+        const pricesBefore = snp500Prices.filter(p => {
+          const pDate = new Date(p.date)
+          return pDate <= rebalanceDateParsed
+        })
+        if (pricesBefore.length > 0) {
+          // Prices are sorted oldest first, so get the last one
+          snp500Price = pricesBefore[pricesBefore.length - 1].price
+        } else {
+          // If no price before, use the first available price
+          snp500Price = snp500Prices[0]?.price
+        }
+      }
+      
+      // Normalize S&P 500 price to match initial balance
+      let snp500Balance: number | undefined
+      if (snp500Price && startSnp500Price && startSnp500Price > 0 && simulationData.initial_balance) {
+        snp500Balance = (snp500Price / startSnp500Price) * simulationData.initial_balance
+      }
+      
       return {
         date: formatDate(rebalance.date),
         dateRaw: rebalance.date,
         balance: rebalance.balance,
+        snp500Balance,
         investments: rebalance.investments,
         rebalanceIndex: index,
       }
     })
-  }, [simulationData])
+  }, [simulationData, snp500Prices])
+  
+  // Check if we have any valid S&P 500 balance data
+  const hasSnp500Data = useMemo(() => {
+    return chartData.some(point => point.snp500Balance !== undefined && point.snp500Balance > 0)
+  }, [chartData])
 
   const selectedRebalance = useMemo(() => {
     return selectedRebalanceIndex !== null && simulationData
@@ -553,8 +672,19 @@ export function SimulationView() {
                           }
                         }
                       }}
-                      name="Balance"
+                      name="Portfolio Balance"
                     />
+                    {hasSnp500Data && (
+                      <Line
+                        type="monotone"
+                        dataKey="snp500Balance"
+                        stroke="#8884d8"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        name="S&P 500"
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
                 <p className="mt-2 text-xs text-muted-foreground text-center">

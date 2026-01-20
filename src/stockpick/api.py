@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from stockpick.rule_engine import compile_rule
 from stockpick.types import TrendAnalysis
+from stockpick import data_loader
 from typing import Optional
 from dataclasses import asdict
 
@@ -98,6 +99,31 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
         "analysis_date": data["analysis_date"],
         "data": result_data,
     }
+
+
+@app.get("/snp500")
+def get_snp500_prices() -> list[dict]:
+    """
+    Fetch and return S&P 500 historical price data.
+    
+    Returns a list of price data points with date and price fields.
+    """
+    try:
+        prices = data_loader.fetch_stock_prices("^GSPC", use_cache=True)
+        # Return data sorted by date (oldest first) for easier frontend consumption
+        prices_sorted = sorted(prices, key=lambda x: x.date)
+        return [
+            {
+                "date": price.date.isoformat(),
+                "price": price.price,
+            }
+            for price in prices_sorted
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch S&P 500 data: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
