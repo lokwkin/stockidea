@@ -75,6 +75,7 @@ function getSortValue(stock: StockAnalysis, column: ColumnConfig): number | stri
 }
 
 function formatValue(value: number, type: string, decimals = 2): string {
+  console.log(value, type, decimals)
   if (type === "percent") {
     const sign = value > 0 ? "+" : ""
     return `${sign}${value.toFixed(decimals)}%`

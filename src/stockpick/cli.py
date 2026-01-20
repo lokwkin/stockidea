@@ -23,7 +23,7 @@ def cli():
 
 
 @cli.command()
-@click.argument("date", type=str)
+@click.argument("date", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format (default: today)")
 def analyze(date: str):
     try:
         analysis_date = datetime.strptime(date, "%Y-%m-%d")
@@ -49,14 +49,9 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
             analysis.trend_slope_pct > 1.5
             and analysis.trend_r_squared > 0.8
             and analysis.biggest_monthly_drop_pct > -15
+            and analysis.biggest_biweekly_drop_pct > -15
             and analysis.change_3m_pct > 0
-        )
-    
-    def rule_2(analysis: PriceAnalysis) -> bool:
-        """Default selection criteria for simulation."""
-        return (
-            analysis.trend_slope_pct > 2
-            and analysis.trend_r_squared > 0.8
+            and analysis.change_1m_pct > 0
         )
 
     try:

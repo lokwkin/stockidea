@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import inspect
 from datetime import datetime, timedelta
 from math import floor
 from typing import Callable
@@ -38,6 +39,7 @@ class SimulationResult:
     rebalance_history: list[RebalanceHistory]
     profit_pct: float
     profit: float
+    rule_ref: str
 
 
 class Simulator:
@@ -139,7 +141,6 @@ class Simulator:
         self, criteria: Callable[[PriceAnalysis], bool]
     ) -> SimulationResult:
         balance = self.initial_balance
-        investments: list[Investment] = []
         rebalance_history: list[RebalanceHistory] = []
         date_iter = self.date_start
         while date_iter < self.date_end:
@@ -179,4 +180,5 @@ class Simulator:
             rebalance_history=rebalance_history,
             profit_pct=(balance - self.initial_balance) / self.initial_balance,
             profit=balance - self.initial_balance,
+            rule_ref=inspect.getsource(criteria),
         )

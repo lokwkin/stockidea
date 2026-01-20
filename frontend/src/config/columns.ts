@@ -89,6 +89,13 @@ export const COLUMNS: ColumnConfig[] = [
     decimals: 3,
   },
   {
+    key: "change_1m_pct",
+    displayName: "1M",
+    filterName: "1M Change",
+    type: "percent",
+    decimals: 2,
+  },
+  {
     key: "change_3m_pct",
     displayName: "3M",
     filterName: "3M Change",
@@ -103,7 +110,7 @@ export const COLUMNS: ColumnConfig[] = [
     decimals: 2,
   },
   {
-    key: "overall_change_pct",
+    key: "change_1y_pct",
     displayName: "1Y",
     filterName: "1Y Change",
     type: "percent",

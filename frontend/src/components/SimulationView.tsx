@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { ArrowUp, ArrowDown } from "lucide-react"
 import type { Simulation, Investment } from "@/types/simulation"
@@ -90,11 +91,10 @@ function CustomTooltip(props: any) {
 type SortColumn = "buy_date" | "profit" | "profit_pct" | null
 type SortDirection = "asc" | "desc" | null
 
-interface SimulationViewProps {
-  onNavigateToAnalysis?: (file: string) => void
-}
-
-export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {}) {
+export function SimulationView() {
+  const { file: urlFile } = useParams<{ file?: string }>()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [simulations, setSimulations] = useState<string[]>([])
   const [selectedSimulation, setSelectedSimulation] = useState<string>("")
   const [simulationData, setSimulationData] = useState<Simulation | null>(null)
@@ -120,7 +120,16 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
           throw new Error("No simulation files available")
         }
         setSimulations(files)
-        setSelectedSimulation(files[0])
+        // Use URL file if provided and valid, otherwise use the most recent file
+        if (urlFile && files.includes(urlFile)) {
+          setSelectedSimulation(urlFile)
+        } else {
+          setSelectedSimulation(files[0])
+          // Update URL if no file in URL or invalid file
+          if (!urlFile || !files.includes(urlFile)) {
+            navigate(`/simulation/${files[0]}`, { replace: true })
+          }
+        }
         setLoading(false)
       })
       .catch((err) => {
@@ -128,6 +137,13 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
         setLoading(false)
       })
   }, [])
+
+  // Handle URL file changes
+  useEffect(() => {
+    if (urlFile && simulations.includes(urlFile) && selectedSimulation !== urlFile) {
+      setSelectedSimulation(urlFile)
+    }
+  }, [urlFile, simulations, selectedSimulation, navigate])
 
   // Load simulation data when selected simulation changes
   useEffect(() => {
@@ -164,6 +180,33 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
       cancelled = true
     }
   }, [selectedSimulation])
+
+  // Sync URL query param with selectedRebalanceIndex when simulationData loads or URL changes
+  useEffect(() => {
+    if (!simulationData) return
+
+    const rebalanceDate = searchParams.get("rebalance")
+    
+    if (rebalanceDate) {
+      // Find the index of the rebalance with matching date
+      const index = simulationData.rebalance_history.findIndex(
+        (r) => r.date === rebalanceDate
+      )
+      if (index !== -1) {
+        // Only update if different to avoid loops
+        setSelectedRebalanceIndex((prev) => prev !== index ? index : prev)
+      } else {
+        // Invalid date in URL, remove it
+        const newSearchParams = new URLSearchParams(searchParams)
+        newSearchParams.delete("rebalance")
+        setSearchParams(newSearchParams, { replace: true })
+        setSelectedRebalanceIndex(null)
+      }
+    } else {
+      // URL has no rebalance param, clear selection if set
+      setSelectedRebalanceIndex((prev) => prev !== null ? null : prev)
+    }
+  }, [simulationData, searchParams, setSearchParams])
 
   const handleSort = useCallback((column: SortColumn) => {
     setSortConfig((prev) => {
@@ -217,17 +260,30 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
         return aVal < bVal ? 1 : aVal > bVal ? -1 : 0
       }
     })
-  }, [allInvestments, sortConfig])
+  }, [allInvestments, sortConfig, simulationData])
 
   const handleChartClick = useCallback((data: any) => {
     if (data && data.activePayload && data.activePayload.length > 0) {
       const payload = data.activePayload[0].payload
       const index = payload.rebalanceIndex
-      if (index !== undefined && index !== null) {
-        setSelectedRebalanceIndex((prev) => prev === index ? null : index)
+      if (index !== undefined && index !== null && simulationData) {
+        const newIndex = selectedRebalanceIndex === index ? null : index
+        setSelectedRebalanceIndex(newIndex)
+        
+        // Update URL query param
+        const newSearchParams = new URLSearchParams(searchParams)
+        if (newIndex !== null) {
+          const rebalance = simulationData.rebalance_history[newIndex]
+          if (rebalance) {
+            newSearchParams.set("rebalance", rebalance.date)
+          }
+        } else {
+          newSearchParams.delete("rebalance")
+        }
+        setSearchParams(newSearchParams)
       }
     }
-  }, [])
+  }, [simulationData, selectedRebalanceIndex, searchParams, setSearchParams])
 
   // Custom dot component that handles clicks
   const CustomDot = useCallback((props: any) => {
@@ -238,8 +294,21 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
       e.stopPropagation()
       e.preventDefault()
       const index = payload?.rebalanceIndex
-      if (index !== undefined && index !== null) {
-        setSelectedRebalanceIndex((prev) => prev === index ? null : index)
+      if (index !== undefined && index !== null && simulationData) {
+        const newIndex = selectedRebalanceIndex === index ? null : index
+        setSelectedRebalanceIndex(newIndex)
+        
+        // Update URL query param
+        const newSearchParams = new URLSearchParams(searchParams)
+        if (newIndex !== null) {
+          const rebalance = simulationData.rebalance_history[newIndex]
+          if (rebalance) {
+            newSearchParams.set("rebalance", rebalance.date)
+          }
+        } else {
+          newSearchParams.delete("rebalance")
+        }
+        setSearchParams(newSearchParams)
       }
     }
     
@@ -274,7 +343,7 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
         />
       </g>
     )
-  }, [setSelectedRebalanceIndex])
+  }, [simulationData, selectedRebalanceIndex, searchParams, setSearchParams])
 
   const chartData = useMemo(() => {
     if (!simulationData) return []
@@ -336,7 +405,10 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
             <label htmlFor="simulation-select" className="text-sm font-medium text-muted-foreground">
               Select Simulation:
             </label>
-            <Select value={selectedSimulation} onValueChange={setSelectedSimulation}>
+            <Select value={selectedSimulation} onValueChange={(value) => {
+              setSelectedSimulation(value)
+              navigate(`/simulation/${value}`)
+            }}>
               <SelectTrigger id="simulation-select" className="w-[300px]">
                 <SelectValue placeholder="Select a simulation" />
               </SelectTrigger>
@@ -421,8 +493,21 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
                         cursor: "pointer", 
                         onClick: (_e: any, payload: any) => {
                           const index = payload?.payload?.rebalanceIndex
-                          if (index !== undefined && index !== null) {
-                            setSelectedRebalanceIndex((prev) => prev === index ? null : index)
+                          if (index !== undefined && index !== null && simulationData) {
+                            const newIndex = selectedRebalanceIndex === index ? null : index
+                            setSelectedRebalanceIndex(newIndex)
+                            
+                            // Update URL query param
+                            const newSearchParams = new URLSearchParams(searchParams)
+                            if (newIndex !== null) {
+                              const rebalance = simulationData.rebalance_history[newIndex]
+                              if (rebalance) {
+                                newSearchParams.set("rebalance", rebalance.date)
+                              }
+                            } else {
+                              newSearchParams.delete("rebalance")
+                            }
+                            setSearchParams(newSearchParams)
                           }
                         }
                       }}
@@ -443,21 +528,27 @@ export function SimulationView({ onNavigateToAnalysis }: SimulationViewProps = {
                       Rebalance Details - {formatDate(selectedRebalance.date)}
                     </h2>
                     <div className="flex items-center gap-2">
-                      {selectedRebalance.analysis_ref && onNavigateToAnalysis && (
+                      {selectedRebalance.analysis_ref && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => {
                             // Remove .json extension if present, as API expects filename without extension
                             const file = selectedRebalance.analysis_ref.replace(/\.json$/, "")
-                            onNavigateToAnalysis(file)
+                            navigate(`/analysis/${file}`)
                           }}
                         >
                           Jump to Analysis
                         </Button>
                       )}
                       <button
-                        onClick={() => setSelectedRebalanceIndex(null)}
+                        onClick={() => {
+                          setSelectedRebalanceIndex(null)
+                          // Remove rebalance query param from URL
+                          const newSearchParams = new URLSearchParams(searchParams)
+                          newSearchParams.delete("rebalance")
+                          setSearchParams(newSearchParams)
+                        }}
                         className="text-muted-foreground hover:text-foreground transition-colors"
                       >
                         ×

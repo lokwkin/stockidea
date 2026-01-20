@@ -9,9 +9,10 @@ export interface StockAnalysis {
   biggest_biweekly_drop_pct: number
   biggest_monthly_jump_pct: number
   biggest_monthly_drop_pct: number
-  overall_change_pct: number
+  change_1y_pct: number
   change_6m_pct: number
   change_3m_pct: number
+  change_1m_pct: number
   total_weeks: number
   trend_slope_pct: number
   trend_r_squared: number

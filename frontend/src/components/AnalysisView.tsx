@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useParams, useNavigate } from "react-router-dom"
 import { StockTable } from "@/components/StockTable"
 import type { AnalysisData } from "@/types/stock"
 import {
@@ -18,12 +19,9 @@ function formatDate(dateStr: string): string {
   return `${day}/${month}/${year}`
 }
 
-interface AnalysisViewProps {
-  initialFile?: string | null
-  onFileSelected?: () => void
-}
-
-export function AnalysisView({ initialFile, onFileSelected }: AnalysisViewProps = {}) {
+export function AnalysisView() {
+  const { file: urlFile } = useParams<{ file?: string }>()
+  const navigate = useNavigate()
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingFiles, setLoadingFiles] = useState(true)
@@ -43,12 +41,15 @@ export function AnalysisView({ initialFile, onFileSelected }: AnalysisViewProps 
           throw new Error("No analysis files available")
         }
         setAvailableFiles(files)
-        // Use initialFile if provided, otherwise use the most recent file
-        if (initialFile && files.includes(initialFile)) {
-          setSelectedFile(initialFile)
-          onFileSelected?.()
+        // Use URL file if provided and valid, otherwise use the most recent file
+        if (urlFile && files.includes(urlFile)) {
+          setSelectedFile(urlFile)
         } else {
           setSelectedFile(files[0])
+          // Update URL if no file in URL or invalid file
+          if (!urlFile || !files.includes(urlFile)) {
+            navigate(`/analysis/${files[0]}`, { replace: true })
+          }
         }
         setLoadingFiles(false)
       })
@@ -58,13 +59,12 @@ export function AnalysisView({ initialFile, onFileSelected }: AnalysisViewProps 
       })
   }, [])
 
-  // Handle initialFile changes after mount
+  // Handle URL file changes
   useEffect(() => {
-    if (initialFile && availableFiles.includes(initialFile) && selectedFile !== initialFile) {
-      setSelectedFile(initialFile)
-      onFileSelected?.()
+    if (urlFile && availableFiles.includes(urlFile) && selectedFile !== urlFile) {
+      setSelectedFile(urlFile)
     }
-  }, [initialFile, availableFiles, selectedFile, onFileSelected])
+  }, [urlFile, availableFiles, selectedFile])
 
   // Load analysis data when selected file changes
   useEffect(() => {
@@ -144,7 +144,7 @@ export function AnalysisView({ initialFile, onFileSelected }: AnalysisViewProps 
             </label>
             <Select value={selectedFile} onValueChange={(value) => {
               setSelectedFile(value)
-              onFileSelected?.()
+              navigate(`/analysis/${value}`)
             }}>
               <SelectTrigger id="file-select" className="w-[250px]">
                 <SelectValue placeholder="Select an analysis file" />

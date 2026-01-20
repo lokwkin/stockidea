@@ -31,9 +31,10 @@ class PriceAnalysis:
     biggest_biweekly_drop_pct: float
     biggest_monthly_jump_pct: float
     biggest_monthly_drop_pct: float
-    overall_change_pct: float  # change between from_date and to_date
+    change_1y_pct: float
     change_6m_pct: float  # 6 month change
     change_3m_pct: float  # 3 month change
+    change_1m_pct: float  # 1 month change
     total_weeks: int
     # Trend analysis (linear regression)
     trend_slope_pct: float  # Weekly slope as % of starting price
@@ -57,9 +58,10 @@ class PriceAnalysis:
             f"Trend slope (per week): {self.trend_slope_pct:+7.3f}%\n"
             f"Trend stability (R²):   {self.trend_r_squared:7.3f}\n"
             f"{'─' * 50}\n"
+            f"Change (1 month):   {self.change_1m_pct:+7.2f}%\n"
             f"Change (3 months):  {self.change_3m_pct:+7.2f}%\n"
             f"Change (6 months):  {self.change_6m_pct:+7.2f}%\n"
-            f"Change (1 year):    {self.overall_change_pct:+7.2f}%"
+            f"Change (1 year):    {self.change_1y_pct:+7.2f}%"
         )
 
 
@@ -198,8 +200,9 @@ def analyze_stock(
     biggest_monthly_drop = min(monthly_changes) if monthly_changes else 0.0
 
     # Overall change (first week to last week)
-    overall_change = _calculate_pct_change(
-        weekly_data[0].closing_price, weekly_data[-1].closing_price
+    weeks_1y = min(52, len(weekly_data) - 1)
+    change_1y = _calculate_pct_change(
+        weekly_data[-weeks_1y - 1].closing_price, weekly_data[-1].closing_price
     )
 
     # 6-month change (approximately 26 weeks)
@@ -219,6 +222,15 @@ def analyze_stock(
             weekly_data[-weeks_3m - 1].closing_price, weekly_data[-1].closing_price
         )
         if weeks_3m > 0
+        else 0.0
+    )
+    
+    weeks_1m = min(4, len(weekly_data) - 1)
+    change_1m = (
+        _calculate_pct_change(
+            weekly_data[-weeks_1m - 1].closing_price, weekly_data[-1].closing_price
+        )
+        if weeks_1m > 0
         else 0.0
     )
 
@@ -247,9 +259,10 @@ def analyze_stock(
         biggest_biweekly_drop_pct=biggest_biweekly_drop,
         biggest_monthly_jump_pct=biggest_monthly_jump,
         biggest_monthly_drop_pct=biggest_monthly_drop,
-        overall_change_pct=overall_change,
+        change_1y_pct=change_1y,
         change_6m_pct=change_6m,
         change_3m_pct=change_3m,
+        change_1m_pct=change_1m,
         total_weeks=total_weeks,
         trend_slope_pct=slope_pct,
         trend_r_squared=r_squared,
