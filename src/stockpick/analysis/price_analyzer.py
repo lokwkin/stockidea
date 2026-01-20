@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 import numpy as np
-from scipy import stats
+from scipy import stats  # type: ignore
 
 from stockpick.fetch_prices import StockPrice
 
@@ -121,8 +121,17 @@ def _calculate_pct_change(old: float, new: float) -> float:
     return ((new - old) / old) * 100
 
 
+def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], from_date: date, to_date: date) -> list[PriceAnalysis]:
+    analyses: list[PriceAnalysis] = []
+    for symbol, prices in stock_prices.items():
+        analysis = analyze_stock(symbol=symbol, prices=prices, from_date=from_date, to_date=to_date)
+        if analysis:
+            analyses.append(analysis)
+    return analyses
+
+
 def analyze_stock(
-    prices: list[StockPrice], from_date: date, to_date: date
+    symbol: str, prices: list[StockPrice], from_date: date, to_date: date
 ) -> PriceAnalysis | None:
     """
     Analyze stock price data and return weekly metrics.
@@ -135,8 +144,6 @@ def analyze_stock(
     """
     if not prices:
         return None
-
-    symbol = prices[0].symbol
 
     weekly_data = _aggregate_to_weekly(prices, date_from=from_date, date_to=to_date)
 

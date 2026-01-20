@@ -1,12 +1,12 @@
 """CLI commands for stockpick using Click."""
 
 import click
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from stockpick import (
     PriceAnalysis,
     Simulator,
-    generate_report,
+    analyze_batch,
     save_simulation_result,
     stock_loader,
 )
@@ -30,7 +30,10 @@ def analyze(date: str):
     except ValueError:
         raise click.BadParameter(f"Invalid date format: {date}. Use YYYY-MM-DD format.")
 
-    generate_report(analysis_date)
+    symbols = stock_loader.load_sp_500()
+    start_from = analysis_date - timedelta(weeks=52 * 1)
+
+    analyze_batch(symbols=symbols, period_start=start_from, period_end=analysis_date)
 
 
 @cli.command()
@@ -45,12 +48,15 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
         return (
             analysis.trend_slope_pct > 1.5
             and analysis.trend_r_squared > 0.8
-            and analysis.biggest_weekly_drop_pct > -10
-            and analysis.biggest_biweekly_drop_pct > -15
             and analysis.biggest_monthly_drop_pct > -15
             and analysis.change_3m_pct > 0
-            and analysis.change_6m_pct > 0
-            and analysis.overall_change_pct > 0
+        )
+    
+    def rule_2(analysis: PriceAnalysis) -> bool:
+        """Default selection criteria for simulation."""
+        return (
+            analysis.trend_slope_pct > 2
+            and analysis.trend_r_squared > 0.8
         )
 
     try:

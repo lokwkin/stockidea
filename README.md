@@ -1,3 +1,10 @@
+# Stockpick
+
+
+### Start API
+```
+uv run python -m stockpick.api
+```
 
 ### Analyze
 ```bash

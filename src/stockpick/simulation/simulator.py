@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import floor
 from typing import Callable
 
-from stockpick.analysis.price_analyzer import PriceAnalysis, analyze_stock
+from stockpick.analysis.analysis import save_analysis
+from stockpick.analysis.price_analyzer import PriceAnalysis, analyze_stock_batch
 from stockpick.fetch_prices import StockPrice, fetch_stock_prices_batch
 
 
@@ -19,9 +21,13 @@ class Investment:
 
 
 @dataclass
-class BalanceHistory:
+class RebalanceHistory:
     date: datetime
     balance: float
+    analysis_ref: str
+    investments: list[Investment]
+    profit_pct: float
+    profit: float
 
 
 @dataclass
@@ -29,8 +35,7 @@ class SimulationResult:
     initial_balance: float
     date_start: datetime
     date_end: datetime
-    investments: list[Investment]
-    balance_history: list[BalanceHistory]
+    rebalance_history: list[RebalanceHistory]
     profit_pct: float
     profit: float
 
@@ -86,33 +91,35 @@ class Simulator:
 
     def pick_stocks(
         self, today: datetime, criteria: Callable[[PriceAnalysis], bool]
-    ) -> list[PriceAnalysis]:
+    ) -> tuple[list[PriceAnalysis], str]:
         if self.stock_prices is None:
             raise ValueError("Stock prices not loaded")
 
         filtered_stocks: list[PriceAnalysis] = []
         analyze_from = today - timedelta(weeks=52 * 1)
         print(f"Analyzing data from {analyze_from.date()} to {today.date()}")
-        for symbol in self.stock_prices.keys():
+        analyses = analyze_stock_batch(stock_prices=self.stock_prices,
+                                       from_date=analyze_from.date(), to_date=today.date())
+        filename = save_analysis(analysis=analyses, analysis_date=today)
+        if filename.endswith(".json"):
+            filename = filename[:-5]
 
-            analysis = analyze_stock(self.stock_prices[symbol], from_date=analyze_from.date(), to_date=today.date())
-            if analysis is None:
-                continue
-            if criteria(analysis):
-                filtered_stocks.append(analysis)
+        # Filter stocks by criteria
+        filtered_stocks = [analysis for analysis in analyses if criteria(analysis)]
 
-        # TODO: sort by weight
+        # Sort by weight
+        # TODO: use a more sophisticated algorithm
         filtered_stocks.sort(key=lambda x: x.trend_slope_pct, reverse=True)
         selected_stocks = filtered_stocks[: self.max_stocks]
         print(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
-        return selected_stocks
+        return selected_stocks, filename
 
     def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
         buy_stock_price = self.get_stock_price(symbol, buy_date).price
         sell_stock_price = self.get_stock_price(symbol, sell_date).price
-        position = amount / buy_stock_price
+        position = floor(amount / buy_stock_price)
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = profit / buy_stock_price
 
@@ -133,17 +140,18 @@ class Simulator:
     ) -> SimulationResult:
         balance = self.initial_balance
         investments: list[Investment] = []
-        balance_history: list[BalanceHistory] = []
+        rebalance_history: list[RebalanceHistory] = []
         date_iter = self.date_start
         while date_iter < self.date_end:
-            balance_history.append(BalanceHistory(date=date_iter, balance=balance))
             end_date = date_iter + timedelta(weeks=self.rebalance_interval_weeks)
             if end_date > self.date_end:
                 break
 
             print(
                 f"====================== Rebalance on {date_iter.date()} (Balance: {balance})==========================")
-            selected_stocks = self.pick_stocks(date_iter, criteria)
+            selected_stocks, analysis_ref = self.pick_stocks(date_iter, criteria)
+
+            investments: list[Investment] = []
             for stock in selected_stocks:
                 # split in average
                 investment = self.invest(
@@ -151,16 +159,24 @@ class Simulator:
                 )
                 investments.append(investment)
 
-                balance += investment.profit
+            # Calculate the profit of this rebalance
+            profit = sum(investment.profit for investment in investments)
+            profit_pct = profit / balance
 
+            rebalance_history.append(RebalanceHistory(date=date_iter, balance=balance,
+                                     analysis_ref=analysis_ref, investments=investments, profit_pct=profit_pct, profit=profit))
+
+            # Update the balance
+            balance += profit
+
+            # Iterate to the next rebalance date
             date_iter = end_date
 
         return SimulationResult(
             initial_balance=self.initial_balance,
             date_start=self.date_start,
             date_end=self.date_end,
-            investments=investments,
-            balance_history=balance_history,
+            rebalance_history=rebalance_history,
             profit_pct=(balance - self.initial_balance) / self.initial_balance,
             profit=balance - self.initial_balance,
         )
