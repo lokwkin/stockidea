@@ -8,13 +8,16 @@ uv run python -m stockpick.api
 
 ### Analyze
 ```bash
-Usage: python -m stockpick.cli analyze [OPTIONS] [DATE]
+Usage: python -m stockpick.cli analyze [OPTIONS]
 
-  Analyze stock prices for a given date. If no date is provided, the current
-  date is used.
+  Analyze stock prices for a given date
+
+Options:
+  -d, --date TEXT  Analysis date in YYYY-MM-DD format
+  --help           Show this message and exit.
 
 # Example
-uv run python -m stockpick.cli analyze 2026-01-20
+uv run python -m stockpick.cli analyze -d 2026-01-20
 ```
 
 #### Analysis Field Description
@@ -39,8 +42,21 @@ uv run python -m stockpick.cli analyze 2026-01-20
 | `trend_slope_pct` | float | Linear trend slope as percentage of starting price per week |
 | `trend_r_squared` | float | R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend) |
 
+### Pick 
+```bash
+Usage: python -m stockpick.cli pick [OPTIONS]
 
+  Apply a rule onto analyzed stock prices for a given date range.
 
+Options:
+  -d, --date TEXT  Analysis date in YYYY-MM-DD format
+  -r, --rule TEXT  Rule expression string (e.g., 'change_3m_pct > 10 AND
+                   biggest_biweekly_drop_pct > 15')  [required]
+  --help           Show this message and exit.
+
+# Example
+uv run python -m stockpick.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
+```
 
 ### Simulate
 ```bash
@@ -55,7 +71,8 @@ Options:
                                   [required]
   --date-end TEXT                 Simulation end date in YYYY-MM-DD format
                                   [required]
-
+  --rule TEXT                     Rule expression string (e.g., 'change_3m_pct
+                                  > 10 AND biggest_biweekly_drop_pct > 15')
 # Example
-uv run python -m stockpick.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20
+uv run python -m stockpick.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
 ```

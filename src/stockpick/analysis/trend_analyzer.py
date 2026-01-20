@@ -1,12 +1,12 @@
 """Analyze stock price data with weekly metrics."""
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 from scipy import stats  # type: ignore
 
-from stockpick.fetch_prices import StockPrice
+from stockpick.types import TrendAnalysis, StockPrice
 
 
 @dataclass
@@ -15,54 +15,6 @@ class WeeklyData:
 
     week_ending: date
     closing_price: float
-
-
-@dataclass
-class PriceAnalysis:
-    """Analysis results for a stock between two dates."""
-
-    symbol: str
-    weeks_above_1_week_ago: int
-    weeks_above_2_weeks_ago: int
-    weeks_above_4_weeks_ago: int
-    biggest_weekly_jump_pct: float
-    biggest_weekly_drop_pct: float
-    biggest_biweekly_jump_pct: float
-    biggest_biweekly_drop_pct: float
-    biggest_monthly_jump_pct: float
-    biggest_monthly_drop_pct: float
-    change_1y_pct: float
-    change_6m_pct: float  # 6 month change
-    change_3m_pct: float  # 3 month change
-    change_1m_pct: float  # 1 month change
-    total_weeks: int
-    # Trend analysis (linear regression)
-    trend_slope_pct: float  # Weekly slope as % of starting price
-    trend_r_squared: float  # R² (0-1), how well data fits the trend line
-
-    def __str__(self) -> str:
-        return (
-            f"Analysis for {self.symbol} ({self.total_weeks} weeks)\n"
-            f"{'─' * 50}\n"
-            f"Weeks closing > 1 week ago:  {self.weeks_above_1_week_ago:3d} ({self.weeks_above_1_week_ago / max(1, self.total_weeks - 1) * 100:5.1f}%)\n"
-            f"Weeks closing > 2 weeks ago: {self.weeks_above_2_weeks_ago:3d} ({self.weeks_above_2_weeks_ago / max(1, self.total_weeks - 2) * 100:5.1f}%)\n"
-            f"Weeks closing > 4 weeks ago: {self.weeks_above_4_weeks_ago:3d} ({self.weeks_above_4_weeks_ago / max(1, self.total_weeks - 4) * 100:5.1f}%)\n"
-            f"{'─' * 50}\n"
-            f"Biggest weekly jump:    {self.biggest_weekly_jump_pct:+7.2f}%\n"
-            f"Biggest weekly drop:    {self.biggest_weekly_drop_pct:+7.2f}%\n"
-            f"Biggest biweekly jump:  {self.biggest_biweekly_jump_pct:+7.2f}%\n"
-            f"Biggest biweekly drop:  {self.biggest_biweekly_drop_pct:+7.2f}%\n"
-            f"Biggest monthly jump:   {self.biggest_monthly_jump_pct:+7.2f}%\n"
-            f"Biggest monthly drop:   {self.biggest_monthly_drop_pct:+7.2f}%\n"
-            f"{'─' * 50}\n"
-            f"Trend slope (per week): {self.trend_slope_pct:+7.3f}%\n"
-            f"Trend stability (R²):   {self.trend_r_squared:7.3f}\n"
-            f"{'─' * 50}\n"
-            f"Change (1 month):   {self.change_1m_pct:+7.2f}%\n"
-            f"Change (3 months):  {self.change_3m_pct:+7.2f}%\n"
-            f"Change (6 months):  {self.change_6m_pct:+7.2f}%\n"
-            f"Change (1 year):    {self.change_1y_pct:+7.2f}%"
-        )
 
 
 def _get_week_ending(d: date) -> date:
@@ -123,18 +75,9 @@ def _calculate_pct_change(old: float, new: float) -> float:
     return ((new - old) / old) * 100
 
 
-def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], from_date: date, to_date: date) -> list[PriceAnalysis]:
-    analyses: list[PriceAnalysis] = []
-    for symbol, prices in stock_prices.items():
-        analysis = analyze_stock(symbol=symbol, prices=prices, from_date=from_date, to_date=to_date)
-        if analysis:
-            analyses.append(analysis)
-    return analyses
-
-
 def analyze_stock(
-    symbol: str, prices: list[StockPrice], from_date: date, to_date: date
-) -> PriceAnalysis | None:
+    symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
+) -> TrendAnalysis | None:
     """
     Analyze stock price data and return weekly metrics.
 
@@ -142,12 +85,12 @@ def analyze_stock(
         prices: List of StockPrice objects (as returned by fetch_stock_prices)
 
     Returns:
-        PriceAnalysis with all computed metrics, or None if insufficient data
+        TrendAnalysis with all computed metrics, or None if insufficient data
     """
     if not prices:
         return None
 
-    weekly_data = _aggregate_to_weekly(prices, date_from=from_date, date_to=to_date)
+    weekly_data = _aggregate_to_weekly(prices, date_from=from_date.date(), date_to=to_date.date())
 
     if len(weekly_data) < 5:
         return None
@@ -224,7 +167,7 @@ def analyze_stock(
         if weeks_3m > 0
         else 0.0
     )
-    
+
     weeks_1m = min(4, len(weekly_data) - 1)
     change_1m = (
         _calculate_pct_change(
@@ -248,7 +191,7 @@ def analyze_stock(
     # R² is r_value squared
     r_squared = r_value**2
 
-    return PriceAnalysis(
+    return TrendAnalysis(
         symbol=symbol,
         weeks_above_1_week_ago=weeks_above_1,
         weeks_above_2_weeks_ago=weeks_above_2,

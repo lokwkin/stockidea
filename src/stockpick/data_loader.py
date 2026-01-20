@@ -1,28 +1,19 @@
 """Fetch historical stock price data from Financial Modeling Prep API."""
 
+import csv
 import json
 import os
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 import requests
 
-from stockpick.config import PROJECT_ROOT
+from stockpick.config import DATA_DIR, PROJECT_ROOT
+from stockpick.types import StockPrice
 
 BASE_URL = "https://financialmodelingprep.com/stable/historical-price-eod/light"
 # Cache directory at project root level
 CACHE_DIR = PROJECT_ROOT / ".cache"
-
-
-@dataclass
-class StockPrice:
-    """Represents a single day's stock price data."""
-
-    symbol: str
-    date: date
-    price: float
-    volume: int
 
 
 def _get_cache_path(symbol: str) -> Path:
@@ -139,3 +130,36 @@ def fetch_stock_prices_batch(symbols: list[str], use_cache: bool = True) -> dict
             print(f"Error fetching stock prices for {symbol}: {e}")
             continue
     return prices
+
+
+DEFAULT_STOCKS_FILE = DATA_DIR / "stocks.txt"
+SP_500_FILE = DATA_DIR / "sp_500.csv"
+
+
+def load_symbols(filepath: Path = DEFAULT_STOCKS_FILE) -> list[str]:
+    """
+    Load stock symbols from a text file (one symbol per line).
+
+    Args:
+        filepath: Path to the stocks file
+
+    Returns:
+        List of stock ticker symbols
+    """
+    with open(filepath) as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def load_sp_500(filepath: Path = SP_500_FILE) -> list[str]:
+    """
+    Load S&P 500 stock symbols from the CSV file.
+
+    Args:
+        filepath: Path to the sp_500.csv file
+
+    Returns:
+        List of S&P 500 stock ticker symbols
+    """
+    with open(filepath, newline="") as f:
+        reader = csv.DictReader(f)
+        return [row["Symbol"] for row in reader]

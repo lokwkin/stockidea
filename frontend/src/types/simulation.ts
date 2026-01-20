@@ -25,4 +25,5 @@ export interface Simulation {
   rebalance_history: RebalanceHistory[]
   profit_pct: number
   profit: number
+  rule_ref?: string | null
 }

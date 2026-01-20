@@ -1,26 +1,41 @@
 
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+from typing import Callable
 
-from stockpick.analysis.price_analyzer import PriceAnalysis, analyze_stock_batch
-from stockpick.fetch_prices import fetch_stock_prices_batch
+from stockpick.analysis import trend_analyzer
 from stockpick.config import OUTPUT_DIR
+from stockpick.types import StockPrice, TrendAnalysis
 
 
-def analyze_batch(symbols: list[str], period_start: datetime, period_end: datetime) -> str:
-    analyses: list[PriceAnalysis] = []
+def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callable[[TrendAnalysis], bool]
+               ) -> list[TrendAnalysis]:
 
-    stock_prices = fetch_stock_prices_batch(symbols)
-    analyses = analyze_stock_batch(stock_prices=stock_prices, from_date=period_start.date(), to_date=period_end.date())
+    filtered_stocks = [analysis for analysis in analyses if rule_func(analysis)]
+
+    # Sort by weight
+    # TODO: use a more sophisticated algorithm
+    filtered_stocks.sort(key=lambda x: x.trend_slope_pct, reverse=True)
+    selected_stocks = filtered_stocks[: max_stocks]
+    print(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
+    return selected_stocks
+
+
+def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], analysis_date: datetime, back_period_weeks: int = 52) -> tuple[list[TrendAnalysis], str]:
+    analyses: list[TrendAnalysis] = []
+    for symbol, prices in stock_prices.items():
+        analysis = trend_analyzer.analyze_stock(
+            symbol=symbol, prices=prices, from_date=analysis_date - timedelta(weeks=back_period_weeks), to_date=analysis_date)
+        if analysis:
+            analyses.append(analysis)
 
     print(f"\nAnalyzed {len(analyses)} stocks successfully")
+    filename = save_analysis(analysis=analyses, analysis_date=analysis_date)
+    return analyses, filename
 
-    filename = save_analysis(analysis=analyses, analysis_date=period_end)
-    return filename
 
-
-def save_analysis(analysis: list[PriceAnalysis], analysis_date: datetime) -> str:
+def save_analysis(analysis: list[TrendAnalysis], analysis_date: datetime) -> str:
     analysis_data = [asdict(a) for a in analysis]
     filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"
     analysis_path = OUTPUT_DIR / "analysis" / filename

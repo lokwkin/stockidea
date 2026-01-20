@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { StockTable } from "@/components/StockTable"
 import type { AnalysisData } from "@/types/stock"
@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 
 function formatDate(dateStr: string): string {
   // Format: "20251021" -> "21/10/2025"
@@ -28,6 +29,7 @@ export function AnalysisView() {
   const [error, setError] = useState<string | null>(null)
   const [availableFiles, setAvailableFiles] = useState<string[]>([])
   const [selectedFile, setSelectedFile] = useState<string>("")
+  const [rule, setRule] = useState<string>("")
 
   // Load available files on mount
   useEffect(() => {
@@ -80,7 +82,9 @@ export function AnalysisView() {
       }
     })
 
-    fetch(`/api/analysis/${selectedFile}`)
+    const url = `/api/analysis/${selectedFile}`
+
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load analysis data")
         return res.json()
@@ -102,6 +106,36 @@ export function AnalysisView() {
       cancelled = true
     }
   }, [selectedFile])
+
+  const handleRuleSubmit = useCallback(() => {
+    if (!selectedFile) return
+
+    setLoading(true)
+    setError(null)
+
+    const url = rule.trim()
+      ? `/api/analysis/${selectedFile}?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/analysis/${selectedFile}`
+
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load analysis data")
+        return res.json()
+      })
+      .then((json: AnalysisData) => {
+        setData(json)
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError(err.message)
+        setLoading(false)
+      })
+  }, [selectedFile, rule])
+
+  const generatedDate = useMemo(() => {
+    const now = new Date()
+    return `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`
+  }, [])
 
   if (loadingFiles) {
     return (
@@ -128,15 +162,12 @@ export function AnalysisView() {
     )
   }
 
-  const now = new Date()
-  const generatedDate = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`
-
   return (
     <div className="relative mx-auto max-w-[2000px] px-4 py-8 sm:px-6 lg:px-8">
         {/* Header */}
         <header className="mb-8 text-center">
           <h1 className="mb-4 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
-            Stock Analysis Report
+            Stock Trend Data
           </h1>
           <div className="mb-4 flex items-center justify-center gap-4">
             <label htmlFor="file-select" className="text-sm font-medium text-muted-foreground">
@@ -166,6 +197,39 @@ export function AnalysisView() {
           )}
         </header>
 
+        {/* Rule Input Section */}
+        <div className="mb-6 flex flex-col items-center gap-4">
+          <div className="w-full max-w-2xl">
+            <label htmlFor="rule-input" className="text-sm font-medium text-muted-foreground mb-1 block">
+              Rule (optional):
+            </label>
+            <div className="flex gap-2 items-start">
+              <textarea
+                id="rule-input"
+                value={rule}
+                onChange={(e) => setRule(e.target.value)}
+                placeholder="Enter rule expression (e.g., change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15)"
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    handleRuleSubmit()
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={handleRuleSubmit}
+                className="shrink-0"
+                disabled={loading}
+              >
+                Apply Rule
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {/* Main Table */}
         <main>
           {loading ? (
@@ -187,7 +251,7 @@ export function AnalysisView() {
 
         {/* Footer */}
         <footer className="mt-8 text-center text-sm text-muted-foreground">
-          <p>Click column headers to sort • Add filters above the table</p>
+          <p>Click column headers to sort</p>
         </footer>
       </div>
   )

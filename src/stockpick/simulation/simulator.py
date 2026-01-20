@@ -1,45 +1,13 @@
-from dataclasses import dataclass
-import inspect
+from dataclasses import asdict
 from datetime import datetime, timedelta
+import json
 from math import floor
 from typing import Callable
 
-from stockpick.analysis.analysis import save_analysis
-from stockpick.analysis.price_analyzer import PriceAnalysis, analyze_stock_batch
-from stockpick.fetch_prices import StockPrice, fetch_stock_prices_batch
-
-
-@dataclass
-class Investment:
-    symbol: str
-    position: float
-    buy_price: float
-    buy_date: datetime
-    sell_price: float
-    sell_date: datetime
-    profit_pct: float
-    profit: float
-
-
-@dataclass
-class RebalanceHistory:
-    date: datetime
-    balance: float
-    analysis_ref: str
-    investments: list[Investment]
-    profit_pct: float
-    profit: float
-
-
-@dataclass
-class SimulationResult:
-    initial_balance: float
-    date_start: datetime
-    date_end: datetime
-    rebalance_history: list[RebalanceHistory]
-    profit_pct: float
-    profit: float
-    rule_ref: str
+from stockpick.analysis import analysis
+from stockpick import data_loader
+from stockpick.config import OUTPUT_DIR
+from stockpick.types import Investment, RebalanceHistory, SimulationResult, StockPrice, TrendAnalysis
 
 
 class Simulator:
@@ -49,6 +17,8 @@ class Simulator:
     date_end: datetime
     rebalance_interval_weeks: int
     max_stocks: int
+    rule_func: Callable[[TrendAnalysis], bool]
+    rule_raw: str
 
     def __init__(
         self,
@@ -56,6 +26,8 @@ class Simulator:
         rebalance_interval_weeks: int,
         date_start: datetime,
         date_end: datetime,
+        rule_func: Callable[[TrendAnalysis], bool],
+        rule_raw: str,
     ):
         self.initial_balance = 10000
         self.stock_prices = None
@@ -63,6 +35,8 @@ class Simulator:
         self.rebalance_interval_weeks = rebalance_interval_weeks
         self.date_start = date_start
         self.date_end = date_end
+        self.rule_func = rule_func
+        self.rule_raw = rule_raw
 
     def get_stock_price(self, symbol: str, date: datetime) -> StockPrice:
         if self.stock_prices is None or symbol not in self.stock_prices:
@@ -85,35 +59,27 @@ class Simulator:
         )
 
     def load_stock_prices(self, symbols: list[str]) -> None:
-        self.stock_prices = fetch_stock_prices_batch(symbols)
+        self.stock_prices = data_loader.fetch_stock_prices_batch(symbols)
+
+        if self.stock_prices is None:
+            raise ValueError("Stock prices not loaded")
 
         for symbol, prices in self.stock_prices.items():
             # Make sure the prices are sorted by date, from newest to oldest
             self.stock_prices[symbol].sort(key=lambda x: x.date, reverse=True)
 
-    def pick_stocks(
-        self, today: datetime, criteria: Callable[[PriceAnalysis], bool]
-    ) -> tuple[list[PriceAnalysis], str]:
+    def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
         if self.stock_prices is None:
             raise ValueError("Stock prices not loaded")
 
-        filtered_stocks: list[PriceAnalysis] = []
-        analyze_from = today - timedelta(weeks=52 * 1)
-        print(f"Analyzing data from {analyze_from.date()} to {today.date()}")
-        analyses = analyze_stock_batch(stock_prices=self.stock_prices,
-                                       from_date=analyze_from.date(), to_date=today.date())
-        filename = save_analysis(analysis=analyses, analysis_date=today)
+        print(f"Analyzing data from {today.date()} to {today.date()}")
+        analyses, filename = analysis.analyze_stock_batch(stock_prices=self.stock_prices,
+                                                          analysis_date=today, back_period_weeks=52)
+        filename = analysis.save_analysis(analysis=analyses, analysis_date=today)
         if filename.endswith(".json"):
             filename = filename[:-5]
 
-        # Filter stocks by criteria
-        filtered_stocks = [analysis for analysis in analyses if criteria(analysis)]
-
-        # Sort by weight
-        # TODO: use a more sophisticated algorithm
-        filtered_stocks.sort(key=lambda x: x.trend_slope_pct, reverse=True)
-        selected_stocks = filtered_stocks[: self.max_stocks]
-        print(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
+        selected_stocks = analysis.apply_rule(analyses=analyses, max_stocks=self.max_stocks, rule_func=self.rule_func)
         return selected_stocks, filename
 
     def invest(
@@ -137,9 +103,7 @@ class Simulator:
         )
         return investment
 
-    def simulate(
-        self, criteria: Callable[[PriceAnalysis], bool]
-    ) -> SimulationResult:
+    def simulate(self) -> SimulationResult:
         balance = self.initial_balance
         rebalance_history: list[RebalanceHistory] = []
         date_iter = self.date_start
@@ -150,7 +114,7 @@ class Simulator:
 
             print(
                 f"====================== Rebalance on {date_iter.date()} (Balance: {balance})==========================")
-            selected_stocks, analysis_ref = self.pick_stocks(date_iter, criteria)
+            selected_stocks, analysis_ref = self.pick_stocks(date_iter)
 
             investments: list[Investment] = []
             for stock in selected_stocks:
@@ -180,5 +144,20 @@ class Simulator:
             rebalance_history=rebalance_history,
             profit_pct=(balance - self.initial_balance) / self.initial_balance,
             profit=balance - self.initial_balance,
-            rule_ref=inspect.getsource(criteria),
+            rule_ref=self.rule_raw,
         )
+
+
+def save_simulation_result(result: SimulationResult) -> None:
+    """Save simulation result to JSON file in output directory."""
+
+    def serialize(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+    result_dict = asdict(result)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = OUTPUT_DIR / "simulations" / f"simulation_{timestamp.format('%Y%m%d%H%M%S')}.json"
+    output_path.write_text(json.dumps(result_dict, indent=2, default=serialize))
+    print(f"✓ Simulation result saved: {output_path}")

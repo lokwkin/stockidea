@@ -9,6 +9,11 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 
+from stockpick.rule_engine import compile_rule
+from stockpick.types import TrendAnalysis
+from typing import Optional
+from dataclasses import asdict
+
 load_dotenv()
 
 app = FastAPI(title="StockPick API", version="0.1.0")
@@ -63,9 +68,36 @@ def list_analysis() -> list[str]:
 
 
 @app.get("/analysis/{filename}")
-def get_analysis(filename: str) -> dict:
-    """Return the full JSON content of an analysis file."""
-    return _read_json_file(ANALYSIS_DIR, filename)
+def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
+    """
+    Return the full JSON content of an analysis file.
+
+    If rule is provided, applies the rule to filter the trend analysis results.
+    """
+    data = _read_json_file(ANALYSIS_DIR, filename)
+
+    # Convert JSON data to TrendAnalysis objects
+    analyses = [TrendAnalysis(**item) for item in data["data"]]
+
+    # Apply rule if provided
+    if rule:
+        try:
+            rule_func = compile_rule(rule)
+            # Filter analyses using the rule (no max_stocks limit for API)
+            filtered_analyses = [a for a in analyses if rule_func(a)]
+            # Sort by trend_slope_pct (same as apply_rule does)
+            filtered_analyses.sort(key=lambda x: x.trend_slope_pct, reverse=True)
+            analyses = filtered_analyses
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
+
+    # Convert back to dict format
+    result_data = [asdict(a) for a in analyses]
+
+    return {
+        "analysis_date": data["analysis_date"],
+        "data": result_data,
+    }
 
 
 if __name__ == "__main__":

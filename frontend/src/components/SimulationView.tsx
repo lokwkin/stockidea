@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowUp, ArrowDown, Copy, Check } from "lucide-react"
 import type { Simulation, Investment } from "@/types/simulation"
 import {
   Select,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -100,6 +101,7 @@ export function SimulationView() {
   const [simulationData, setSimulationData] = useState<Simulation | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
+  const [ruleCopied, setRuleCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
@@ -217,6 +219,18 @@ export function SimulationView() {
       return { column, direction: "asc" }
     })
   }, [])
+
+  const handleCopyRule = useCallback(async () => {
+    if (!simulationData?.rule_ref) return
+    
+    try {
+      await navigator.clipboard.writeText(simulationData.rule_ref)
+      setRuleCopied(true)
+      setTimeout(() => setRuleCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy rule:", err)
+    }
+  }, [simulationData?.rule_ref])
 
   // Flatten all investments from all rebalances
   const allInvestments = useMemo(() => {
@@ -422,24 +436,52 @@ export function SimulationView() {
             </Select>
           </div>
           {simulationData && (
-            <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
-              <span>
-                Period: {formatDate(simulationData.date_start)} - {formatDate(simulationData.date_end)}
-              </span>
-              <span>•</span>
-              <span>Initial Balance: {formatCurrency(simulationData.initial_balance)}</span>
-              <span>•</span>
-              <span>
-                Final Balance:{" "}
-                {formatCurrency(
-                  simulationData.rebalance_history[simulationData.rebalance_history.length - 1]?.balance ||
-                    simulationData.initial_balance
-                )}
-              </span>
-              <span>•</span>
-              <span className={totalProfitPct >= 0 ? "text-green-600" : "text-red-600"}>
-                Total Return: {formatPercent(totalProfitPct)} ({formatCurrency(totalProfit)})
-              </span>
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
+                <span>
+                  Period: {formatDate(simulationData.date_start)} - {formatDate(simulationData.date_end)}
+                </span>
+                <span>•</span>
+                <span>Initial Balance: {formatCurrency(simulationData.initial_balance)}</span>
+                <span>•</span>
+                <span>
+                  Final Balance:{" "}
+                  {formatCurrency(
+                    simulationData.rebalance_history[simulationData.rebalance_history.length - 1]?.balance ||
+                      simulationData.initial_balance
+                  )}
+                </span>
+                <span>•</span>
+                <span className={totalProfitPct >= 0 ? "text-green-600" : "text-red-600"}>
+                  Total Return: {formatPercent(totalProfitPct)} ({formatCurrency(totalProfit)})
+                </span>
+              </div>
+              {simulationData.rule_ref && (
+                <div className="w-full max-w-2xl">
+                  <div className="flex gap-2 items-start">
+                    <textarea
+                      readOnly
+                      value={simulationData.rule_ref}
+                      className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                      rows={Math.min(Math.max(simulationData.rule_ref.split('\n').length, 2), 6)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyRule}
+                      className="shrink-0"
+                      title="Copy rule to clipboard"
+                    >
+                      {ruleCopied ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </header>
