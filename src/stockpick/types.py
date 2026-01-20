@@ -2,16 +2,30 @@
 
 from dataclasses import dataclass
 from datetime import datetime, date
+import enum
+
+from pydantic import BaseModel
 
 
-@dataclass
-class StockPrice:
+class StockIndex(enum.Enum):
+    SP500 = "sp500"
+    DOWJONES = "dowjones"
+    NASDAQ = "nasdaq"
+
+
+class StockPrice(BaseModel):
     """Represents a single day's stock price data."""
 
     symbol: str
     date: date
     price: float
     volume: int
+
+
+class ConstituentChange(BaseModel):
+    date: date
+    added_symbol: str | None = None
+    removed_symbol: str | None = None
 
 
 @dataclass
