@@ -22,8 +22,8 @@ def cli():
     pass
 
 
-@cli.command()
-@click.argument("date", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format (default: today)")
+@cli.command(help="Analyze stock prices for a given date. If no date is provided, the current date is used.")
+@click.argument("date", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"))
 def analyze(date: str):
     try:
         analysis_date = datetime.strptime(date, "%Y-%m-%d")
