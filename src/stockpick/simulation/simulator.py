@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable
+
+from stockpick.analysis.price_analyzer import PriceAnalysis, analyze_stock
 from stockpick.fetch_prices import StockPrice, fetch_stock_prices_batch
-from stockpick.price_analyzer import PriceAnalysis, analyze_stock
 
 
 @dataclass
@@ -44,7 +45,6 @@ class Simulator:
 
     def __init__(
         self,
-        criteria: list[Callable[[PriceAnalysis], bool]],
         max_stocks: int,
         rebalance_interval_weeks: int,
         date_start: datetime,

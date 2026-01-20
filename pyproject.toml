@@ -5,15 +5,18 @@ description = "Stock price analysis and reporting tool"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "click>=8.1.0",
+    "fastapi>=0.115.0",
     "numpy>=2.0.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
     "scipy>=1.14.0",
     "types-requests>=2.32.4.20260107",
+    "uvicorn>=0.34.0",
 ]
 
 [project.scripts]
-stockpick = "stockpick.main:main"
+stockpick = "stockpick.cli:cli"
 
 [build-system]
 requires = ["hatchling"]

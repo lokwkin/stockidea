@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import numpy as np
 from scipy import stats
 
-from .fetch_prices import StockPrice
+from stockpick.fetch_prices import StockPrice
 
 
 @dataclass
