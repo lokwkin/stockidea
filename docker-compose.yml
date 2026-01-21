@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: stockpick-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./output:/app/output
+      - ./.cache:/app/.cache
+      - ./data:/app/data
+    environment:
+      - FMP_API_KEY=${FMP_API_KEY}
+    env_file:
+      - .env
+    command: uv run uvicorn stockpick.api:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - stockpick-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: stockpick-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      - VITE_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - stockpick-network
+
+networks:
+  stockpick-network:
+    driver: bridge

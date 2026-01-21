@@ -2,7 +2,6 @@
 name = "stockpick"
 version = "0.1.0"
 description = "Stock price analysis and reporting tool"
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.0",
