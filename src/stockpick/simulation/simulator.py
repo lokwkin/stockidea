@@ -40,7 +40,7 @@ class Simulator:
 
     def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
         # Get the symbols of the constituent
-        symbols = market_data.get_constituent(self.from_index, today)
+        symbols = market_data.get_constituent(self.from_index, today.date())
 
         # Get the stock price histories
         stock_prices = market_data.get_stock_price_histories(symbols)
@@ -59,8 +59,8 @@ class Simulator:
     def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
-        buy_stock_price = market_data.get_stock_price(symbol, buy_date).price
-        sell_stock_price = market_data.get_stock_price(symbol, sell_date).price
+        buy_stock_price = market_data.get_stock_price(symbol, buy_date.date(), nearest=True).price
+        sell_stock_price = market_data.get_stock_price(symbol, sell_date.date(), nearest=True).price
         position = floor(amount / buy_stock_price)
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = profit / buy_stock_price

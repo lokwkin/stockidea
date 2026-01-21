@@ -1,7 +1,6 @@
-from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date
 import json
-from typing import Any, Literal
+from typing import Any
 from stockpick.config import CACHE_DIR, FMP_API_KEY, FMP_BASE_URL
 from stockpick.types import ConstituentChange, StockIndex, StockPrice
 import os
@@ -16,7 +15,6 @@ if not os.getenv("FMP_API_KEY"):
 def fetch_stock_prices(symbol: str) -> list[StockPrice]:
     cached = _load_from_cache(f"price_{symbol}")
     if cached is not None:
-        print(f"Loaded stock prices for {symbol} from cache")
         return [StockPrice.model_validate(price) for price in cached]
 
     print(f"Fetching stock prices for {symbol}")
@@ -48,7 +46,6 @@ def fetch_historical_constituent(index: StockIndex) -> list[ConstituentChange]:
 
     cached = _load_from_cache(f"historical-{index.value}-constituent")
     if cached is not None:
-        print(f"Loaded historical constituent for {index.value} from cache")
         return [ConstituentChange.model_validate(change) for change in cached]
 
     print(f"Fetching historical constituent for {index.value}")
@@ -78,6 +75,9 @@ def fetch_historical_constituent(index: StockIndex) -> list[ConstituentChange]:
     return changes
 
 
+PRICE_CACHE: dict[str, list[StockPrice]] = {}
+
+
 def _save_to_cache(key: str, data: Any) -> None:
     CACHE_DIR.mkdir(exist_ok=True)
     cache_path = CACHE_DIR / f"{key}.json"
@@ -88,8 +88,13 @@ def _save_to_cache(key: str, data: Any) -> None:
             "data": data,
         }, f)
 
+    PRICE_CACHE[key] = data
+
 
 def _load_from_cache(key: str) -> Any | None:
+    if key in PRICE_CACHE:
+        return PRICE_CACHE[key]
+
     CACHE_DIR.mkdir(exist_ok=True)
     cache_path = CACHE_DIR / f"{key}.json"
 
