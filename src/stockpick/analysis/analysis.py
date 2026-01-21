@@ -35,6 +35,15 @@ def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], analysis_date
     return analyses, filename
 
 
+def load_analysis(analysis_date: datetime) -> tuple[list[TrendAnalysis], str] | None:
+    filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"
+    analysis_path = OUTPUT_DIR / "analysis" / filename
+    if not analysis_path.exists():
+        return None
+    analysis_data = json.loads(analysis_path.read_text())
+    return [TrendAnalysis(**item) for item in analysis_data["data"]], filename
+
+
 def save_analysis(analysis: list[TrendAnalysis], analysis_date: datetime) -> str:
     analysis_data = [asdict(a) for a in analysis]
     filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"

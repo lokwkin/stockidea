@@ -45,11 +45,18 @@ class Simulator:
         # Get the stock price histories
         stock_prices = market_data.get_stock_price_histories(symbols)
 
-        print(f"Analyzing data from {today.date()} to {today.date()}")
+        result = analysis.load_analysis(today)
+        if result is not None:
+            # Got the analysis from the cache
+            analyses, filename = result
+        else:
+            # No analysis found in the cache, analyze the data
+            print(f"Analyzing data from {today.date()} to {today.date()}")
 
-        analyses, filename = analysis.analyze_stock_batch(stock_prices=stock_prices,
-                                                          analysis_date=today, back_period_weeks=52)
-        filename = analysis.save_analysis(analysis=analyses, analysis_date=today)
+            analyses, filename = analysis.analyze_stock_batch(stock_prices=stock_prices,
+                                                              analysis_date=today, back_period_weeks=52)
+            filename = analysis.save_analysis(analysis=analyses, analysis_date=today)
+
         if filename.endswith(".json"):
             filename = filename[:-5]
 
