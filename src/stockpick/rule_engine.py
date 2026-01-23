@@ -47,7 +47,8 @@ class RuleEngine:
                 "change_3m_pct": analysis.change_3m_pct,
                 "change_1m_pct": analysis.change_1m_pct,
                 "total_weeks": analysis.total_weeks,
-                "trend_slope_pct": analysis.trend_slope_pct,
+                # "trend_slope_pct": analysis.trend_slope_pct,
+                "annualized_slope": analysis.annualized_slope,
                 "trend_r_squared": analysis.trend_r_squared,
             }
             try:

@@ -40,6 +40,7 @@ uv run python -m stockpick.cli analyze -d 2026-01-20
 | `change_1m_pct` | float | Percentage change over 1 month (4 weeks) |
 | `total_weeks` | int | Total number of weeks analyzed |
 | `trend_slope_pct` | float | Linear trend slope as percentage of starting price per week |
+| `annualized_slope` | float | |
 | `trend_r_squared` | float | R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend) |
 
 ### Pick 

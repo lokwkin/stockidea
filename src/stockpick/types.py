@@ -13,13 +13,22 @@ class StockIndex(enum.Enum):
     NASDAQ = "nasdaq"
 
 
+class FMPAdjustedStockPrice(BaseModel):
+    symbol: str
+    date: str
+    adjOpen: float
+    adjHigh: float
+    adjLow: float
+    adjClose: float
+    volume: int
+
+
 class StockPrice(BaseModel):
     """Represents a single day's stock price data."""
 
     symbol: str
     date: date
-    price: float
-    volume: int
+    adj_close: float
 
 
 class ConstituentChange(BaseModel):
@@ -28,8 +37,7 @@ class ConstituentChange(BaseModel):
     removed_symbol: str | None = None
 
 
-@dataclass
-class TrendAnalysis:
+class TrendAnalysis(BaseModel):
     """Analysis results for a stock between two dates."""
 
     symbol: str
@@ -48,7 +56,8 @@ class TrendAnalysis:
     change_1m_pct: float  # 1 month change
     total_weeks: int
     # Trend analysis (linear regression)
-    trend_slope_pct: float  # Weekly slope as % of starting price
+    # trend_slope_pct: float  # Weekly slope as % of starting price
+    annualized_slope: float  # Annualized slope as % of starting price
     trend_r_squared: float  # R² (0-1), how well data fits the trend line
 
     def __str__(self) -> str:
@@ -66,7 +75,8 @@ class TrendAnalysis:
             f"Biggest monthly jump:   {self.biggest_monthly_jump_pct:+7.2f}%\n"
             f"Biggest monthly drop:   {self.biggest_monthly_drop_pct:+7.2f}%\n"
             f"{'─' * 50}\n"
-            f"Trend slope (per week): {self.trend_slope_pct:+7.3f}%\n"
+            # f"Trend slope (per week): {self.trend_slope_pct:+7.3f}%\n"
+            f"Trend slope (per year): {self.annualized_slope:+7.3f}%\n"
             f"Trend stability (R²):   {self.trend_r_squared:7.3f}\n"
             f"{'─' * 50}\n"
             f"Change (1 month):   {self.change_1m_pct:+7.2f}%\n"

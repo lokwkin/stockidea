@@ -1,5 +1,6 @@
 """FastAPI endpoints for stock analysis and simulations."""
 
+from datetime import datetime, timedelta
 from stockpick.config import OUTPUT_DIR
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
@@ -12,7 +13,6 @@ from stockpick.rule_engine import compile_rule
 from stockpick.types import TrendAnalysis
 from stockpick.datasource import market_data
 from typing import Optional
-from dataclasses import asdict
 
 app = FastAPI(title="StockPick API", version="0.1.0")
 
@@ -84,13 +84,13 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
             # Filter analyses using the rule (no max_stocks limit for API)
             filtered_analyses = [a for a in analyses if rule_func(a)]
             # Sort by trend_slope_pct (same as apply_rule does)
-            filtered_analyses.sort(key=lambda x: x.trend_slope_pct, reverse=True)
+            filtered_analyses.sort(key=lambda x: x.annualized_slope, reverse=True)
             analyses = filtered_analyses
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     # Convert back to dict format
-    result_data = [asdict(a) for a in analyses]
+    result_data = [a.model_dump() for a in analyses]
 
     return {
         "analysis_date": data["analysis_date"],
@@ -106,13 +106,14 @@ def get_snp500_prices() -> list[dict]:
     Returns a list of price data points with date and price fields.
     """
     try:
-        prices = market_data.get_stock_price_history("^GSPC")
+        prices = market_data.get_stock_price_history(
+            "^GSPC", from_date=datetime.now().date() - timedelta(weeks=1000), to_date=datetime.now().date())
         # Return data sorted by date (oldest first) for easier frontend consumption
         prices_sorted = sorted(prices, key=lambda x: x.date)
         return [
             {
                 "date": price.date.isoformat(),
-                "price": price.price,
+                "price": price.adj_close,
             }
             for price in prices_sorted
         ]

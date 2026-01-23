@@ -6,7 +6,8 @@ from typing import Callable
 
 from stockpick.analysis import analysis
 from stockpick.config import OUTPUT_DIR
-from stockpick.datasource import market_data
+from stockpick.datasource import constituent, market_data
+from stockpick.helper import next_monday
 from stockpick.types import Investment, RebalanceHistory, SimulationResult, StockIndex, TrendAnalysis
 
 
@@ -40,10 +41,11 @@ class Simulator:
 
     def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
         # Get the symbols of the constituent
-        symbols = market_data.get_constituent(self.from_index, today.date())
+        symbols = constituent.get_constituent_at(self.from_index, today.date())
 
         # Get the stock price histories
-        stock_prices = market_data.get_stock_price_histories(symbols)
+        stock_prices = market_data.get_stock_price_histories(
+            symbols, from_date=today.date() - timedelta(weeks=52), to_date=today.date())
 
         result = analysis.load_analysis(today)
         if result is not None:
@@ -55,7 +57,6 @@ class Simulator:
 
             analyses, filename = analysis.analyze_stock_batch(stock_prices=stock_prices,
                                                               analysis_date=today, back_period_weeks=52)
-            filename = analysis.save_analysis(analysis=analyses, analysis_date=today)
 
         if filename.endswith(".json"):
             filename = filename[:-5]
@@ -66,11 +67,11 @@ class Simulator:
     def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
-        buy_stock_price = market_data.get_stock_price(symbol, buy_date.date(), nearest=True).price
-        sell_stock_price = market_data.get_stock_price(symbol, sell_date.date(), nearest=True).price
+        buy_stock_price = market_data.get_stock_price(symbol, buy_date.date(), nearest=True).adj_close
+        sell_stock_price = market_data.get_stock_price(symbol, sell_date.date(), nearest=True).adj_close
         position = floor(amount / buy_stock_price)
         profit = (sell_stock_price - buy_stock_price) * position
-        profit_pct = profit / buy_stock_price
+        profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
 
         investment = Investment(
             symbol=symbol,
@@ -87,7 +88,7 @@ class Simulator:
     def simulate(self) -> SimulationResult:
         balance = self.initial_balance
         rebalance_history: list[RebalanceHistory] = []
-        date_iter = self.date_start
+        date_iter = next_monday(self.date_start)  # Start from the next Monday
         while date_iter < self.date_end:
             end_date = date_iter + timedelta(weeks=self.rebalance_interval_weeks)
             if end_date > self.date_end:

@@ -1,5 +1,4 @@
 
-from dataclasses import asdict
 from datetime import datetime, timedelta
 import json
 from typing import Callable
@@ -16,7 +15,7 @@ def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callab
 
     # Sort by weight
     # TODO: use a more sophisticated algorithm
-    filtered_stocks.sort(key=lambda x: x.trend_slope_pct, reverse=True)
+    filtered_stocks.sort(key=lambda x: x.annualized_slope, reverse=True)
     selected_stocks = filtered_stocks[: max_stocks]
     print(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
     return selected_stocks
@@ -41,11 +40,11 @@ def load_analysis(analysis_date: datetime) -> tuple[list[TrendAnalysis], str] | 
     if not analysis_path.exists():
         return None
     analysis_data = json.loads(analysis_path.read_text())
-    return [TrendAnalysis(**item) for item in analysis_data["data"]], filename
+    return [TrendAnalysis.model_validate(item) for item in analysis_data["data"]], filename
 
 
 def save_analysis(analysis: list[TrendAnalysis], analysis_date: datetime) -> str:
-    analysis_data = [asdict(a) for a in analysis]
+    analysis_data = [a.model_dump() for a in analysis]
     filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"
     analysis_path = OUTPUT_DIR / "analysis" / filename
     analysis_path.write_text(
