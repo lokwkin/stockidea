@@ -23,7 +23,7 @@ def _analyze(analysis_date: datetime, index: StockIndex) -> list[TrendAnalysis]:
     symbols = constituent.get_constituent_at(index, analysis_date.date())
 
     # Get the stock price histories
-    stock_prices = market_data.get_stock_price_histories(
+    stock_prices = market_data.get_stock_price_batch_histories(
         symbols, from_date=analysis_date.date() - timedelta(weeks=52), to_date=analysis_date.date())
 
     # Analyze the stock prices
@@ -35,7 +35,14 @@ def _analyze(analysis_date: datetime, index: StockIndex) -> list[TrendAnalysis]:
 
 @cli.command("analyze", help="Analyze stock prices for a given date")
 @click.option("--date", "-d", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format")
-@click.option("--index", "-i", type=click.Choice([member.value for member in StockIndex]), required=False, default="sp500", help="Stock index to analyze")
+@click.option(
+    "--index",
+    "-i",
+    type=click.Choice([member.value for member in StockIndex]),
+    required=False,
+    default=StockIndex.SP500.value,
+    help="Stock index to analyze"
+)
 def analyze(date: str, index: str):
     stock_index = StockIndex(index)
     try:
@@ -49,7 +56,14 @@ def analyze(date: str, index: str):
 @cli.command("pick", help="Apply a rule onto analyzed stock prices for a given date range.")
 @click.option("--date", "-d", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format")
 @click.option("--rule", "-r", type=str, required=True, help="Rule expression string (e.g., 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15')")
-@click.option("--index", "-i", type=click.Choice([member.value for member in StockIndex]), required=False, default="sp500", help="Stock index to analyze")
+@click.option(
+    "--index",
+    "-i",
+    type=click.Choice([member.value for member in StockIndex]),
+    required=False,
+    default=StockIndex.SP500.value,
+    help="Stock index to analyze"
+)
 def pick(date: str, rule: str, index: str):
     stock_index = StockIndex(index)
     try:
@@ -73,7 +87,13 @@ def pick(date: str, rule: str, index: str):
 @click.option("--rebalance-interval-weeks", type=int, default=2, help="Rebalance interval in weeks (default: 2)")
 @click.option("--date-start", type=str, required=True, help="Simulation start date in YYYY-MM-DD format")
 @click.option("--date-end", type=str, required=True, help="Simulation end date in YYYY-MM-DD format")
-@click.option("--index", "-i", type=click.Choice([member.value for member in StockIndex]), required=False, default="sp500", help="Stock index to analyze")
+@click.option(
+    "--index", "-i",
+    type=click.Choice([member.value for member in StockIndex]),
+    required=False,
+    default=StockIndex.SP500.value,
+    help="Stock index to analyze"
+)
 @click.option(
     "--rule", "-r",
     type=str,
@@ -108,6 +128,7 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
         rule_func=rule_func,
         rule_raw=rule,
         from_index=stock_index,
+        baseline_index=StockIndex.SP500,
     )
 
     simulation_result = simulator.simulate()

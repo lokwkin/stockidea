@@ -10,7 +10,8 @@ from pathlib import Path
 import uvicorn
 
 from stockpick.rule_engine import compile_rule
-from stockpick.types import TrendAnalysis
+from stockpick.simulation.simulator import Simulator, save_simulation_result
+from stockpick.types import SimulationConfig, StockIndex, TrendAnalysis
 from stockpick.datasource import market_data
 from typing import Optional
 
@@ -98,6 +99,28 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
     }
 
 
+@app.post("/simulate")
+def simulate(simulation_config: SimulationConfig) -> dict:
+    """
+    Simulate an investment strategy.
+    """
+    simulator = Simulator(
+        max_stocks=simulation_config.max_stocks,
+        rebalance_interval_weeks=simulation_config.rebalance_interval_weeks,
+        date_start=simulation_config.date_start,
+        date_end=simulation_config.date_end,
+        rule_func=compile_rule(simulation_config.rule),
+        rule_raw=simulation_config.rule,
+        from_index=simulation_config.index,
+        baseline_index=StockIndex.SP500,
+    )
+    simulation_result = simulator.simulate()
+
+    save_simulation_result(simulation_result)
+
+    return simulation_result.model_dump()
+
+
 @app.get("/snp500")
 def get_snp500_prices() -> list[dict]:
     """
@@ -106,17 +129,8 @@ def get_snp500_prices() -> list[dict]:
     Returns a list of price data points with date and price fields.
     """
     try:
-        prices = market_data.get_stock_price_history(
-            "^GSPC", from_date=datetime.now().date() - timedelta(weeks=1000), to_date=datetime.now().date())
-        # Return data sorted by date (oldest first) for easier frontend consumption
-        prices_sorted = sorted(prices, key=lambda x: x.date)
-        return [
-            {
-                "date": price.date.isoformat(),
-                "price": price.adj_close,
-            }
-            for price in prices_sorted
-        ]
+        prices = market_data.get_index_prices(StockIndex.SP500, datetime.now() - timedelta(weeks=700), datetime.now())
+        return [price.model_dump() for price in prices]
     except Exception as e:
         raise HTTPException(
             status_code=500,

@@ -142,7 +142,7 @@ export function AnalysisView() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Loading analysis files...</p>
+          <p className="text-muted-foreground">Loading trend data files...</p>
         </div>
       </div>
     )
@@ -155,7 +155,7 @@ export function AnalysisView() {
           <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
           <p className="text-muted-foreground">{error ?? "No data available"}</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Make sure the API server is running and analysis files are available
+            Make sure the API server is running and trend data files are available
           </p>
         </div>
       </div>
@@ -171,14 +171,14 @@ export function AnalysisView() {
           </h1>
           <div className="mb-4 flex items-center justify-center gap-4">
             <label htmlFor="file-select" className="text-sm font-medium text-muted-foreground">
-              Select Analysis:
+              Select Trend Data:
             </label>
             <Select value={selectedFile} onValueChange={(value) => {
               setSelectedFile(value)
               navigate(`/analysis/${value}`)
             }}>
               <SelectTrigger id="file-select" className="w-[250px]">
-                <SelectValue placeholder="Select an analysis file" />
+                <SelectValue placeholder="Select a trend data file" />
               </SelectTrigger>
               <SelectContent>
                 {availableFiles.map((file) => (
@@ -191,7 +191,7 @@ export function AnalysisView() {
           </div>
           {data && (
             <p className="text-sm text-muted-foreground">
-              Analysis Date: {formatDate(data.analysis_date)} • Generated on{" "}
+              Trend Data Date: {formatDate(data.analysis_date)} • Generated on{" "}
               {generatedDate} • {data.data.length} stocks analyzed • 52-week metrics
             </p>
           )}
@@ -236,7 +236,7 @@ export function AnalysisView() {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                <p className="text-muted-foreground">Loading analysis data...</p>
+                <p className="text-muted-foreground">Loading trend data...</p>
               </div>
             </div>
           ) : error ? (

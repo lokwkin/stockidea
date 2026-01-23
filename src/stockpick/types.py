@@ -1,6 +1,5 @@
 
 
-from dataclasses import dataclass
 from datetime import datetime, date
 import enum
 
@@ -8,9 +7,16 @@ from pydantic import BaseModel
 
 
 class StockIndex(enum.Enum):
-    SP500 = "sp500"
-    DOWJONES = "dowjones"
-    NASDAQ = "nasdaq"
+    SP500 = "SP500"
+    DOWJONES = "DOWJONES"
+    NASDAQ = "NASDAQ"
+
+
+class FMPLightPrice(BaseModel):
+    symbol: str
+    date: str
+    price: float
+    volume: int
 
 
 class FMPAdjustedStockPrice(BaseModel):
@@ -86,8 +92,7 @@ class TrendAnalysis(BaseModel):
         )
 
 
-@dataclass
-class Investment:
+class Investment(BaseModel):
     symbol: str
     position: float
     buy_price: float
@@ -98,8 +103,7 @@ class Investment:
     profit: float
 
 
-@dataclass
-class RebalanceHistory:
+class RebalanceHistory(BaseModel):
     date: datetime
     balance: float
     analysis_ref: str
@@ -107,13 +111,29 @@ class RebalanceHistory:
     profit_pct: float
     profit: float
 
+    baseline_profit_pct: float
+    baseline_profit: float
+    baseline_balance: float
 
-@dataclass
-class SimulationResult:
+
+class SimulationConfig(BaseModel):
+    max_stocks: int
+    rebalance_interval_weeks: int
+    date_start: datetime
+    date_end: datetime
+    rule: str
+    index: StockIndex
+
+
+class SimulationResult(BaseModel):
     initial_balance: float
     date_start: datetime
     date_end: datetime
     rebalance_history: list[RebalanceHistory]
     profit_pct: float
     profit: float
-    rule_ref: str | None = None
+    baseline_index: StockIndex
+    baseline_profit_pct: float
+    baseline_profit: float
+    baseline_balance: float
+    simulation_config: SimulationConfig

@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from stockpick.config import CACHE_DIR
-from stockpick.types import FMPAdjustedStockPrice, StockPrice
+from stockpick.types import FMPAdjustedStockPrice, FMPLightPrice, StockIndex, StockPrice
 
 
 class Base(DeclarativeBase):
@@ -85,6 +85,27 @@ def get_db_session() -> Session:
     return _DB_SESSION
 
 
+def save_index_prices(db_session: Session, index: StockIndex, prices: list[FMPLightPrice]) -> None:
+    print(f"Saving index prices for {index.value}")
+    # Delete existing entries for this index
+    delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == index.value)
+    delete_metadata_stmt = delete(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == index.value)
+    db_session.execute(delete_prices_stmt)
+    db_session.execute(delete_metadata_stmt)
+    db_session.commit()
+
+    # Insert new entries
+    for price in prices:
+        price_record = DBStockPrice(
+            symbol=index.value, date=date.fromisoformat(price.date), adj_close=price.price, close=price.price, volume=price.volume)
+        db_session.add(price_record)
+
+    # Update metadata for this index
+    metadata = DBStockPriceMetadata(symbol=index.value, fetched_at=datetime.now())
+    db_session.add(metadata)
+    db_session.commit()
+
+
 def save_stock_prices(db_session: Session, symbol: str, prices: list[FMPAdjustedStockPrice]) -> None:
 
     # Delete existing entries for this symbol
@@ -129,7 +150,7 @@ def is_data_fresh(db_session: Session, symbol: str) -> bool:
     return metadata.fetched_at > datetime.now() - timedelta(days=1)
 
 
-def get_stock_prices_by_date_range(db_session: Session, symbol: str, from_date: date, to_date: date) -> list[StockPrice]:
+def get_prices_by_date_range(db_session: Session, symbol: str, from_date: date, to_date: date) -> list[StockPrice]:
     """
     Get the stock prices for a given symbol and date range.
     """
@@ -143,7 +164,7 @@ def get_stock_prices_by_date_range(db_session: Session, symbol: str, from_date: 
     ) for price in prices]
 
 
-def get_stock_price_by_date(db_session: Session, symbol: str, target_date: date, nearest: bool = False) -> StockPrice:
+def get_price_by_date(db_session: Session, symbol: str, target_date: date, nearest: bool = False) -> StockPrice:
     """
     Get the stock price for a given symbol and date.
     If nearest is True, and the price is not found for the given date, return the price for the nearest date before the given date.

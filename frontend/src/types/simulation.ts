@@ -16,6 +16,18 @@ export interface RebalanceHistory {
   investments: Investment[]
   profit_pct: number
   profit: number
+  baseline_profit_pct?: number
+  baseline_profit?: number
+  baseline_balance?: number
+}
+
+export interface SimulationConfig {
+  max_stocks: number
+  rebalance_interval_weeks: number
+  date_start: string
+  date_end: string
+  rule: string
+  index: string
 }
 
 export interface Simulation {
@@ -25,5 +37,10 @@ export interface Simulation {
   rebalance_history: RebalanceHistory[]
   profit_pct: number
   profit: number
+  baseline_index?: string
+  baseline_profit_pct?: number
+  baseline_profit?: number
+  baseline_balance?: number
   rule_ref?: string | null
+  simulation_config?: SimulationConfig
 }
