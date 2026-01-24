@@ -14,7 +14,7 @@ services:
     networks:
       - stockidea-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stockidea_user && psql -U stockidea_user -d stockidea -c 'SELECT 1'"]
+      test: ["CMD-SHELL", "pg_isready -U stockidea -d stockidea"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -25,9 +25,9 @@ FMP_BASE_URL = "https://financialmodelingprep.com"
 # PostgreSQL configuration
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
-POSTGRES_DB = os.getenv("POSTGRES_DB", "stockidea")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "stockidea")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "stockidea")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "database")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "user")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 
 # Database URL for SQLAlchemy
 DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
