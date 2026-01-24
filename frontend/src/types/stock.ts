@@ -14,9 +14,10 @@ export interface StockAnalysis {
   change_3m_pct: number
   change_1m_pct: number
   total_weeks: number
-  // trend_slope_pct: number
-  annualized_slope: number
-  trend_r_squared: number
+  linear_slope_pct: number
+  linear_r_squared: number
+  log_slope: number
+  log_r_squared: number
 }
 
 export interface AnalysisData {

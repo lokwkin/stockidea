@@ -18,7 +18,7 @@ def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callab
 
     # Sort by weight
     # TODO: use a more sophisticated algorithm
-    filtered_stocks.sort(key=lambda x: x.annualized_slope, reverse=True)
+    filtered_stocks.sort(key=lambda x: x.log_slope, reverse=True)
     selected_stocks = filtered_stocks[: max_stocks]
     logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
     return selected_stocks

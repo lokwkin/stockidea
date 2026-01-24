@@ -588,10 +588,10 @@ export function CreateSimulationView() {
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("trend_slope_pct")}
+                          onClick={() => insertVariableAtCursor("linear_slope_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          trend_slope_pct
+                          linear_slope_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
@@ -601,10 +601,23 @@ export function CreateSimulationView() {
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("annualized_slope")}
+                          onClick={() => insertVariableAtCursor("linear_r_squared")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          annualized_slope
+                          linear_r_squared
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("log_slope")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          log_slope
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
@@ -614,10 +627,10 @@ export function CreateSimulationView() {
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("trend_r_squared")}
+                          onClick={() => insertVariableAtCursor("log_r_squared")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          trend_r_squared
+                          log_r_squared
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>

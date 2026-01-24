@@ -181,18 +181,20 @@ def analyze_stock(
     # x = week number (0, 1, 2, ...), y = closing price
     x = np.arange(len(weekly_data))
     weekly_close = np.array([w.closing_price for w in weekly_data])
-    y = np.log(weekly_close)
+    log_weekly_close = np.log(weekly_close)
 
-    slope, _intercept, r_value, _p_value, _std_err = stats.linregress(x, y)
-    annualized_slope = slope * 52
+    log_slope, _log_intercept, log_r_value, _log_p_value, _log_std_err = stats.linregress(x, log_weekly_close)
+    log_r_squared = log_r_value**2
 
+    linear_slope, _linear_intercept, linear_r_value, _linear_p_value, _linear_std_err = stats.linregress(
+        x, weekly_close)
     # Convert slope to percentage of starting price (per week)
-    # starting_price = weekly_data[0].closing_price
-    annualized_slope = slope * 52
-    # slope_pct = (slope / starting_price) * 100 if starting_price != 0 else 0.0
+    # weekly_slope = stats.linregress(x, y)
+    starting_price = weekly_data[0].closing_price
+    linear_slope_pct = (linear_slope / starting_price) * 100 if starting_price != 0 else 0.0
 
     # R² is r_value squared
-    r_squared = r_value**2
+    linear_r_squared = linear_r_value**2
 
     return TrendAnalysis(
         symbol=symbol,
@@ -210,7 +212,8 @@ def analyze_stock(
         change_3m_pct=change_3m,
         change_1m_pct=change_1m,
         total_weeks=total_weeks,
-        # trend_slope_pct=slope_pct,
-        annualized_slope=annualized_slope,
-        trend_r_squared=r_squared,
+        linear_slope_pct=linear_slope_pct,
+        linear_r_squared=linear_r_squared,
+        log_slope=log_slope,
+        log_r_squared=log_r_squared,
     )

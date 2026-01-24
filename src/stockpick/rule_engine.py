@@ -22,7 +22,7 @@ class RuleEngine:
 
         Examples:
             >>> engine = RuleEngine()
-            >>> rule = engine.compile("change_3m_pct > 1 AND trend_r_squared > 0.8")
+            >>> rule = engine.compile("change_3m_pct > 1 AND linear_r_squared > 0.8")
             >>> result = rule(analysis)
         """
         # Normalize the rule string (handle case-insensitive AND/OR)
@@ -47,9 +47,10 @@ class RuleEngine:
                 "change_3m_pct": analysis.change_3m_pct,
                 "change_1m_pct": analysis.change_1m_pct,
                 "total_weeks": analysis.total_weeks,
-                # "trend_slope_pct": analysis.trend_slope_pct,
-                "annualized_slope": analysis.annualized_slope,
-                "trend_r_squared": analysis.trend_r_squared,
+                "linear_slope_pct": analysis.linear_slope_pct,
+                "linear_r_squared": analysis.linear_r_squared,
+                "log_slope": analysis.log_slope,
+                "log_r_squared": analysis.log_r_squared,
             }
             try:
                 # SimpleEval automatically validates the expression and only allows safe operations
@@ -109,7 +110,7 @@ def compile_rule(rule_string: str) -> Callable[[TrendAnalysis], bool]:
         A callable function that takes TrendAnalysis and returns bool
 
     Examples:
-        >>> rule = compile_rule("change_3m_pct > 1 AND trend_r_squared > 0.8")
+        >>> rule = compile_rule("change_3m_pct > 1 AND linear_r_squared > 0.8")
         >>> result = rule(analysis)
     """
     engine = RuleEngine()

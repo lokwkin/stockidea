@@ -61,10 +61,10 @@ class TrendAnalysis(BaseModel):
     change_3m_pct: float  # 3 month change
     change_1m_pct: float  # 1 month change
     total_weeks: int
-    # Trend analysis (linear regression)
-    # trend_slope_pct: float  # Weekly slope as % of starting price
-    annualized_slope: float  # Annualized slope as % of starting price
-    trend_r_squared: float  # R² (0-1), how well data fits the trend line
+    linear_slope_pct: float  # Linear slope as % of starting price
+    linear_r_squared: float  # Linear R² (0-1), how well data fits the trend line
+    log_slope: float  # Log slope as % of starting price
+    log_r_squared: float  # Log R² (0-1), how well data fits the trend line
 
     def __str__(self) -> str:
         return (
@@ -81,9 +81,10 @@ class TrendAnalysis(BaseModel):
             f"Biggest monthly jump:   {self.biggest_monthly_jump_pct:+7.2f}%\n"
             f"Biggest monthly drop:   {self.biggest_monthly_drop_pct:+7.2f}%\n"
             f"{'─' * 50}\n"
-            # f"Trend slope (per week): {self.trend_slope_pct:+7.3f}%\n"
-            f"Trend slope (per year): {self.annualized_slope:+7.3f}%\n"
-            f"Trend stability (R²):   {self.trend_r_squared:7.3f}\n"
+            f"Linear trend slope (per week): {self.linear_slope_pct:7.3f}\n"
+            f"Linear trend stability (R²):   {self.linear_r_squared:7.3f}\n"
+            f"Log trend slope (per year): {self.log_slope:+7.3f}%\n"
+            f"Log trend stability (R²):   {self.log_r_squared:7.3f}\n"
             f"{'─' * 50}\n"
             f"Change (1 month):   {self.change_1m_pct:+7.2f}%\n"
             f"Change (3 months):  {self.change_3m_pct:+7.2f}%\n"

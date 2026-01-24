@@ -85,7 +85,7 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
             # Filter analyses using the rule (no max_stocks limit for API)
             filtered_analyses = [a for a in analyses if rule_func(a)]
             # Sort by trend_slope_pct (same as apply_rule does)
-            filtered_analyses.sort(key=lambda x: x.annualized_slope, reverse=True)
+            filtered_analyses.sort(key=lambda x: x.log_slope, reverse=True)
             analyses = filtered_analyses
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")

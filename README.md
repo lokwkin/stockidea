@@ -13,8 +13,10 @@ Usage: python -m stockpick.cli analyze [OPTIONS]
   Analyze stock prices for a given date
 
 Options:
-  -d, --date TEXT  Analysis date in YYYY-MM-DD format
-  --help           Show this message and exit.
+  -d, --date TEXT                 Analysis date in YYYY-MM-DD format
+  -i, --index [SP500|DOWJONES|NASDAQ]
+                                  Stock index to analyze
+  --help                          Show this message and exit.
 
 # Example
 uv run python -m stockpick.cli analyze -d 2026-01-20
@@ -39,9 +41,10 @@ uv run python -m stockpick.cli analyze -d 2026-01-20
 | `change_3m_pct` | float | Percentage change over 3 months (13 weeks) |
 | `change_1m_pct` | float | Percentage change over 1 month (4 weeks) |
 | `total_weeks` | int | Total number of weeks analyzed |
-| `trend_slope_pct` | float | Linear trend slope as percentage of starting price per week |
-| `annualized_slope` | float | |
-| `trend_r_squared` | float | R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend) |
+| `linear_slope_pct` | float | Linear trend slope as percentage of starting price per week |
+| `linear_r_squared` | float | R² value (0-1) indicating how well the price data fits the linear trend line (higher = more consistent trend) |
+| `log_slope` | float | Annualized log trend slope (log slope * 52 weeks per year) |
+| `log_r_squared` | float | R² value (0-1) indicating how well the price data fits the log trend line (higher = more consistent trend) |
 
 ### Pick 
 ```bash
@@ -50,10 +53,15 @@ Usage: python -m stockpick.cli pick [OPTIONS]
   Apply a rule onto analyzed stock prices for a given date range.
 
 Options:
-  -d, --date TEXT  Analysis date in YYYY-MM-DD format
-  -r, --rule TEXT  Rule expression string (e.g., 'change_3m_pct > 10 AND
-                   biggest_biweekly_drop_pct > 15')  [required]
-  --help           Show this message and exit.
+  -d, --date TEXT                 Analysis date in YYYY-MM-DD format
+  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
+                                  > 10 AND biggest_biweekly_drop_pct > 15')
+                                  [required]
+  -m, --max-stocks INTEGER        Maximum number of stocks to hold at once
+                                  (default: 3)
+  -i, --index [SP500|DOWJONES|NASDAQ]
+                                  Stock index to analyze
+  --help                          Show this message and exit.
 
 # Example
 uv run python -m stockpick.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
@@ -62,6 +70,8 @@ uv run python -m stockpick.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_
 ### Simulate
 ```bash
 Usage: python -m stockpick.cli simulate [OPTIONS]
+
+  Simulate investment strategy for a given date range.
 
 Options:
   --max-stocks INTEGER            Maximum number of stocks to hold at once
@@ -72,8 +82,12 @@ Options:
                                   [required]
   --date-end TEXT                 Simulation end date in YYYY-MM-DD format
                                   [required]
-  --rule TEXT                     Rule expression string (e.g., 'change_3m_pct
+  -i, --index [SP500|DOWJONES|NASDAQ]
+                                  Stock index to analyze
+  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
                                   > 10 AND biggest_biweekly_drop_pct > 15')
+  --help                          Show this message and exit.
+  
 # Example
 uv run python -m stockpick.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
 ```

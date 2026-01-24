@@ -63,6 +63,7 @@ def analyze(date: str, index: str):
 @cli.command("pick", help="Apply a rule onto analyzed stock prices for a given date range.")
 @click.option("--date", "-d", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format")
 @click.option("--rule", "-r", type=str, required=True, help="Rule expression string (e.g., 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15')")
+@click.option("--max-stocks", "-m", type=int, default=3, help="Maximum number of stocks to hold at once (default: 3)")
 @click.option(
     "--index",
     "-i",
@@ -71,7 +72,7 @@ def analyze(date: str, index: str):
     default=StockIndex.SP500.value,
     help="Stock index to analyze"
 )
-def pick(date: str, rule: str, index: str):
+def pick(date: str, rule: str, max_stocks: int, index: str):
     stock_index = StockIndex(index)
     try:
         analysis_date = datetime.strptime(date, "%Y-%m-%d")
@@ -86,7 +87,7 @@ def pick(date: str, rule: str, index: str):
 
     analyses = asyncio.run(_analyze(analysis_date=analysis_date, index=stock_index))
 
-    analysis.apply_rule(analyses=analyses, max_stocks=3, rule_func=rule_func)
+    analysis.apply_rule(analyses=analyses, max_stocks=max_stocks, rule_func=rule_func)
 
 
 @cli.command("simulate", help="Simulate investment strategy for a given date range.")
