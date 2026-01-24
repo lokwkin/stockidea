@@ -107,5 +107,17 @@ For example, `change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15` means on ea
 | `log_slope` | float | Annualized log trend slope (log slope * 52 weeks per year) |
 | `log_r_squared` | float | R² value (0-1) indicating how well the price data fits the log trend line (higher = more consistent trend) |
 
+## Upcoming
+- Add more stock indicator and signals
+  - Trend and momentum data (Returns, Moving Averages, Breakouts, Strength)
+  - Volatility and Risks
+  - Volume and Liquidity (later phase)
+  - Fundamentals (PE, PB, EV/EBITDA)
+  - Market context (sector)
+- Allow custom stock ranking logic for stocks satisfying the rules.
+- Add exit criteria and mechanism in simulation
+- Add LLM assisted strategy design
+- Automated strategy tuning
+
 ## License
 This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
