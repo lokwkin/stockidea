@@ -6,10 +6,9 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 
 ### Analyze
 Analyze the stock price and performance data of index constituent stocks at a given date with the data in the past 52 weeks.
-```bash
-uv run python -m stockidea.cli analyze
 
-# Example
+#### Example
+```bash
 uv run python -m stockidea.cli analyze -d 2026-01-20
 ```
 
@@ -23,10 +22,8 @@ uv run python -m stockidea.cli analyze -d 2026-01-20
 ### Pick
 Analyze the stock price and indicator data of index constituent stocks at a given date with the data in the past 52 weeks, then filter and pick the stocks based on user's custom rule.
 
+#### Example
 ```bash
-python -m stockidea.cli pick
-
-# Example
 uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
 ```
 
@@ -44,9 +41,9 @@ uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_
 
 ### Simulate
 With user's custom rules, backtest and simulate the performance within the given date range.
+
+#### Example
 ```bash
-python -m stockidea.cli simulate
-# Example
 uv run python -m stockidea.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
 ```
 
