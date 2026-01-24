@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from math import floor
+import logging
 from typing import Callable
 
 from stockpick.analysis import analysis
@@ -7,6 +8,8 @@ from stockpick.config import OUTPUT_DIR
 from stockpick.datasource import constituent, market_data
 from stockpick.helper import next_monday
 from stockpick.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, TrendAnalysis
+
+logger = logging.getLogger(__name__)
 
 
 class Simulator:
@@ -39,12 +42,12 @@ class Simulator:
         self.from_index = from_index
         self.baseline_index = baseline_index
 
-    def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
+    async def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
         # Get the symbols of the constituent
-        symbols = constituent.get_constituent_at(self.from_index, today.date())
+        symbols = await constituent.get_constituent_at(self.from_index, today.date())
 
         # Get the stock price histories
-        stock_prices = market_data.get_stock_price_batch_histories(
+        stock_prices = await market_data.get_stock_price_batch_histories(
             symbols, from_date=today.date() - timedelta(weeks=52), to_date=today.date())
 
         result = analysis.load_analysis(today)
@@ -53,7 +56,7 @@ class Simulator:
             analyses, filename = result
         else:
             # No analysis found in the cache, analyze the data
-            print(f"Analyzing data from {today.date()} to {today.date()}")
+            logger.info(f"Analyzing data from {today.date()} to {today.date()}")
 
             analyses, filename = analysis.analyze_stock_batch(stock_prices=stock_prices,
                                                               analysis_date=today, back_period_weeks=52)
@@ -64,11 +67,11 @@ class Simulator:
         selected_stocks = analysis.apply_rule(analyses=analyses, max_stocks=self.max_stocks, rule_func=self.rule_func)
         return selected_stocks, filename
 
-    def invest(
+    async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
-        buy_stock_price = market_data.get_stock_price_at_date(symbol, buy_date.date(), nearest=True).adj_close
-        sell_stock_price = market_data.get_stock_price_at_date(symbol, sell_date.date(), nearest=True).adj_close
+        buy_stock_price = (await market_data.get_stock_price_at_date(symbol, buy_date.date(), nearest=True)).adj_close
+        sell_stock_price = (await market_data.get_stock_price_at_date(symbol, sell_date.date(), nearest=True)).adj_close
         position = floor(amount / buy_stock_price)
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
@@ -85,11 +88,11 @@ class Simulator:
         )
         return investment
 
-    def invest_baseline(self, buy_date: datetime, sell_date: datetime, amount: float) -> Investment:
-        baseline_index_price_buy = market_data.get_index_price_at_date(
-            self.baseline_index, buy_date.date(), nearest=True).adj_close
-        baseline_index_price_sell = market_data.get_index_price_at_date(
-            self.baseline_index, sell_date.date(), nearest=True).adj_close
+    async def invest_baseline(self, buy_date: datetime, sell_date: datetime, amount: float) -> Investment:
+        baseline_index_price_buy = (await market_data.get_index_price_at_date(
+            self.baseline_index, buy_date.date(), nearest=True)).adj_close
+        baseline_index_price_sell = (await market_data.get_index_price_at_date(
+            self.baseline_index, sell_date.date(), nearest=True)).adj_close
         position = floor(amount / baseline_index_price_buy)
         profit = (baseline_index_price_sell - baseline_index_price_buy) * position
         profit_pct = (baseline_index_price_sell - baseline_index_price_buy) / baseline_index_price_buy * 100
@@ -106,7 +109,7 @@ class Simulator:
         )
         return investment
 
-    def simulate(self) -> SimulationResult:
+    async def simulate(self) -> SimulationResult:
 
         # Initial Setup
         balance = self.initial_balance
@@ -119,14 +122,14 @@ class Simulator:
             if end_date > self.date_end:
                 break
 
-            print(
+            logger.info(
                 f"====================== Rebalance on {date_iter.date()} (Balance: {balance})==========================")
-            selected_stocks, analysis_ref = self.pick_stocks(date_iter)
+            selected_stocks, analysis_ref = await self.pick_stocks(date_iter)
 
             investments: list[Investment] = []
             for stock in selected_stocks:
                 # split in average
-                investment = self.invest(
+                investment = await self.invest(
                     stock.symbol, date_iter, end_date, balance / len(selected_stocks)
                 )
                 investments.append(investment)
@@ -136,7 +139,7 @@ class Simulator:
             profit_pct = profit / balance
 
             # Invest in the baseline index
-            baseline_investment = self.invest_baseline(date_iter, end_date, balance)
+            baseline_investment = await self.invest_baseline(date_iter, end_date, balance)
 
             rebalance_history.append(RebalanceHistory(
                 date=date_iter,
@@ -185,4 +188,4 @@ def save_simulation_result(result: SimulationResult) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = OUTPUT_DIR / "simulations" / f"simulation_{timestamp}.json"
     output_path.write_text(result.model_dump_json(indent=2))
-    print(f"✓ Simulation result saved: {output_path}")
+    logger.info(f"✓ Simulation result saved: {output_path}")

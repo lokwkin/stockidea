@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type StockIndex = "SP500" | "DOWJONES" | "NASDAQ"
 
@@ -26,13 +34,39 @@ export function CreateSimulationView() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState<SimulateRequest>({
-    max_stocks: 10,
-    rebalance_interval_weeks: 4,
+    max_stocks: 3,
+    rebalance_interval_weeks: 2,
     date_start: "",
     date_end: "",
     rule: "",
     index: "SP500",
   })
+  // Store string values for numeric inputs to allow empty state
+  const [maxStocksInput, setMaxStocksInput] = useState<string>("3")
+  const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>("2")
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Format date from yyyy-mm-dd (ISO) to yyyy/mm/dd for display
+  const formatDateForDisplay = (dateStr: string): string => {
+    if (!dateStr) return ""
+    return dateStr.replace(/-/g, "/")
+  }
+  
+  // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
+  const parseDateInput = (dateStr: string): string => {
+    if (!dateStr) return ""
+    return dateStr.split("/").join("-")
+  }
+  
+  // Validate date format yyyy/mm/dd
+  const isValidDate = (dateStr: string): boolean => {
+    if (!dateStr) return false
+    const datePattern = new RegExp("^\\d{4}/\\d{2}/\\d{2}$")
+    if (!datePattern.test(dateStr)) return false
+    const [year, month, day] = dateStr.split("/").map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,6 +74,18 @@ export function CreateSimulationView() {
     setLoading(true)
 
     try {
+      // Convert input strings to numbers, using current formData values as fallback
+      const maxStocks = maxStocksInput === "" ? formData.max_stocks : parseInt(maxStocksInput) || 0
+      const rebalanceInterval = rebalanceIntervalInput === "" ? formData.rebalance_interval_weeks : parseInt(rebalanceIntervalInput) || 0
+
+      // Validate numeric inputs
+      if (maxStocks <= 0) {
+        throw new Error("Maximum stocks must be greater than 0")
+      }
+      if (rebalanceInterval <= 0) {
+        throw new Error("Rebalance interval must be greater than 0")
+      }
+
       // Convert date strings to ISO datetime strings
       const dateStart = new Date(formData.date_start + "T00:00:00").toISOString()
       const dateEnd = new Date(formData.date_end + "T23:59:59").toISOString()
@@ -51,6 +97,8 @@ export function CreateSimulationView() {
         },
         body: JSON.stringify({
           ...formData,
+          max_stocks: maxStocks,
+          rebalance_interval_weeks: rebalanceInterval,
           date_start: dateStart,
           date_end: dateEnd,
         }),
@@ -90,6 +138,33 @@ export function CreateSimulationView() {
       ...prev,
       [field]: value,
     }))
+  }
+  
+  const handleDateChange = (field: "date_start" | "date_end", value: string) => {
+    // Convert yyyy/mm/dd to yyyy-mm-dd for storage
+    const isoDate = parseDateInput(value)
+    handleChange(field, isoDate)
+  }
+  
+  const insertVariableAtCursor = (variable: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = formData.rule
+    const before = text.substring(0, start)
+    const after = text.substring(end)
+    
+    const newText = before + variable + after
+    handleChange("rule", newText)
+    
+    // Restore cursor position after the inserted variable
+    setTimeout(() => {
+      const newCursorPos = start + variable.length
+      textarea.focus()
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 0)
   }
 
   // Set default dates on mount
@@ -163,8 +238,24 @@ export function CreateSimulationView() {
               type="number"
               min="1"
               max="100"
-              value={formData.max_stocks}
-              onChange={(e) => handleChange("max_stocks", parseInt(e.target.value) || 0)}
+              value={maxStocksInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setMaxStocksInput(value)
+                // Update formData only if value is valid number
+                const numValue = parseInt(value)
+                if (!isNaN(numValue) && numValue > 0) {
+                  handleChange("max_stocks", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                // On blur, ensure we have a valid value or reset to default
+                const value = e.target.value
+                if (value === "" || parseInt(value) <= 0) {
+                  setMaxStocksInput("3")
+                  handleChange("max_stocks", 3)
+                }
+              }}
               required
             />
             <p className="text-xs text-muted-foreground">
@@ -182,8 +273,24 @@ export function CreateSimulationView() {
               type="number"
               min="1"
               max="52"
-              value={formData.rebalance_interval_weeks}
-              onChange={(e) => handleChange("rebalance_interval_weeks", parseInt(e.target.value) || 0)}
+              value={rebalanceIntervalInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setRebalanceIntervalInput(value)
+                // Update formData only if value is valid number
+                const numValue = parseInt(value)
+                if (!isNaN(numValue) && numValue > 0) {
+                  handleChange("rebalance_interval_weeks", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                // On blur, ensure we have a valid value or reset to default
+                const value = e.target.value
+                if (value === "" || parseInt(value) <= 0) {
+                  setRebalanceIntervalInput("2")
+                  handleChange("rebalance_interval_weeks", 2)
+                }
+              }}
               required
             />
             <p className="text-xs text-muted-foreground">
@@ -199,12 +306,35 @@ export function CreateSimulationView() {
               </label>
               <Input
                 id="date_start"
-                type="date"
-                value={formData.date_start}
-                onChange={(e) => handleChange("date_start", e.target.value)}
+                type="text"
+                placeholder="yyyy/mm/dd"
+                value={formatDateForDisplay(formData.date_start)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  // Allow typing yyyy/mm/dd format
+                  const dateInputPattern = new RegExp("^\\d{0,4}(/\\d{0,2})?(/\\d{0,2})?$")
+                  if (value === "" || dateInputPattern.test(value)) {
+                    handleDateChange("date_start", value)
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value
+                  if (value && !isValidDate(value)) {
+                    // Try to fix common issues
+                    const fixed = value.replace(/[^\d/]/g, "")
+                    if (isValidDate(fixed)) {
+                      handleDateChange("date_start", fixed)
+                    } else {
+                      // Reset to default if invalid
+                      const date = new Date()
+                      date.setFullYear(date.getFullYear() - 1)
+                      handleDateChange("date_start", formatDateForDisplay(date.toISOString().split("T")[0]))
+                    }
+                  }
+                }}
                 required
               />
-              <p className="text-xs text-muted-foreground">Simulation start date</p>
+              <p className="text-xs text-muted-foreground">Simulation start date (yyyy/mm/dd)</p>
             </div>
 
             <div className="space-y-2">
@@ -213,12 +343,33 @@ export function CreateSimulationView() {
               </label>
               <Input
                 id="date_end"
-                type="date"
-                value={formData.date_end}
-                onChange={(e) => handleChange("date_end", e.target.value)}
+                type="text"
+                placeholder="yyyy/mm/dd"
+                value={formatDateForDisplay(formData.date_end)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  // Allow typing yyyy/mm/dd format
+                  const dateInputPattern = new RegExp("^\\d{0,4}(/\\d{0,2})?(/\\d{0,2})?$")
+                  if (value === "" || dateInputPattern.test(value)) {
+                    handleDateChange("date_end", value)
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value
+                  if (value && !isValidDate(value)) {
+                    // Try to fix common issues
+                    const fixed = value.replace(/[^\d/]/g, "")
+                    if (isValidDate(fixed)) {
+                      handleDateChange("date_end", fixed)
+                    } else {
+                      // Reset to default if invalid
+                      handleDateChange("date_end", formatDateForDisplay(new Date().toISOString().split("T")[0]))
+                    }
+                  }
+                }}
                 required
               />
-              <p className="text-xs text-muted-foreground">Simulation end date</p>
+              <p className="text-xs text-muted-foreground">Simulation end date (yyyy/mm/dd)</p>
             </div>
           </div>
 
@@ -228,20 +379,254 @@ export function CreateSimulationView() {
               Selection Rule
             </label>
             <textarea
+              ref={textareaRef}
               id="rule"
               value={formData.rule}
               onChange={(e) => handleChange("rule", e.target.value)}
               required
               rows={8}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono"
-              placeholder="Enter your stock selection rule (Python expression)..."
+              placeholder="change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1"
             />
-            <p className="text-xs text-muted-foreground">
-              Python expression that evaluates to True/False for stock selection. Use variables like{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">annualized_slope</code>,{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">trend_r_squared</code>,{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">change_1y_pct</code>, etc.
-            </p>
+            <div className="text-xs text-muted-foreground space-y-2">
+              <p>
+                Python expression that evaluates to True/False for stock selection. Click on a variable name to insert it into the rule:
+              </p>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">Variable</TableHead>
+                      <TableHead className="w-[80px]">Type</TableHead>
+                      <TableHead>Description</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("weeks_above_1_week_ago")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          weeks_above_1_week_ago
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">int</TableCell>
+                      <TableCell className="text-xs">Number of weeks where closing price was higher than 1 week prior</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("weeks_above_2_weeks_ago")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          weeks_above_2_weeks_ago
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">int</TableCell>
+                      <TableCell className="text-xs">Number of weeks where closing price was higher than 2 weeks prior</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("weeks_above_4_weeks_ago")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          weeks_above_4_weeks_ago
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">int</TableCell>
+                      <TableCell className="text-xs">Number of weeks where closing price was higher than 4 weeks prior</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_weekly_jump_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_weekly_jump_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest week-over-week percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_weekly_drop_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_weekly_drop_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest week-over-week percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_biweekly_jump_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_biweekly_jump_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest biweekly (2-week) percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_biweekly_drop_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_biweekly_drop_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest biweekly (2-week) percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_monthly_jump_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_monthly_jump_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest monthly (4-week) percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("biggest_monthly_drop_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          biggest_monthly_drop_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Largest monthly (4-week) percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_1y_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_1y_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 1 year (52 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_6m_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_6m_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 6 months (26 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_3m_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_3m_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 3 months (13 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_1m_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_1m_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 1 month (4 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("total_weeks")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          total_weeks
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">int</TableCell>
+                      <TableCell className="text-xs">Total number of weeks analyzed</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("trend_slope_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          trend_slope_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Linear trend slope as percentage of starting price per week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("annualized_slope")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          annualized_slope
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Annualized trend slope</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("trend_r_squared")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          trend_r_squared
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </div>
         </div>
 

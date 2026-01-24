@@ -100,7 +100,7 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
 
 
 @app.post("/simulate")
-def simulate(simulation_config: SimulationConfig) -> dict:
+async def simulate(simulation_config: SimulationConfig) -> dict:
     """
     Simulate an investment strategy.
     """
@@ -114,7 +114,7 @@ def simulate(simulation_config: SimulationConfig) -> dict:
         from_index=simulation_config.index,
         baseline_index=StockIndex.SP500,
     )
-    simulation_result = simulator.simulate()
+    simulation_result = await simulator.simulate()
 
     save_simulation_result(simulation_result)
 
@@ -122,14 +122,14 @@ def simulate(simulation_config: SimulationConfig) -> dict:
 
 
 @app.get("/snp500")
-def get_snp500_prices() -> list[dict]:
+async def get_snp500_prices() -> list[dict]:
     """
     Fetch and return S&P 500 historical price data.
 
     Returns a list of price data points with date and price fields.
     """
     try:
-        prices = market_data.get_index_prices(StockIndex.SP500, datetime.now() - timedelta(weeks=700), datetime.now())
+        prices = await market_data.get_index_prices(StockIndex.SP500, datetime.now() - timedelta(weeks=700), datetime.now())
         return [price.model_dump() for price in prices]
     except Exception as e:
         raise HTTPException(

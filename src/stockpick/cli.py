@@ -1,14 +1,20 @@
 """CLI commands for stockpick using Click."""
 
+import asyncio
+import logging
 import click
 from datetime import datetime, timedelta
 
+# Import config to initialize logging
+import stockpick.config  # noqa: F401
 from stockpick.analysis import analysis
 from stockpick.datasource import constituent, market_data
 from stockpick.rule_engine import compile_rule
 
 from stockpick.simulation.simulator import Simulator, save_simulation_result
 from stockpick.types import StockIndex, TrendAnalysis
+
+logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -17,13 +23,14 @@ def cli():
     pass
 
 
-def _analyze(analysis_date: datetime, index: StockIndex) -> list[TrendAnalysis]:
+async def _analyze(analysis_date: datetime, index: StockIndex) -> list[TrendAnalysis]:
 
     # Get the symbols of the constituent
-    symbols = constituent.get_constituent_at(index, analysis_date.date())
+    symbols = await constituent.get_constituent_at(index, analysis_date.date())
 
     # Get the stock price histories
-    stock_prices = market_data.get_stock_price_batch_histories(
+    logger.info(f"Getting stock price histories for {len(symbols)} symbols")
+    stock_prices = await market_data.get_stock_price_batch_histories(
         symbols, from_date=analysis_date.date() - timedelta(weeks=52), to_date=analysis_date.date())
 
     # Analyze the stock prices
@@ -50,7 +57,7 @@ def analyze(date: str, index: str):
     except ValueError:
         raise click.BadParameter(f"Invalid date format: {date}. Use YYYY-MM-DD format.")
 
-    _analyze(analysis_date=analysis_date, index=stock_index)
+    asyncio.run(_analyze(analysis_date=analysis_date, index=stock_index))
 
 
 @cli.command("pick", help="Apply a rule onto analyzed stock prices for a given date range.")
@@ -77,7 +84,7 @@ def pick(date: str, rule: str, index: str):
     except Exception as e:
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
-    analyses = _analyze(analysis_date=analysis_date, index=stock_index)
+    analyses = asyncio.run(_analyze(analysis_date=analysis_date, index=stock_index))
 
     analysis.apply_rule(analyses=analyses, max_stocks=3, rule_func=rule_func)
 
@@ -131,7 +138,7 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
         baseline_index=StockIndex.SP500,
     )
 
-    simulation_result = simulator.simulate()
+    simulation_result = asyncio.run(simulator.simulate())
     click.echo(
         f"Simulation result: {simulation_result.profit_pct * 100:2.2f}%, {simulation_result.profit:2.2f}"
     )

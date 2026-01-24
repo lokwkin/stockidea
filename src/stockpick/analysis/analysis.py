@@ -1,11 +1,14 @@
 
 from datetime import datetime, timedelta
 import json
+import logging
 from typing import Callable
 
 from stockpick.analysis import trend_analyzer
 from stockpick.config import OUTPUT_DIR
 from stockpick.types import StockPrice, TrendAnalysis
+
+logger = logging.getLogger(__name__)
 
 
 def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callable[[TrendAnalysis], bool]
@@ -17,7 +20,7 @@ def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callab
     # TODO: use a more sophisticated algorithm
     filtered_stocks.sort(key=lambda x: x.annualized_slope, reverse=True)
     selected_stocks = filtered_stocks[: max_stocks]
-    print(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
+    logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
     return selected_stocks
 
 
@@ -29,7 +32,7 @@ def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], analysis_date
         if analysis:
             analyses.append(analysis)
 
-    print(f"\nAnalyzed {len(analyses)} stocks successfully")
+    logger.info(f"Analyzed {len(analyses)} stocks successfully")
     filename = save_analysis(analysis=analyses, analysis_date=analysis_date)
     return analyses, filename
 
@@ -56,5 +59,5 @@ def save_analysis(analysis: list[TrendAnalysis], analysis_date: datetime) -> str
             indent=2,
         )
     )
-    print(f"✓ Analysis saved: {analysis_path}")
+    logger.info(f"✓ Analysis saved: {analysis_path}")
     return filename

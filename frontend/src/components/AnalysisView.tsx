@@ -12,12 +12,12 @@ import {
 import { Button } from "@/components/ui/button"
 
 function formatDate(dateStr: string): string {
-  // Format: "20251021" -> "21/10/2025"
+  // Format: "20251021" -> "2025/10/21"
   if (dateStr.length !== 8) return dateStr
   const year = dateStr.slice(0, 4)
   const month = dateStr.slice(4, 6)
   const day = dateStr.slice(6, 8)
-  return `${day}/${month}/${year}`
+  return `${year}/${month}/${day}`
 }
 
 export function AnalysisView() {
@@ -134,7 +134,7 @@ export function AnalysisView() {
 
   const generatedDate = useMemo(() => {
     const now = new Date()
-    return `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`
+    return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`
   }, [])
 
   if (loadingFiles) {

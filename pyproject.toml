@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "Stock price analysis and reporting tool"
 requires-python = ">=3.12"
 dependencies = [
+    "asyncpg>=0.29.0",
     "click>=8.1.0",
     "fastapi>=0.115.0",
+    "greenlet>=3.0.0",
+    "httpx>=0.27.0",
     "numpy>=2.0.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",

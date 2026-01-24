@@ -3,21 +3,21 @@ from stockpick.datasource import fmp, file_cache
 from stockpick.types import ConstituentChange, StockIndex
 
 
-def _load_constituent_changes(index: StockIndex) -> list[ConstituentChange]:
+async def _load_constituent_changes(index: StockIndex) -> list[ConstituentChange]:
     cached_changes = file_cache.load_from_cache(f"constituent_changes_{index.value}")
     if cached_changes is not None:
         return [ConstituentChange.model_validate(change) for change in cached_changes]
-    changes = fmp.fetch_historical_constituent(index)
+    changes = await fmp.fetch_historical_constituent(index)
     file_cache.save_to_cache(f"constituent_changes_{index.value}", [change.model_dump(mode="json") for change in changes])
     return changes
 
 
-def get_constituent_at(index: StockIndex, target_date: date) -> list[str]:
+async def get_constituent_at(index: StockIndex, target_date: date) -> list[str]:
     """
     Get the constituent of the index at the target date.
     Load the constituent changes and re-construct the constituent at the target date.
     """
-    changes = _load_constituent_changes(index)
+    changes = await _load_constituent_changes(index)
     symbols = set()
     for change in changes:
         # Stop processing if we've passed the target date
