@@ -4,17 +4,17 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=stockpick
-      - POSTGRES_USER=stockpick
-      - POSTGRES_PASSWORD=stockpick
+      - POSTGRES_DB=stockidea
+      - POSTGRES_USER=stockidea
+      - POSTGRES_PASSWORD=stockidea
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - stockpick-network
+      - stockidea-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockpick}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockidea}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,17 +34,17 @@ services:
       - FMP_API_KEY=${FMP_API_KEY}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-stockpick}
-      - POSTGRES_USER=${POSTGRES_USER:-stockpick}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockpick}
+      - POSTGRES_DB=${POSTGRES_DB:-stockidea}
+      - POSTGRES_USER=${POSTGRES_USER:-stockidea}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockidea}
     env_file:
       - .env
-    command: uv run uvicorn stockpick.api:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run uvicorn stockidea.api:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - stockpick-network
+      - stockidea-network
 
   frontend:
     build:
@@ -61,11 +61,11 @@ services:
     depends_on:
       - backend
     networks:
-      - stockpick-network
+      - stockidea-network
 
 volumes:
   postgres_data:
 
 networks:
-  stockpick-network:
+  stockidea-network:
     driver: bridge

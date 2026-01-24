@@ -2,8 +2,8 @@
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from stockpick.config import DATABASE_URL
-from stockpick.datasource.database.models import Base
+from stockidea.config import DATABASE_URL
+from stockidea.datasource.database.models import Base
 
 
 _engine = None

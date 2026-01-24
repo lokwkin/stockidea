@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { dateFormat } from "@/lib/utils"
 
 type StockIndex = "SP500" | "DOWJONES" | "NASDAQ"
 
@@ -45,12 +46,6 @@ export function CreateSimulationView() {
   const [maxStocksInput, setMaxStocksInput] = useState<string>("3")
   const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>("2")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  
-  // Format date from yyyy-mm-dd (ISO) to yyyy/mm/dd for display
-  const formatDateForDisplay = (dateStr: string): string => {
-    if (!dateStr) return ""
-    return dateStr.replace(/-/g, "/")
-  }
   
   // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
   const parseDateInput = (dateStr: string): string => {
@@ -109,19 +104,13 @@ export function CreateSimulationView() {
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
 
-      await response.json()
+      const result = await response.json()
 
-      // Fetch the list of simulations to get the newly created one
-      // The simulation is saved with filename: simulation_YYYYMMDD_HHMMSS.json
-      const simulationsResponse = await fetch("/api/simulations")
-      if (simulationsResponse.ok) {
-        const simulations = await simulationsResponse.json()
-        if (simulations.length > 0) {
-          // Navigate to the most recent simulation (should be the one we just created)
-          setLoading(false)
-          navigate(`/simulation/${simulations[0]}`)
-          return
-        }
+      // The API now returns the simulation with an ID
+      if (result.id) {
+        setLoading(false)
+        navigate(`/simulation/${result.id}`)
+        return
       }
 
       // Fallback: navigate to simulation list
@@ -308,7 +297,7 @@ export function CreateSimulationView() {
                 id="date_start"
                 type="text"
                 placeholder="yyyy/mm/dd"
-                value={formatDateForDisplay(formData.date_start)}
+                value={dateFormat(formData.date_start)}
                 onChange={(e) => {
                   const value = e.target.value
                   // Allow typing yyyy/mm/dd format
@@ -328,7 +317,7 @@ export function CreateSimulationView() {
                       // Reset to default if invalid
                       const date = new Date()
                       date.setFullYear(date.getFullYear() - 1)
-                      handleDateChange("date_start", formatDateForDisplay(date.toISOString().split("T")[0]))
+                      handleDateChange("date_start", dateFormat(date.toISOString().split("T")[0]))
                     }
                   }
                 }}
@@ -345,7 +334,7 @@ export function CreateSimulationView() {
                 id="date_end"
                 type="text"
                 placeholder="yyyy/mm/dd"
-                value={formatDateForDisplay(formData.date_end)}
+                value={dateFormat(formData.date_end)}
                 onChange={(e) => {
                   const value = e.target.value
                   // Allow typing yyyy/mm/dd format
@@ -363,7 +352,7 @@ export function CreateSimulationView() {
                       handleDateChange("date_end", fixed)
                     } else {
                       // Reset to default if invalid
-                      handleDateChange("date_end", formatDateForDisplay(new Date().toISOString().split("T")[0]))
+                      handleDateChange("date_end", dateFormat(new Date().toISOString().split("T")[0]))
                     }
                   }
                 }}

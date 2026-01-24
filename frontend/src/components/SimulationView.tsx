@@ -8,14 +8,7 @@ import { InvestmentTable } from "@/components/InvestmentTable"
 import { RebalanceHistoryTable } from "@/components/RebalanceHistoryTable"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}/${month}/${day}`
-}
+import { dateFormat } from "@/lib/utils"
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -52,12 +45,12 @@ export function SimulationView() {
           if (!res.ok) throw new Error("Failed to load simulations list")
           return res.json()
         })
-        .then((files: string[]) => {
-          if (files.length === 0) {
-            setError("No simulation files available")
+        .then((sims: Array<{ id: number }>) => {
+          if (sims.length === 0) {
+            setError("No simulations available")
             setLoading(false)
           } else {
-            navigate(`/simulation/${files[0]}`, { replace: true })
+            navigate(`/simulation/${sims[0].id}`, { replace: true })
           }
         })
         .catch((err) => {
@@ -77,6 +70,7 @@ export function SimulationView() {
       }
     })
 
+    // urlFile is now a simulation ID (number as string)
     fetch(`/api/simulations/${urlFile}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load simulation data")
@@ -232,7 +226,7 @@ export function SimulationView() {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Period</p>
                     <p className="text-base font-medium">
-                      {formatDate(simulationData.date_start)} - {formatDate(simulationData.date_end)}
+                      {dateFormat(simulationData.date_start)} - {dateFormat(simulationData.date_end)}
                     </p>
                   </div>
                   <div>
@@ -242,10 +236,7 @@ export function SimulationView() {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Final Balance</p>
                     <p className="text-base font-medium">
-                      {formatCurrency(
-                        simulationData.rebalance_history[simulationData.rebalance_history.length - 1]?.balance ||
-                          simulationData.initial_balance
-                      )}
+                      {formatCurrency(simulationData.final_balance)}
                     </p>
                   </div>
                   <div>
@@ -366,7 +357,7 @@ export function SimulationView() {
                 simulationData={simulationData}
                 selectedRebalanceIndex={selectedRebalanceIndex}
                 onRebalanceSelect={handleRebalanceSelect}
-                formatDate={formatDate}
+                formatDate={dateFormat}
                 formatCurrency={formatCurrency}
                 formatPercent={formatPercent}
               />
@@ -376,7 +367,7 @@ export function SimulationView() {
                 <RebalanceDetailView
                   rebalance={selectedRebalance}
                   simulationData={simulationData}
-                  formatDate={formatDate}
+                  formatDate={dateFormat}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
                   onClose={handleCloseRebalance}
@@ -397,7 +388,7 @@ export function SimulationView() {
                   <TabsContent value="investment">
                     <InvestmentTable
                       investments={allInvestments}
-                      formatDate={formatDate}
+                      formatDate={dateFormat}
                       formatCurrency={formatCurrency}
                       formatPercent={formatPercent}
                     />
@@ -406,7 +397,7 @@ export function SimulationView() {
                   <TabsContent value="rebalance">
                     <RebalanceHistoryTable
                       rebalanceHistory={simulationData.rebalance_history}
-                      formatDate={formatDate}
+                      formatDate={dateFormat}
                       formatCurrency={formatCurrency}
                       formatPercent={formatPercent}
                     />

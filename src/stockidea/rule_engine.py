@@ -4,7 +4,7 @@ from typing import Callable
 
 from simpleeval import SimpleEval  # type: ignore
 
-from stockpick.types import TrendAnalysis
+from stockidea.types import TrendAnalysis
 
 
 class RuleEngine:

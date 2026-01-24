@@ -1,7 +1,7 @@
 """FastAPI endpoints for stock analysis and simulations."""
 
 from datetime import datetime, timedelta
-from stockpick.config import OUTPUT_DIR
+from uuid import UUID
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 import json
@@ -9,10 +9,12 @@ from pathlib import Path
 
 import uvicorn
 
-from stockpick.rule_engine import compile_rule
-from stockpick.simulation.simulator import Simulator, save_simulation_result
-from stockpick.types import SimulationConfig, StockIndex, TrendAnalysis
-from stockpick.datasource import market_data
+from stockidea.config import ANALYSIS_DIR
+from stockidea.rule_engine import compile_rule
+from stockidea.simulation.simulator import Simulator
+from stockidea.types import SimulationConfig, StockIndex, TrendAnalysis
+from stockidea.datasource import market_data
+from stockidea.datasource.database import conn, queries
 from typing import Optional
 
 app = FastAPI(title="StockPick API", version="0.1.0")
@@ -25,9 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-SIMULATIONS_DIR = OUTPUT_DIR / "simulations"
-ANALYSIS_DIR = OUTPUT_DIR / "analysis"
 
 
 def _list_json_files(directory: Path) -> list[str]:
@@ -49,15 +48,21 @@ def _read_json_file(directory: Path, filename: str) -> dict:
 
 
 @app.get("/simulations")
-def list_simulations() -> list[str]:
-    """Return list of available simulation filenames (without .json extension)."""
-    return _list_json_files(SIMULATIONS_DIR)
+async def list_simulations() -> list[dict]:
+    """Return list of available simulations from database."""
+    async with conn.get_db_session() as db_session:
+        simulations = await queries.list_simulations(db_session)
+        return simulations
 
 
-@app.get("/simulations/{filename}")
-def get_simulation(filename: str) -> dict:
-    """Return the full JSON content of a simulation file."""
-    return _read_json_file(SIMULATIONS_DIR, filename)
+@app.get("/simulations/{simulation_id}")
+async def get_simulation(simulation_id: UUID) -> dict:
+    """Return the full JSON content of a simulation by ID."""
+    async with conn.get_db_session() as db_session:
+        simulation_result = await queries.get_simulation_by_id(db_session, simulation_id)
+        if simulation_result is None:
+            raise HTTPException(status_code=404, detail=f"Simulation not found: {simulation_id}")
+        return simulation_result.model_dump()
 
 
 @app.get("/analysis")
@@ -116,9 +121,12 @@ async def simulate(simulation_config: SimulationConfig) -> dict:
     )
     simulation_result = await simulator.simulate()
 
-    save_simulation_result(simulation_result)
+    async with conn.get_db_session() as db_session:
+        simulation_id = await queries.save_simulation_result(db_session, simulation_result)
 
-    return simulation_result.model_dump()
+    result_dict = simulation_result.model_dump()
+    result_dict["id"] = simulation_id
+    return result_dict
 
 
 @app.get("/snp500")

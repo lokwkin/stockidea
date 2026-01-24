@@ -31,7 +31,9 @@ export interface SimulationConfig {
 }
 
 export interface Simulation {
+  id?: number
   initial_balance: number
+  final_balance: number
   date_start: string
   date_end: string
   rebalance_history: RebalanceHistory[]
@@ -43,4 +45,14 @@ export interface Simulation {
   baseline_balance?: number
   rule_ref?: string | null
   simulation_config?: SimulationConfig
+}
+
+export interface SimulationSummary {
+  id: number
+  date_start: string
+  date_end: string
+  profit_pct: number
+  profit: number
+  baseline_profit_pct: number
+  created_at: string
 }

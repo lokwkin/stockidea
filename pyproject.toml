@@ -1,5 +1,5 @@
 [project]
-name = "stockpick"
+name = "stockidea"
 version = "0.1.0"
 description = "Stock price analysis and reporting tool"
 requires-python = ">=3.12"
@@ -20,11 +20,11 @@ dependencies = [
 ]
 
 [project.scripts]
-stockpick = "stockpick.cli:cli"
+stockidea = "stockidea.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/stockpick"]
+packages = ["src/stockidea"]

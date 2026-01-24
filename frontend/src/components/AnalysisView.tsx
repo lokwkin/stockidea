@@ -10,15 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-
-function formatDate(dateStr: string): string {
-  // Format: "20251021" -> "2025/10/21"
-  if (dateStr.length !== 8) return dateStr
-  const year = dateStr.slice(0, 4)
-  const month = dateStr.slice(4, 6)
-  const day = dateStr.slice(6, 8)
-  return `${year}/${month}/${day}`
-}
+import { dateFormat } from "@/lib/utils"
 
 export function AnalysisView() {
   const { file: urlFile } = useParams<{ file?: string }>()
@@ -133,8 +125,7 @@ export function AnalysisView() {
   }, [selectedFile, rule])
 
   const generatedDate = useMemo(() => {
-    const now = new Date()
-    return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`
+    return dateFormat(new Date())
   }, [])
 
   if (loadingFiles) {
@@ -191,7 +182,7 @@ export function AnalysisView() {
           </div>
           {data && (
             <p className="text-sm text-muted-foreground">
-              Trend Data Date: {formatDate(data.analysis_date)} • Generated on{" "}
+              Trend Data Date: {dateFormat(data.analysis_date)} • Generated on{" "}
               {generatedDate} • {data.data.length} stocks analyzed • 52-week metrics
             </p>
           )}

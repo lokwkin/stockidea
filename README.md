@@ -1,14 +1,15 @@
-# Stockpick
+# Stockidea
 
+Stockidea is a platform for designing and backtesting systematic stock strategies using transparent, composable signals, allowing user to build rule-based portfolios with momentum, trend, volatility, liquidity, and fundamental indicators while evaluating performance under realistic rebalancing and risk constraints.
 
-### Start API
+### Command Line
 ```
-uv run python -m stockpick.api
+uv run python -m stockidea.api
 ```
 
 ### Analyze
 ```bash
-Usage: python -m stockpick.cli analyze [OPTIONS]
+Usage: python -m stockidea.cli analyze [OPTIONS]
 
   Analyze stock prices for a given date
 
@@ -19,7 +20,7 @@ Options:
   --help                          Show this message and exit.
 
 # Example
-uv run python -m stockpick.cli analyze -d 2026-01-20
+uv run python -m stockidea.cli analyze -d 2026-01-20
 ```
 
 #### Analysis Field Description
@@ -48,7 +49,7 @@ uv run python -m stockpick.cli analyze -d 2026-01-20
 
 ### Pick 
 ```bash
-Usage: python -m stockpick.cli pick [OPTIONS]
+Usage: python -m stockidea.cli pick [OPTIONS]
 
   Apply a rule onto analyzed stock prices for a given date range.
 
@@ -64,12 +65,12 @@ Options:
   --help                          Show this message and exit.
 
 # Example
-uv run python -m stockpick.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
+uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
 ```
 
 ### Simulate
 ```bash
-Usage: python -m stockpick.cli simulate [OPTIONS]
+Usage: python -m stockidea.cli simulate [OPTIONS]
 
   Simulate investment strategy for a given date range.
 
@@ -89,5 +90,5 @@ Options:
   --help                          Show this message and exit.
   
 # Example
-uv run python -m stockpick.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
+uv run python -m stockidea.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
 ```

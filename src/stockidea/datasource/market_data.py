@@ -2,9 +2,9 @@ import asyncio
 import logging
 from datetime import date
 
-from stockpick.datasource import fmp
-from stockpick.types import StockIndex, StockPrice
-from stockpick.datasource.database import conn, queries
+from stockidea.datasource import fmp
+from stockidea.types import StockIndex, StockPrice
+from stockidea.datasource.database import conn, queries
 
 logger = logging.getLogger(__name__)
 

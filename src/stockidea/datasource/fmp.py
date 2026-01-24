@@ -3,8 +3,8 @@ import logging
 import os
 import httpx
 
-from stockpick.config import FMP_API_KEY, FMP_BASE_URL
-from stockpick.types import ConstituentChange, FMPAdjustedStockPrice, FMPLightPrice, StockIndex
+from stockidea.config import FMP_API_KEY, FMP_BASE_URL
+from stockidea.types import ConstituentChange, FMPAdjustedStockPrice, FMPLightPrice, StockIndex
 
 logger = logging.getLogger(__name__)
 

@@ -2,12 +2,14 @@ from datetime import datetime, timedelta
 from math import floor
 import logging
 from typing import Callable
+from uuid import UUID
 
-from stockpick.analysis import analysis
-from stockpick.config import OUTPUT_DIR
-from stockpick.datasource import constituent, market_data
-from stockpick.helper import next_monday
-from stockpick.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, TrendAnalysis
+from stockidea.analysis import analysis
+from stockidea.datasource import constituent, market_data
+from stockidea.datasource.database import conn
+from stockidea.datasource.database.queries import save_simulation_result as save_simulation_to_db
+from stockidea.helper import next_monday
+from stockidea.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, TrendAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +165,7 @@ class Simulator:
 
         return SimulationResult(
             initial_balance=self.initial_balance,
+            final_balance=balance,
             date_start=self.date_start,
             date_end=self.date_end,
             rebalance_history=rebalance_history,
@@ -183,9 +186,11 @@ class Simulator:
         )
 
 
-def save_simulation_result(result: SimulationResult) -> None:
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = OUTPUT_DIR / "simulations" / f"simulation_{timestamp}.json"
-    output_path.write_text(result.model_dump_json(indent=2))
-    logger.info(f"✓ Simulation result saved: {output_path}")
+async def save_simulation_result(result: SimulationResult) -> UUID:
+    """
+    Save simulation result to database.
+    Returns the simulation ID.
+    """
+    async with conn.get_db_session() as db_session:
+        simulation_id = await save_simulation_to_db(db_session, result)
+        return simulation_id

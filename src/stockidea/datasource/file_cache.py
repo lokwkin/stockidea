@@ -1,7 +1,7 @@
 from datetime import date
 import json
 from typing import Any
-from stockpick.config import CACHE_DIR
+from stockidea.config import CACHE_DIR
 
 
 def save_to_cache(key: str, data: Any) -> None:

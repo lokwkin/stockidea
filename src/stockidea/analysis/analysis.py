@@ -4,9 +4,9 @@ import json
 import logging
 from typing import Callable
 
-from stockpick.analysis import trend_analyzer
-from stockpick.config import OUTPUT_DIR
-from stockpick.types import StockPrice, TrendAnalysis
+from stockidea.analysis import trend_analyzer
+from stockidea.config import ANALYSIS_DIR
+from stockidea.types import StockPrice, TrendAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], analysis_date
 
 def load_analysis(analysis_date: datetime) -> tuple[list[TrendAnalysis], str] | None:
     filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"
-    analysis_path = OUTPUT_DIR / "analysis" / filename
+    analysis_path = ANALYSIS_DIR / filename
     if not analysis_path.exists():
         return None
     analysis_data = json.loads(analysis_path.read_text())
@@ -49,7 +49,7 @@ def load_analysis(analysis_date: datetime) -> tuple[list[TrendAnalysis], str] | 
 def save_analysis(analysis: list[TrendAnalysis], analysis_date: datetime) -> str:
     analysis_data = [a.model_dump() for a in analysis]
     filename = f"analysis_{analysis_date.strftime('%Y%m%d')}.json"
-    analysis_path = OUTPUT_DIR / "analysis" / filename
+    analysis_path = ANALYSIS_DIR / filename
     analysis_path.write_text(
         json.dumps(
             {

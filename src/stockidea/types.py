@@ -128,6 +128,7 @@ class SimulationConfig(BaseModel):
 
 class SimulationResult(BaseModel):
     initial_balance: float
+    final_balance: float
     date_start: datetime
     date_end: datetime
     rebalance_history: list[RebalanceHistory]

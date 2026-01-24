@@ -1,4 +1,4 @@
-"""CLI commands for stockpick using Click."""
+"""CLI commands for stockidea using Click."""
 
 import asyncio
 import logging
@@ -6,13 +6,13 @@ import click
 from datetime import datetime, timedelta
 
 # Import config to initialize logging
-import stockpick.config  # noqa: F401
-from stockpick.analysis import analysis
-from stockpick.datasource import constituent, market_data
-from stockpick.rule_engine import compile_rule
+import stockidea.config  # noqa: F401
+from stockidea.analysis import analysis
+from stockidea.datasource import constituent, market_data
+from stockidea.rule_engine import compile_rule
 
-from stockpick.simulation.simulator import Simulator, save_simulation_result
-from stockpick.types import StockIndex, TrendAnalysis
+from stockidea.simulation.simulator import Simulator, save_simulation_result
+from stockidea.types import StockIndex, TrendAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +139,16 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
         baseline_index=StockIndex.SP500,
     )
 
-    simulation_result = asyncio.run(simulator.simulate())
+    async def _simulate_and_save():
+        simulation_result = await simulator.simulate()
+        simulation_id = await save_simulation_result(simulation_result)
+        return simulation_result, simulation_id
+
+    simulation_result, simulation_id = asyncio.run(_simulate_and_save())
     click.echo(
         f"Simulation result: {simulation_result.profit_pct * 100:2.2f}%, {simulation_result.profit:2.2f}"
     )
-    save_simulation_result(simulation_result)
+    click.echo(f"Simulation saved to database with ID: {simulation_id}")
 
 
 if __name__ == "__main__":

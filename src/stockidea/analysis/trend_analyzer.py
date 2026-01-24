@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 from scipy import stats  # type: ignore
 
-from stockpick.types import TrendAnalysis, StockPrice
+from stockidea.types import TrendAnalysis, StockPrice
 
 
 @dataclass

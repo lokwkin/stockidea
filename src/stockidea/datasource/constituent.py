@@ -1,6 +1,6 @@
 from datetime import date
-from stockpick.datasource import fmp, file_cache
-from stockpick.types import ConstituentChange, StockIndex
+from stockidea.datasource import fmp, file_cache
+from stockidea.types import ConstituentChange, StockIndex
 
 
 async def _load_constituent_changes(index: StockIndex) -> list[ConstituentChange]:
