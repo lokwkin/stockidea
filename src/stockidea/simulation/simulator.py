@@ -125,7 +125,7 @@ class Simulator:
                 break
 
             logger.info(
-                f"====================== Rebalance on {date_iter.date()} (Balance: {balance})==========================")
+                f"====== Rebalance on {date_iter.date()} (Balance: {balance}) ======")
             selected_stocks, analysis_ref = await self.pick_stocks(date_iter)
 
             investments: list[Investment] = []

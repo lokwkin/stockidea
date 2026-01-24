@@ -2,28 +2,71 @@
 
 Stockidea is a platform for designing and backtesting systematic stock strategies using transparent, composable signals, allowing user to build rule-based portfolios with momentum, trend, volatility, liquidity, and fundamental indicators while evaluating performance under realistic rebalancing and risk constraints.
 
-### Command Line
-```
-uv run python -m stockidea.api
-```
+## Command Line APIs
 
 ### Analyze
+Analyze the stock price and performance data of index constituent stocks at a given date with the data in the past 52 weeks.
 ```bash
-Usage: python -m stockidea.cli analyze [OPTIONS]
-
-  Analyze stock prices for a given date
+uv run python -m stockidea.cli analyze
 
 Options:
   -d, --date TEXT                 Analysis date in YYYY-MM-DD format
   -i, --index [SP500|DOWJONES|NASDAQ]
                                   Stock index to analyze
-  --help                          Show this message and exit.
 
 # Example
 uv run python -m stockidea.cli analyze -d 2026-01-20
 ```
 
-#### Analysis Field Description
+### Pick
+Analyze the stock price and indicator data of index constituent stocks at a given date with the data in the past 52 weeks, then filter and pick the stocks based on user's custom rule.
+
+```bash
+Usage: python -m stockidea.cli pick [OPTIONS]
+
+Options:
+  -d, --date TEXT                 Analysis date in YYYY-MM-DD format
+  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
+                                  > 10 AND biggest_biweekly_drop_pct > 15')
+                                  [required]
+  -m, --max-stocks INTEGER        Maximum number of stocks to hold at once
+                                  (default: 3)
+  -i, --index [SP500|DOWJONES|NASDAQ]
+                                  Stock index to analyze
+
+# Example
+uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
+```
+
+### Simulate
+With user's custom rules, backtest and simulate the performance within the given date range.
+```bash
+Usage: python -m stockidea.cli simulate
+
+Options:
+  --max-stocks INTEGER            Maximum number of stocks to hold at once
+                                  (default: 3)
+  --rebalance-interval-weeks INTEGER
+                                  Rebalance interval in weeks (default: 2)
+  --date-start TEXT               Simulation start date in YYYY-MM-DD format
+                                  [required]
+  --date-end TEXT                 Simulation end date in YYYY-MM-DD format
+                                  [required]
+  -i, --index [SP500|DOWJONES|NASDAQ]
+                                  Stock index to analyze
+  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
+                                  > 10 AND biggest_biweekly_drop_pct > 15')
+  
+# Example
+uv run python -m stockidea.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
+```
+
+## Stock Picking Rule and Available Performance Data
+The analysis will result in a list of performance data for each stock. User can design stock filtering / picking rule using the field below. 
+
+For example, `change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15` means on each rebalance point, only pick the stocks that has 3 months percentage change larger than 10% and the biggest bi-weekly drop percentage less than 15%.
+
+### Field Descriptions
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -46,49 +89,3 @@ uv run python -m stockidea.cli analyze -d 2026-01-20
 | `linear_r_squared` | float | R² value (0-1) indicating how well the price data fits the linear trend line (higher = more consistent trend) |
 | `log_slope` | float | Annualized log trend slope (log slope * 52 weeks per year) |
 | `log_r_squared` | float | R² value (0-1) indicating how well the price data fits the log trend line (higher = more consistent trend) |
-
-### Pick 
-```bash
-Usage: python -m stockidea.cli pick [OPTIONS]
-
-  Apply a rule onto analyzed stock prices for a given date range.
-
-Options:
-  -d, --date TEXT                 Analysis date in YYYY-MM-DD format
-  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
-                                  > 10 AND biggest_biweekly_drop_pct > 15')
-                                  [required]
-  -m, --max-stocks INTEGER        Maximum number of stocks to hold at once
-                                  (default: 3)
-  -i, --index [SP500|DOWJONES|NASDAQ]
-                                  Stock index to analyze
-  --help                          Show this message and exit.
-
-# Example
-uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
-```
-
-### Simulate
-```bash
-Usage: python -m stockidea.cli simulate [OPTIONS]
-
-  Simulate investment strategy for a given date range.
-
-Options:
-  --max-stocks INTEGER            Maximum number of stocks to hold at once
-                                  (default: 3)
-  --rebalance-interval-weeks INTEGER
-                                  Rebalance interval in weeks (default: 2)
-  --date-start TEXT               Simulation start date in YYYY-MM-DD format
-                                  [required]
-  --date-end TEXT                 Simulation end date in YYYY-MM-DD format
-                                  [required]
-  -i, --index [SP500|DOWJONES|NASDAQ]
-                                  Stock index to analyze
-  -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
-                                  > 10 AND biggest_biweekly_drop_pct > 15')
-  --help                          Show this message and exit.
-  
-# Example
-uv run python -m stockidea.cli simulate --max-stocks=3 --rebalance-interval-weeks=4 --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_3m_pct > 10'
-```
