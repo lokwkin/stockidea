@@ -5,7 +5,7 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 ## Dashboard
 The frontend dashboard allows users to define custom strategy configurations, run simulations, and inspect detailed analytics for each rebalance action at every point in time.
 
-![Dashboard](docs/dashboard.gif)
+<img src="docs/dashboard.gif" alt="Dashboard" width="60%">
 
 
 ## Setup local development
