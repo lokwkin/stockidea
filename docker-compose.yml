@@ -5,8 +5,8 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_DB=stockidea
-      - POSTGRES_USER=stockidea
-      - POSTGRES_PASSWORD=stockidea
+      - POSTGRES_USER=stockidea_user
+      - POSTGRES_PASSWORD=stockidea_password
     ports:
       - "5432:5432"
     volumes:
@@ -14,7 +14,7 @@ services:
     networks:
       - stockidea-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockidea}"]
+      test: ["CMD-SHELL", "pg_isready -U stockidea_user && psql -U stockidea_user -d stockidea -c 'SELECT 1'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,9 +34,9 @@ services:
       - FMP_API_KEY=${FMP_API_KEY}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-stockidea}
-      - POSTGRES_USER=${POSTGRES_USER:-stockidea}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stockidea}
+      - POSTGRES_DB=stockidea
+      - POSTGRES_USER=stockidea_user
+      - POSTGRES_PASSWORD=stockidea_password
     env_file:
       - .env
     command: uv run uvicorn stockidea.api:app --host 0.0.0.0 --port 8000 --reload

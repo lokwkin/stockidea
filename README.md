@@ -2,6 +2,15 @@
 
 Stockidea is a platform for designing and backtesting systematic stock strategies using transparent, composable signals, allowing user to build rule-based portfolios with momentum, trend, volatility, liquidity, and fundamental indicators while evaluating performance under realistic rebalancing and risk constraints.
 
+## Setup Development with Docker Compose
+
+Clone a `.env` file from `.env.example` and supply your own credentials.
+```
+docker-compose up -d
+
+# Frontend dashboard located at http://localhost:5173
+```
+
 ## Command Line APIs
 
 ### Analyze
