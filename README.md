@@ -106,3 +106,6 @@ For example, `change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15` means on ea
 | `linear_r_squared` | float | R² value (0-1) indicating how well the price data fits the linear trend line (higher = more consistent trend) |
 | `log_slope` | float | Annualized log trend slope (log slope * 52 weeks per year) |
 | `log_r_squared` | float | R² value (0-1) indicating how well the price data fits the log trend line (higher = more consistent trend) |
+
+## License
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
