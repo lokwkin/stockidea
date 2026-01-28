@@ -225,6 +225,9 @@ def analyze_stock(
 
 
 def rank_by_rising_stability_score(items: list[TrendAnalysis]) -> list[TrendAnalysis]:
+    
+    if len(items) <= 1:
+        return items  # no ranking needed
 
     slopes = np.array([i.linear_slope_pct for i in items], dtype=float)
     r2s = np.array([i.linear_r_squared for i in items], dtype=float)
@@ -255,8 +258,8 @@ def slope_outlier_mask(items: list[TrendAnalysis], k: float = 3.0) -> list[Trend
     Returns:
         List of TrendAnalysis objects without outliers
     """
-    if not items:
-        return []
+    if not items or len(items) <= 2:
+        return items  # no outliers found or not enough data to determine outliers
 
     slopes = np.asarray([i.linear_slope_pct for i in items], dtype=float)
 
