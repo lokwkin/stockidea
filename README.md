@@ -39,14 +39,14 @@ Analyze the stock price and indicator data of index constituent stocks at a give
 
 #### Example
 ```bash
-uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1'
+uv run python -m stockidea.cli pick -r 'change_3m_pct > 10 AND max_drop_2w_pct > 1'
 ```
 
 #### Options
 ```
   -d, --date TEXT                 Analysis date in YYYY-MM-DD format
   -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
-                                  > 10 AND biggest_biweekly_drop_pct > 15')
+                                  > 10 AND max_drop_2w_pct > 15')
                                   [required]
   -m, --max-stocks INTEGER        Maximum number of stocks to hold at once
                                   (default: 3)
@@ -75,32 +75,31 @@ uv run python -m stockidea.cli simulate --max-stocks=3 --rebalance-interval-week
   -i, --index [SP500|DOWJONES|NASDAQ]
                                   Stock index to analyze
   -r, --rule TEXT                 Rule expression string (e.g., 'change_3m_pct
-                                  > 10 AND biggest_biweekly_drop_pct > 15')
+                                  > 10 AND max_drop_2w_pct > 15')
 ```
 
 ## Stock Picking Rule and Available Performance Data
 The analysis will result in a list of performance data for each stock. User can design stock filtering / picking rule using the field below. 
 
-For example, `change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15` means on each rebalance point, only pick the stocks that has 3 months percentage change larger than 10% and the biggest bi-weekly drop percentage less than 15%.
+For example, `change_3m_pct > 10 AND max_drop_2w_pct > 15` means on each rebalance point, only pick the stocks that has 3 months percentage change larger than 10% and the maximum 2-week drop percentage less than 15%.
 
 ### Field Descriptions
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `symbol` | string | Stock ticker symbol |
-| `weeks_above_1_week_ago` | int | Number of weeks where closing price was higher than 1 week prior |
-| `weeks_above_2_weeks_ago` | int | Number of weeks where closing price was higher than 2 weeks prior |
-| `weeks_above_4_weeks_ago` | int | Number of weeks where closing price was higher than 4 weeks prior |
-| `biggest_weekly_jump_pct` | float | Largest week-over-week percentage increase |
-| `biggest_weekly_drop_pct` | float | Largest week-over-week percentage decrease |
-| `biggest_biweekly_jump_pct` | float | Largest biweekly (2-week) percentage increase |
-| `biggest_biweekly_drop_pct` | float | Largest biweekly (2-week) percentage decrease |
-| `biggest_monthly_jump_pct` | float | Largest monthly (4-week) percentage increase |
-| `biggest_monthly_drop_pct` | float | Largest monthly (4-week) percentage decrease |
+| `max_jump_1w_pct` | float | Maximum 1-week percentage increase |
+| `max_drop_1w_pct` | float | Maximum 1-week percentage decrease |
+| `max_jump_2w_pct` | float | Maximum 2-week percentage increase |
+| `max_drop_2w_pct` | float | Maximum 2-week percentage decrease |
+| `max_jump_4w_pct` | float | Maximum 4-week percentage increase |
+| `max_drop_4w_pct` | float | Maximum 4-week percentage decrease |
 | `change_1y_pct` | float | Percentage change over 1 year (52 weeks) |
 | `change_6m_pct` | float | Percentage change over 6 months (26 weeks) |
 | `change_3m_pct` | float | Percentage change over 3 months (13 weeks) |
 | `change_1m_pct` | float | Percentage change over 1 month (4 weeks) |
+| `change_2w_pct` | float | Percentage change over 2 weeks |
+| `change_1w_pct` | float | Percentage change over 1 week |
 | `total_weeks` | int | Total number of weeks analyzed |
 | `linear_slope_pct` | float | Linear trend slope as percentage of starting price per week |
 | `linear_r_squared` | float | R² value (0-1) indicating how well the price data fits the linear trend line (higher = more consistent trend) |

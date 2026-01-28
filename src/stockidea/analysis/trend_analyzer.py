@@ -97,19 +97,6 @@ def analyze_stock(
 
     total_weeks = len(weekly_data)
 
-    # Calculate weeks above previous periods
-    weeks_above_1 = 0
-    weeks_above_2 = 0
-    weeks_above_4 = 0
-
-    for i, week in enumerate(weekly_data):
-        if i >= 1 and week.closing_price > weekly_data[i - 1].closing_price:
-            weeks_above_1 += 1
-        if i >= 2 and week.closing_price > weekly_data[i - 2].closing_price:
-            weeks_above_2 += 1
-        if i >= 4 and week.closing_price > weekly_data[i - 4].closing_price:
-            weeks_above_4 += 1
-
     # Calculate weekly changes (percentage)
     weekly_changes = []
     for i in range(1, len(weekly_data)):
@@ -134,13 +121,13 @@ def analyze_stock(
         )
         monthly_changes.append(change)
 
-    # Find biggest movements
-    biggest_weekly_jump = max(weekly_changes) if weekly_changes else 0.0
-    biggest_weekly_drop = min(weekly_changes) if weekly_changes else 0.0
-    biggest_biweekly_jump = max(biweekly_changes) if biweekly_changes else 0.0
-    biggest_biweekly_drop = min(biweekly_changes) if biweekly_changes else 0.0
-    biggest_monthly_jump = max(monthly_changes) if monthly_changes else 0.0
-    biggest_monthly_drop = min(monthly_changes) if monthly_changes else 0.0
+    # Find max movements
+    max_jump_1w = max(weekly_changes) if weekly_changes else 0.0
+    max_drop_1w = - min(weekly_changes) if weekly_changes else 0.0
+    max_jump_2w = max(biweekly_changes) if biweekly_changes else 0.0
+    max_drop_2w = - min(biweekly_changes) if biweekly_changes else 0.0
+    max_jump_4w = max(monthly_changes) if monthly_changes else 0.0
+    max_drop_4w = - min(monthly_changes) if monthly_changes else 0.0
 
     # Overall change (first week to last week)
     weeks_1y = min(52, len(weekly_data) - 1)
@@ -177,6 +164,25 @@ def analyze_stock(
         else 0.0
     )
 
+    # Calculate 1-week and 2-week changes
+    weeks_2w = min(2, len(weekly_data) - 1)
+    change_2w = (
+        _calculate_pct_change(
+            weekly_data[-weeks_2w - 1].closing_price, weekly_data[-1].closing_price
+        )
+        if weeks_2w > 0
+        else 0.0
+    )
+
+    weeks_1w = min(1, len(weekly_data) - 1)
+    change_1w = (
+        _calculate_pct_change(
+            weekly_data[-weeks_1w - 1].closing_price, weekly_data[-1].closing_price
+        )
+        if weeks_1w > 0
+        else 0.0
+    )
+
     # Trend analysis using linear regression
     # x = week number (0, 1, 2, ...), y = closing price
     x = np.arange(len(weekly_data))
@@ -198,19 +204,18 @@ def analyze_stock(
 
     return TrendAnalysis(
         symbol=symbol,
-        weeks_above_1_week_ago=weeks_above_1,
-        weeks_above_2_weeks_ago=weeks_above_2,
-        weeks_above_4_weeks_ago=weeks_above_4,
-        biggest_weekly_jump_pct=biggest_weekly_jump,
-        biggest_weekly_drop_pct=biggest_weekly_drop,
-        biggest_biweekly_jump_pct=biggest_biweekly_jump,
-        biggest_biweekly_drop_pct=biggest_biweekly_drop,
-        biggest_monthly_jump_pct=biggest_monthly_jump,
-        biggest_monthly_drop_pct=biggest_monthly_drop,
+        max_jump_1w_pct=max_jump_1w,
+        max_drop_1w_pct=max_drop_1w,
+        max_jump_2w_pct=max_jump_2w,
+        max_drop_2w_pct=max_drop_2w,
+        max_jump_4w_pct=max_jump_4w,
+        max_drop_4w_pct=max_drop_4w,
         change_1y_pct=change_1y,
         change_6m_pct=change_6m,
         change_3m_pct=change_3m,
         change_1m_pct=change_1m,
+        change_2w_pct=change_2w,
+        change_1w_pct=change_1w,
         total_weeks=total_weeks,
         linear_slope_pct=linear_slope_pct,
         linear_r_squared=linear_r_squared,
@@ -237,3 +242,30 @@ def rank_by_rising_stability_score(items: list[TrendAnalysis]) -> list[TrendAnal
     ]
 
     return ranked_items
+
+
+def slope_outlier_mask(items: list[TrendAnalysis], k: float = 3.0) -> list[TrendAnalysis]:
+    """
+    Remove outliers from the list of TrendAnalysis objects based on the linear slope percentage.
+
+    Args:
+        items: List of TrendAnalysis objects
+        k: Multiplier for the median absolute deviation (MAD) to define outliers
+
+    Returns:
+        List of TrendAnalysis objects without outliers
+    """
+    if not items:
+        return []
+
+    slopes = np.asarray([i.linear_slope_pct for i in items], dtype=float)
+
+    median = np.median(slopes)
+    mad = np.median(np.abs(slopes - median))
+
+    if mad == 0:
+        return items  # no outliers found
+
+    modified_z = 0.6745 * (slopes - median) / mad
+    is_not_outlier = np.abs(modified_z) <= 2.5
+    return [item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier]

@@ -289,7 +289,34 @@ export function SimulationView() {
           {simulationData && (
             <div className="mx-auto max-w-6xl">
               <div className="rounded-lg border bg-card p-6 shadow-sm">
-                <h2 className="mb-6 text-2xl font-semibold">Simulation Summary</h2>
+                <div className="mb-6 flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold">Simulation Summary</h2>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!simulationData?.simulation_config) return
+                      const config = simulationData.simulation_config
+                      // Convert dates from ISO to yyyy/mm/dd format for URL
+                      const dateStart = dateFormat(config.date_start).replace(/-/g, "/")
+                      const dateEnd = dateFormat(config.date_end).replace(/-/g, "/")
+                      
+                      const params = new URLSearchParams({
+                        max_stocks: config.max_stocks.toString(),
+                        rebalance_interval_weeks: config.rebalance_interval_weeks.toString(),
+                        date_start: dateStart,
+                        date_end: dateEnd,
+                        rule: config.rule,
+                        index: config.index,
+                      })
+                      
+                      navigate(`/simulation/create?${params.toString()}`)
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Clone Simulation
+                  </Button>
+                </div>
                 
                 {/* Period and Performance */}
                 <div className="mb-6 grid grid-cols-1 gap-6 border-b pb-6 md:grid-cols-2 lg:grid-cols-4">

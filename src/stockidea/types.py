@@ -47,19 +47,18 @@ class TrendAnalysis(BaseModel):
     """Analysis results for a stock between two dates."""
 
     symbol: str
-    weeks_above_1_week_ago: int
-    weeks_above_2_weeks_ago: int
-    weeks_above_4_weeks_ago: int
-    biggest_weekly_jump_pct: float
-    biggest_weekly_drop_pct: float
-    biggest_biweekly_jump_pct: float
-    biggest_biweekly_drop_pct: float
-    biggest_monthly_jump_pct: float
-    biggest_monthly_drop_pct: float
+    max_jump_1w_pct: float
+    max_drop_1w_pct: float
+    max_jump_2w_pct: float
+    max_drop_2w_pct: float
+    max_jump_4w_pct: float
+    max_drop_4w_pct: float
     change_1y_pct: float
     change_6m_pct: float  # 6 month change
     change_3m_pct: float  # 3 month change
     change_1m_pct: float  # 1 month change
+    change_2w_pct: float  # 2 week change
+    change_1w_pct: float  # 1 week change
     total_weeks: int
     linear_slope_pct: float  # Linear slope as % of starting price
     linear_r_squared: float  # Linear R² (0-1), how well data fits the trend line
@@ -70,22 +69,20 @@ class TrendAnalysis(BaseModel):
         return (
             f"Analysis for {self.symbol} ({self.total_weeks} weeks)\n"
             f"{'─' * 50}\n"
-            f"Weeks closing > 1 week ago:  {self.weeks_above_1_week_ago:3d} ({self.weeks_above_1_week_ago / max(1, self.total_weeks - 1) * 100:5.1f}%)\n"
-            f"Weeks closing > 2 weeks ago: {self.weeks_above_2_weeks_ago:3d} ({self.weeks_above_2_weeks_ago / max(1, self.total_weeks - 2) * 100:5.1f}%)\n"
-            f"Weeks closing > 4 weeks ago: {self.weeks_above_4_weeks_ago:3d} ({self.weeks_above_4_weeks_ago / max(1, self.total_weeks - 4) * 100:5.1f}%)\n"
-            f"{'─' * 50}\n"
-            f"Biggest weekly jump:    {self.biggest_weekly_jump_pct:+7.2f}%\n"
-            f"Biggest weekly drop:    {self.biggest_weekly_drop_pct:+7.2f}%\n"
-            f"Biggest biweekly jump:  {self.biggest_biweekly_jump_pct:+7.2f}%\n"
-            f"Biggest biweekly drop:  {self.biggest_biweekly_drop_pct:+7.2f}%\n"
-            f"Biggest monthly jump:   {self.biggest_monthly_jump_pct:+7.2f}%\n"
-            f"Biggest monthly drop:   {self.biggest_monthly_drop_pct:+7.2f}%\n"
+            f"Max weekly jump:    {self.max_jump_1w_pct:+7.2f}%\n"
+            f"Max weekly drop:    {self.max_drop_1w_pct:+7.2f}%\n"
+            f"Max biweekly jump:  {self.max_jump_2w_pct:+7.2f}%\n"
+            f"Max biweekly drop:  {self.max_drop_2w_pct:+7.2f}%\n"
+            f"Max monthly jump:   {self.max_jump_4w_pct:+7.2f}%\n"
+            f"Max monthly drop:   {self.max_drop_4w_pct:+7.2f}%\n"
             f"{'─' * 50}\n"
             f"Linear trend slope (per week): {self.linear_slope_pct:7.3f}\n"
             f"Linear trend stability (R²):   {self.linear_r_squared:7.3f}\n"
             f"Log trend slope (per year): {self.log_slope:+7.3f}%\n"
             f"Log trend stability (R²):   {self.log_r_squared:7.3f}\n"
             f"{'─' * 50}\n"
+            f"Change (1 week):    {self.change_1w_pct:+7.2f}%\n"
+            f"Change (2 weeks):   {self.change_2w_pct:+7.2f}%\n"
             f"Change (1 month):   {self.change_1m_pct:+7.2f}%\n"
             f"Change (3 months):  {self.change_3m_pct:+7.2f}%\n"
             f"Change (6 months):  {self.change_6m_pct:+7.2f}%\n"

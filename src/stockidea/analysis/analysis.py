@@ -11,16 +11,18 @@ from stockidea.types import StockPrice, TrendAnalysis
 logger = logging.getLogger(__name__)
 
 
-def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callable[[TrendAnalysis], bool]
+def apply_rule(analyses: list[TrendAnalysis], rule_func: Callable[[TrendAnalysis], bool]
                ) -> list[TrendAnalysis]:
 
     filtered_stocks = [analysis for analysis in analyses if rule_func(analysis)]
 
     # Sort by rising stability score
     filtered_stocks = trend_analyzer.rank_by_rising_stability_score(filtered_stocks)
-    selected_stocks = filtered_stocks[: max_stocks]
-    logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
-    return selected_stocks
+
+    # Remove outliers from the list of TrendAnalysis objects based on the linear slope percentage
+    filtered_stocks = trend_analyzer.slope_outlier_mask(filtered_stocks, k=3.0)
+
+    return filtered_stocks
 
 
 def analyze_stock_batch(stock_prices: dict[str, list[StockPrice]], analysis_date: datetime, back_period_weeks: int = 52) -> tuple[list[TrendAnalysis], str]:

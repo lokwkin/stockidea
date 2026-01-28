@@ -62,7 +62,7 @@ def analyze(date: str, index: str):
 
 @cli.command("pick", help="Apply a rule onto analyzed stock prices for a given date range.")
 @click.option("--date", "-d", type=str, required=False, default=datetime.now().strftime("%Y-%m-%d"), help="Analysis date in YYYY-MM-DD format")
-@click.option("--rule", "-r", type=str, required=True, help="Rule expression string (e.g., 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15')")
+@click.option("--rule", "-r", type=str, required=True, help="Rule expression string (e.g., 'change_3m_pct > 10 AND max_drop_2w_pct > 15')")
 @click.option("--max-stocks", "-m", type=int, default=3, help="Maximum number of stocks to hold at once (default: 3)")
 @click.option(
     "--index",
@@ -87,7 +87,12 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
 
     analyses = asyncio.run(_analyze(analysis_date=analysis_date, index=stock_index))
 
-    analysis.apply_rule(analyses=analyses, max_stocks=max_stocks, rule_func=rule_func)
+    filtered_stocks = analysis.apply_rule(analyses=analyses, rule_func=rule_func)
+    
+    selected_stocks = filtered_stocks[: max_stocks]
+    logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
+    
+    # selected_stocks = trend_analyzer.slope_outlier_mask(selected_stocks, k=3.0)
 
 
 @cli.command("simulate", help="Simulate investment strategy for a given date range.")
@@ -105,7 +110,7 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
 @click.option(
     "--rule", "-r",
     type=str,
-    help="Rule expression string (e.g., 'change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15')",
+    help="Rule expression string (e.g., 'change_3m_pct > 10 AND max_drop_2w_pct > 15')",
 )
 def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, date_end: str, rule: str, index: str):
     stock_index = StockIndex(index)

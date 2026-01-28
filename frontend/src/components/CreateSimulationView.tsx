@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,22 +32,49 @@ interface SimulateRequest {
 
 export function CreateSimulationView() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [formData, setFormData] = useState<SimulateRequest>({
-    max_stocks: 3,
-    rebalance_interval_weeks: 2,
-    date_start: "",
-    date_end: "",
-    rule: "",
-    index: "SP500",
-  })
+  
+  // Initialize form data from URL parameters if available, otherwise use defaults
+  const getInitialFormData = (): SimulateRequest => {
+    const maxStocks = searchParams.get("max_stocks")
+    const rebalanceInterval = searchParams.get("rebalance_interval_weeks")
+    const dateStart = searchParams.get("date_start") || ""
+    const dateEnd = searchParams.get("date_end") || ""
+    const rule = searchParams.get("rule") || ""
+    const index = (searchParams.get("index") as StockIndex) || "SP500"
+    
+    return {
+      max_stocks: maxStocks ? parseInt(maxStocks) : 3,
+      rebalance_interval_weeks: rebalanceInterval ? parseInt(rebalanceInterval) : 2,
+      date_start: dateStart ? dateStart.replace(/\//g, "-") : "", // Convert yyyy/mm/dd to yyyy-mm-dd
+      date_end: dateEnd ? dateEnd.replace(/\//g, "-") : "",
+      rule: rule,
+      index: index,
+    }
+  }
+  
+  const [formData, setFormData] = useState<SimulateRequest>(getInitialFormData())
+  
   // Store string values for numeric inputs to allow empty state
-  const [maxStocksInput, setMaxStocksInput] = useState<string>("3")
-  const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>("2")
+  const [maxStocksInput, setMaxStocksInput] = useState<string>(() => {
+    const val = searchParams.get("max_stocks")
+    return val || formData.max_stocks.toString()
+  })
+  const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>(() => {
+    const val = searchParams.get("rebalance_interval_weeks")
+    return val || formData.rebalance_interval_weeks.toString()
+  })
   // Store raw string values for date inputs to allow free typing
-  const [dateStartInput, setDateStartInput] = useState<string>("")
-  const [dateEndInput, setDateEndInput] = useState<string>("")
+  const [dateStartInput, setDateStartInput] = useState<string>(() => {
+    const val = searchParams.get("date_start")
+    return val || ""
+  })
+  const [dateEndInput, setDateEndInput] = useState<string>(() => {
+    const val = searchParams.get("date_end")
+    return val || ""
+  })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
@@ -387,7 +414,7 @@ export function CreateSimulationView() {
               required
               rows={8}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono"
-              placeholder="change_3m_pct > 10 AND biggest_biweekly_drop_pct > 1"
+              placeholder="change_3m_pct > 10 AND max_drop_2w_pct > 1"
             />
             <div className="text-xs text-muted-foreground space-y-2">
               <p>
@@ -407,118 +434,79 @@ export function CreateSimulationView() {
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("weeks_above_1_week_ago")}
+                          onClick={() => insertVariableAtCursor("max_jump_1w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          weeks_above_1_week_ago
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">int</TableCell>
-                      <TableCell className="text-xs">Number of weeks where closing price was higher than 1 week prior</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("weeks_above_2_weeks_ago")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          weeks_above_2_weeks_ago
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">int</TableCell>
-                      <TableCell className="text-xs">Number of weeks where closing price was higher than 2 weeks prior</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("weeks_above_4_weeks_ago")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          weeks_above_4_weeks_ago
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">int</TableCell>
-                      <TableCell className="text-xs">Number of weeks where closing price was higher than 4 weeks prior</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("biggest_weekly_jump_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          biggest_weekly_jump_pct
+                          max_jump_1w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest week-over-week percentage increase</TableCell>
+                      <TableCell className="text-xs">Maximum 1-week percentage increase</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("biggest_weekly_drop_pct")}
+                          onClick={() => insertVariableAtCursor("max_drop_1w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          biggest_weekly_drop_pct
+                          max_drop_1w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest week-over-week percentage decrease</TableCell>
+                      <TableCell className="text-xs">Maximum 1-week percentage decrease</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("biggest_biweekly_jump_pct")}
+                          onClick={() => insertVariableAtCursor("max_jump_2w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          biggest_biweekly_jump_pct
+                          max_jump_2w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest biweekly (2-week) percentage increase</TableCell>
+                      <TableCell className="text-xs">Maximum 2-week percentage increase</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("biggest_biweekly_drop_pct")}
+                          onClick={() => insertVariableAtCursor("max_drop_2w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          biggest_biweekly_drop_pct
+                          max_drop_2w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest biweekly (2-week) percentage decrease</TableCell>
+                      <TableCell className="text-xs">Maximum 2-week percentage decrease</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("biggest_monthly_jump_pct")}
+                          onClick={() => insertVariableAtCursor("max_jump_4w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          biggest_monthly_jump_pct
+                          max_jump_4w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest monthly (4-week) percentage increase</TableCell>
+                      <TableCell className="text-xs">Maximum 4-week percentage increase</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
                         <button
                           type="button"
-                          onClick={() => insertVariableAtCursor("biggest_monthly_drop_pct")}
+                          onClick={() => insertVariableAtCursor("max_drop_4w_pct")}
                           className="font-mono text-xs text-primary hover:underline cursor-pointer"
                         >
-                          biggest_monthly_drop_pct
+                          max_drop_4w_pct
                         </button>
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Largest monthly (4-week) percentage decrease</TableCell>
+                      <TableCell className="text-xs">Maximum 4-week percentage decrease</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>
@@ -558,6 +546,32 @@ export function CreateSimulationView() {
                       </TableCell>
                       <TableCell className="text-xs">float</TableCell>
                       <TableCell className="text-xs">Percentage change over 3 months (13 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_1w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_1w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 1 week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_2w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_2w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 2 weeks</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>

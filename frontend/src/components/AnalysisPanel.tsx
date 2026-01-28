@@ -168,45 +168,8 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
           let aVal: number | string | { count: number; total: number }
           let bVal: number | string | { count: number; total: number }
 
-          // Handle special cases for percentage bars
-          if (column.key === "above_1w") {
-            aVal = {
-              count: a.weeks_above_1_week_ago,
-              total: Math.max(1, a.total_weeks - 1),
-            }
-            bVal = {
-              count: b.weeks_above_1_week_ago,
-              total: Math.max(1, b.total_weeks - 1),
-            }
-          } else if (column.key === "above_2w") {
-            aVal = {
-              count: a.weeks_above_2_weeks_ago,
-              total: Math.max(1, a.total_weeks - 2),
-            }
-            bVal = {
-              count: b.weeks_above_2_weeks_ago,
-              total: Math.max(1, b.total_weeks - 2),
-            }
-          } else if (column.key === "above_4w") {
-            aVal = {
-              count: a.weeks_above_4_weeks_ago,
-              total: Math.max(1, a.total_weeks - 4),
-            }
-            bVal = {
-              count: b.weeks_above_4_weeks_ago,
-              total: Math.max(1, b.total_weeks - 4),
-            }
-          } else {
-            aVal = a[column.key as keyof StockAnalysis] as number | string
-            bVal = b[column.key as keyof StockAnalysis] as number | string
-          }
-
-          // Handle percentage bar values
-          if (typeof aVal === "object" && "count" in aVal && typeof bVal === "object" && "count" in bVal) {
-            const aPct = aVal.total > 0 ? (aVal.count / aVal.total) * 100 : 0
-            const bPct = bVal.total > 0 ? (bVal.count / bVal.total) * 100 : 0
-            return sortConfig.direction === "asc" ? aPct - bPct : bPct - aPct
-          }
+          aVal = a[column.key as keyof StockAnalysis] as number | string
+          bVal = b[column.key as keyof StockAnalysis] as number | string
 
           if (typeof aVal === "string" && typeof bVal === "string") {
             return sortConfig.direction === "asc"
@@ -245,25 +208,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     return String(value)
   }
 
-  const getCellValue = (stock: StockAnalysis, columnKey: string): number | string | { count: number; total: number } => {
-    if (columnKey === "above_1w") {
-      return {
-        count: stock.weeks_above_1_week_ago,
-        total: Math.max(1, stock.total_weeks - 1),
-      }
-    }
-    if (columnKey === "above_2w") {
-      return {
-        count: stock.weeks_above_2_weeks_ago,
-        total: Math.max(1, stock.total_weeks - 2),
-      }
-    }
-    if (columnKey === "above_4w") {
-      return {
-        count: stock.weeks_above_4_weeks_ago,
-        total: Math.max(1, stock.total_weeks - 4),
-      }
-    }
+  const getCellValue = (stock: StockAnalysis, columnKey: string): number | string => {
     return stock[columnKey as keyof StockAnalysis] as number | string
   }
 
@@ -405,16 +350,6 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
                     {displayColumns.map((column) => {
                       const value = getCellValue(stock, column.key)
                       const isNumeric = column.type === "number" || column.type === "percent" || column.type === "r_squared"
-                      
-                      // Handle percentage bar values
-                      if (typeof value === "object" && "count" in value) {
-                        const percentage = value.total > 0 ? (value.count / value.total) * 100 : 0
-                        return (
-                          <TableCell key={column.key} className={cn(isNumeric && "text-right")}>
-                            {percentage.toFixed(1)}%
-                          </TableCell>
-                        )
-                      }
                       
                       // Handle string values (like symbol)
                       if (typeof value === "string") {

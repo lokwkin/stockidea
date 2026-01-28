@@ -67,7 +67,11 @@ class Simulator:
         if filename.endswith(".json"):
             filename = filename[:-5]
 
-        selected_stocks = analysis.apply_rule(analyses=analyses, max_stocks=self.max_stocks, rule_func=self.rule_func)
+        filtered_stocks = analysis.apply_rule(analyses=analyses, rule_func=self.rule_func)
+
+        selected_stocks = filtered_stocks[: self.max_stocks]
+        logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
+
         return selected_stocks, filename
 
     async def invest(

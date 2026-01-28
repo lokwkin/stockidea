@@ -236,7 +236,7 @@ export function AnalysisView() {
                 id="rule-input"
                 value={rule}
                 onChange={(e) => setRule(e.target.value)}
-                placeholder="Enter rule expression (e.g., change_3m_pct > 10 AND biggest_biweekly_drop_pct > 15)"
+                placeholder="Enter rule expression (e.g., change_3m_pct > 10 AND max_drop_2w_pct > 15)"
                 className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
                 rows={3}
                 onKeyDown={(e) => {

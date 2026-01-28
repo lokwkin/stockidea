@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { PercentBar } from "@/components/PercentBar"
 import { COLUMNS } from "@/config/columns"
 import { cn } from "@/lib/utils"
 import type {
@@ -25,34 +24,12 @@ interface StockTableProps {
 function getCellValue(
   stock: StockAnalysis,
   column: ColumnConfig
-): number | string | { count: number; total: number } {
-  switch (column.key) {
-    case "above_1w":
-      return {
-        count: stock.weeks_above_1_week_ago,
-        total: Math.max(1, stock.total_weeks - 1),
-      }
-    case "above_2w":
-      return {
-        count: stock.weeks_above_2_weeks_ago,
-        total: Math.max(1, stock.total_weeks - 2),
-      }
-    case "above_4w":
-      return {
-        count: stock.weeks_above_4_weeks_ago,
-        total: Math.max(1, stock.total_weeks - 4),
-      }
-    default:
-      return stock[column.key as keyof StockAnalysis]
-  }
+): number | string {
+  return stock[column.key as keyof StockAnalysis]
 }
 
 function getSortValue(stock: StockAnalysis, column: ColumnConfig): number | string {
-  const value = getCellValue(stock, column)
-  if (typeof value === "object" && "count" in value) {
-    return value.total > 0 ? (value.count / value.total) * 100 : 0
-  }
-  return value as number | string
+  return getCellValue(stock, column) as number | string
 }
 
 function formatValue(value: number, type: string, decimals = 2): string {
@@ -168,14 +145,6 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
               >
                 {COLUMNS.map((column) => {
                   const value = getCellValue(stock, column)
-
-                  if (column.type === "pct_bar" && typeof value === "object" && "count" in value) {
-                    return (
-                      <TableCell key={column.key} className="px-4 py-3">
-                        <PercentBar count={value.count} total={value.total} />
-                      </TableCell>
-                    )
-                  }
 
                   if (column.type === "string") {
                     return (

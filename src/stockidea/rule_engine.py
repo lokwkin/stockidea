@@ -26,7 +26,7 @@ class RuleEngine:
         Compile a string rule into a callable function.
 
         Args:
-            rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+            rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
 
         Returns:
             A callable function that takes TrendAnalysis and returns bool
@@ -94,7 +94,7 @@ class RuleEngine:
         Extract the TrendAnalysis keys that are referenced in the rule string.
 
         Args:
-            rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+            rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
 
         Returns:
             List of TrendAnalysis field names that are used in the rule
@@ -136,7 +136,7 @@ def compile_rule(rule_string: str) -> Callable[[TrendAnalysis], bool]:
     Convenience function to compile a rule string.
 
     Args:
-        rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+        rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
 
     Returns:
         A callable function that takes TrendAnalysis and returns bool
@@ -154,7 +154,7 @@ def extract_involved_keys(rule_string: str) -> list[str]:
     Convenience function to extract TrendAnalysis keys from a rule string.
 
     Args:
-        rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+        rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
 
     Returns:
         List of TrendAnalysis field names that are used in the rule
