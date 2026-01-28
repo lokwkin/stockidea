@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getColumnDisplayName } from "@/config/columnNames"
 
 interface RebalanceHistoryTableProps {
   rebalanceHistory: RebalanceHistory[]
@@ -51,14 +52,14 @@ export function RebalanceHistoryTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Symbol</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Buy Price</TableHead>
-                  <TableHead>Buy Date</TableHead>
-                  <TableHead>Sell Price</TableHead>
-                  <TableHead>Sell Date</TableHead>
-                  <TableHead>Profit %</TableHead>
-                  <TableHead>Profit</TableHead>
+                  <TableHead>{getColumnDisplayName("symbol")}</TableHead>
+                  <TableHead>{getColumnDisplayName("position")}</TableHead>
+                  <TableHead>{getColumnDisplayName("buy_price")}</TableHead>
+                  <TableHead>{getColumnDisplayName("buy_date")}</TableHead>
+                  <TableHead>{getColumnDisplayName("sell_price")}</TableHead>
+                  <TableHead>{getColumnDisplayName("sell_date")}</TableHead>
+                  <TableHead>{getColumnDisplayName("profit_pct")}</TableHead>
+                  <TableHead>{getColumnDisplayName("profit")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

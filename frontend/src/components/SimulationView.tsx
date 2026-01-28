@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
-import { Copy, Check } from "lucide-react"
+import { Copy, Check, TrendingDown, TrendingUp, ExternalLink } from "lucide-react"
 import type { Simulation } from "@/types/simulation"
 import { BalanceChart } from "@/components/BalanceChart"
 import { RebalanceDetailView } from "@/components/RebalanceDetailView"
 import { InvestmentTable } from "@/components/InvestmentTable"
 import { RebalanceHistoryTable } from "@/components/RebalanceHistoryTable"
+import { AnalysisPanel } from "@/components/AnalysisPanel"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { dateFormat } from "@/lib/utils"
 
 function formatCurrency(value: number): string {
@@ -35,6 +37,8 @@ export function SimulationView() {
   const [error, setError] = useState<string | null>(null)
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
+  const [analysisPanelSymbol, setAnalysisPanelSymbol] = useState<string | undefined>(undefined)
+  const [analysisPanelFile, setAnalysisPanelFile] = useState<string | null>(null)
 
   // Load simulation data when URL file changes
   useEffect(() => {
@@ -166,6 +170,21 @@ export function SimulationView() {
     return simulationData.rebalance_history.flatMap((rebalance) => rebalance.investments)
   }, [simulationData])
 
+  // Calculate top 3 biggest losses and profits (sorted by percentage)
+  const topLosses = useMemo(() => {
+    if (!allInvestments.length) return []
+    return [...allInvestments]
+      .sort((a, b) => a.profit_pct - b.profit_pct)
+      .slice(0, 3)
+  }, [allInvestments])
+
+  const topProfits = useMemo(() => {
+    if (!allInvestments.length) return []
+    return [...allInvestments]
+      .sort((a, b) => b.profit_pct - a.profit_pct)
+      .slice(0, 3)
+  }, [allInvestments])
+
   const selectedRebalance = useMemo(() => {
     return selectedRebalanceIndex !== null && simulationData
       ? simulationData.rebalance_history[selectedRebalanceIndex]
@@ -176,6 +195,53 @@ export function SimulationView() {
   const totalProfitPct = useMemo(() => {
     return simulationData?.profit_pct ? simulationData.profit_pct * 100 : 0
   }, [simulationData])
+
+  // Get simulation rule
+  const simulationRule = useMemo(() => {
+    if (!simulationData) return ""
+    if (simulationData.simulation_config?.rule) {
+      return simulationData.simulation_config.rule
+    }
+    if (simulationData.rule_ref) {
+      return simulationData.rule_ref
+    }
+    return ""
+  }, [simulationData])
+
+  // Get involved keys from simulation config
+  const involvedKeys = useMemo(() => {
+    return simulationData?.simulation_config?.involved_keys || []
+  }, [simulationData])
+
+  const handleOpenAnalysis = useCallback((symbol: string, buyDate: string) => {
+    // Find the rebalance that contains this investment by matching buy_date
+    if (!simulationData) return
+    
+    const rebalance = simulationData.rebalance_history.find((r) =>
+      r.investments.some((inv) => inv.symbol === symbol && inv.buy_date === buyDate)
+    )
+    
+    if (rebalance?.analysis_ref) {
+      // Remove .json extension if present
+      const analysisFile = rebalance.analysis_ref.replace(/\.json$/, "")
+      setAnalysisPanelSymbol(symbol)
+      setAnalysisPanelFile(analysisFile)
+    } else {
+      // Fallback: use the first available analysis file
+      setAnalysisPanelSymbol(symbol)
+      setAnalysisPanelFile(null)
+    }
+  }, [simulationData])
+
+  const handleOpenAnalysisFromRebalance = useCallback((analysisFile: string) => {
+    setAnalysisPanelSymbol(undefined)
+    setAnalysisPanelFile(analysisFile)
+  }, [])
+
+  const handleCloseAnalysis = useCallback(() => {
+    setAnalysisPanelSymbol(undefined)
+    setAnalysisPanelFile(null)
+  }, [])
 
   if (loading) {
     return (
@@ -371,7 +437,113 @@ export function SimulationView() {
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
                   onClose={handleCloseRebalance}
+                  onOpenAnalysis={handleOpenAnalysisFromRebalance}
                 />
+              )}
+
+              {/* Top Losses and Profits */}
+              {(topLosses.length > 0 || topProfits.length > 0) && (
+                <div className="rounded-lg border bg-card p-6">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    {/* Top Losses */}
+                    <div>
+                      <div className="mb-3 flex items-center gap-2">
+                        <TrendingDown className="h-5 w-5 text-red-600" />
+                        <h3 className="text-lg font-semibold">Biggest Losses</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {topLosses.map((investment, idx) => (
+                          <div
+                            key={`loss-${investment.symbol}-${investment.buy_date}`}
+                            className="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-900 dark:bg-red-950/20"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="mb-1 flex items-center gap-2">
+                                  <Badge variant="destructive" className="text-xs">
+                                    #{idx + 1}
+                                  </Badge>
+                                  <span className="font-semibold">{investment.symbol}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {dateFormat(investment.buy_date)} → {dateFormat(investment.sell_date)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-red-600">
+                                    {formatPercent(investment.profit_pct)}
+                                  </p>
+                                  <p className="text-xs text-red-600">
+                                    {formatCurrency(investment.profit)}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  onClick={() => handleOpenAnalysis(investment.symbol, investment.buy_date)}
+                                  title={`View ${investment.symbol} analysis`}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Top Profits */}
+                    <div>
+                      <div className="mb-3 flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        <h3 className="text-lg font-semibold">Biggest Profits</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {topProfits.map((investment, idx) => (
+                          <div
+                            key={`profit-${investment.symbol}-${investment.buy_date}`}
+                            className="rounded-lg border border-green-200 bg-green-50/50 p-4 dark:border-green-900 dark:bg-green-950/20"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="mb-1 flex items-center gap-2">
+                                  <Badge variant="default" className="bg-green-600 text-xs">
+                                    #{idx + 1}
+                                  </Badge>
+                                  <span className="font-semibold">{investment.symbol}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {dateFormat(investment.buy_date)} → {dateFormat(investment.sell_date)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-green-600">
+                                    {formatPercent(investment.profit_pct)}
+                                  </p>
+                                  <p className="text-xs text-green-600">
+                                    {formatCurrency(investment.profit)}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  onClick={() => handleOpenAnalysis(investment.symbol, investment.buy_date)}
+                                  title={`View ${investment.symbol} analysis`}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Investments Table */}
@@ -407,6 +579,17 @@ export function SimulationView() {
             </>
           ) : null}
         </main>
+
+        {/* Analysis Panel */}
+        {analysisPanelFile && (
+          <AnalysisPanel
+            symbol={analysisPanelSymbol || undefined}
+            analysisFile={analysisPanelFile}
+            simulationRule={simulationRule}
+            involvedKeys={involvedKeys}
+            onClose={handleCloseAnalysis}
+          />
+        )}
     </div>
   )
 }

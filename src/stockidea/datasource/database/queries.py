@@ -18,6 +18,7 @@ from stockidea.datasource.database.models import (
     DBRebalanceHistory,
     DBInvestment,
 )
+from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
     FMPAdjustedStockPrice,
     FMPLightPrice,
@@ -306,5 +307,6 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
             date_end=db_simulation.date_end,
             rule=db_simulation.rule,
             index=StockIndex(db_simulation.index),
+            involved_keys=extract_involved_keys(db_simulation.rule),
         ),
     )

@@ -45,6 +45,9 @@ export function CreateSimulationView() {
   // Store string values for numeric inputs to allow empty state
   const [maxStocksInput, setMaxStocksInput] = useState<string>("3")
   const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>("2")
+  // Store raw string values for date inputs to allow free typing
+  const [dateStartInput, setDateStartInput] = useState<string>("")
+  const [dateEndInput, setDateEndInput] = useState<string>("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
@@ -168,11 +171,18 @@ export function CreateSimulationView() {
       return new Date().toISOString().split("T")[0]
     }
 
+    const defaultStart = getDefaultStartDate()
+    const defaultEnd = getDefaultEndDate()
+    
     setFormData((prev) => ({
       ...prev,
-      date_start: prev.date_start || getDefaultStartDate(),
-      date_end: prev.date_end || getDefaultEndDate(),
+      date_start: prev.date_start || defaultStart,
+      date_end: prev.date_end || defaultEnd,
     }))
+    
+    // Initialize input strings with formatted dates only if empty
+    setDateStartInput((prev) => prev || dateFormat(defaultStart))
+    setDateEndInput((prev) => prev || dateFormat(defaultEnd))
   }, [])
 
   return (
@@ -297,14 +307,9 @@ export function CreateSimulationView() {
                 id="date_start"
                 type="text"
                 placeholder="yyyy/mm/dd"
-                value={dateFormat(formData.date_start)}
+                value={dateStartInput}
                 onChange={(e) => {
-                  const value = e.target.value
-                  // Allow typing yyyy/mm/dd format
-                  const dateInputPattern = new RegExp("^\\d{0,4}(/\\d{0,2})?(/\\d{0,2})?$")
-                  if (value === "" || dateInputPattern.test(value)) {
-                    handleDateChange("date_start", value)
-                  }
+                  setDateStartInput(e.target.value)
                 }}
                 onBlur={(e) => {
                   const value = e.target.value
@@ -312,13 +317,19 @@ export function CreateSimulationView() {
                     // Try to fix common issues
                     const fixed = value.replace(/[^\d/]/g, "")
                     if (isValidDate(fixed)) {
+                      setDateStartInput(fixed)
                       handleDateChange("date_start", fixed)
                     } else {
                       // Reset to default if invalid
                       const date = new Date()
                       date.setFullYear(date.getFullYear() - 1)
-                      handleDateChange("date_start", dateFormat(date.toISOString().split("T")[0]))
+                      const defaultDate = dateFormat(date.toISOString().split("T")[0])
+                      setDateStartInput(defaultDate)
+                      handleDateChange("date_start", defaultDate)
                     }
+                  } else if (value && isValidDate(value)) {
+                    // Update formData with valid date
+                    handleDateChange("date_start", value)
                   }
                 }}
                 required
@@ -334,14 +345,9 @@ export function CreateSimulationView() {
                 id="date_end"
                 type="text"
                 placeholder="yyyy/mm/dd"
-                value={dateFormat(formData.date_end)}
+                value={dateEndInput}
                 onChange={(e) => {
-                  const value = e.target.value
-                  // Allow typing yyyy/mm/dd format
-                  const dateInputPattern = new RegExp("^\\d{0,4}(/\\d{0,2})?(/\\d{0,2})?$")
-                  if (value === "" || dateInputPattern.test(value)) {
-                    handleDateChange("date_end", value)
-                  }
+                  setDateEndInput(e.target.value)
                 }}
                 onBlur={(e) => {
                   const value = e.target.value
@@ -349,11 +355,17 @@ export function CreateSimulationView() {
                     // Try to fix common issues
                     const fixed = value.replace(/[^\d/]/g, "")
                     if (isValidDate(fixed)) {
+                      setDateEndInput(fixed)
                       handleDateChange("date_end", fixed)
                     } else {
                       // Reset to default if invalid
-                      handleDateChange("date_end", dateFormat(new Date().toISOString().split("T")[0]))
+                      const defaultDate = dateFormat(new Date().toISOString().split("T")[0])
+                      setDateEndInput(defaultDate)
+                      handleDateChange("date_end", defaultDate)
                     }
+                  } else if (value && isValidDate(value)) {
+                    // Update formData with valid date
+                    handleDateChange("date_end", value)
                   }
                 }}
                 required

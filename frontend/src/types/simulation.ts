@@ -28,6 +28,7 @@ export interface SimulationConfig {
   date_end: string
   rule: string
   index: string
+  involved_keys?: string[]
 }
 
 export interface Simulation {

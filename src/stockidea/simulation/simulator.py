@@ -9,6 +9,7 @@ from stockidea.datasource import constituent, market_data
 from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import save_simulation_result as save_simulation_to_db
 from stockidea.helper import next_monday
+from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, TrendAnalysis
 
 logger = logging.getLogger(__name__)
@@ -125,7 +126,7 @@ class Simulator:
                 break
 
             logger.info(
-                f"====== Rebalance on {date_iter.date()} (Balance: {balance}) ======")
+                f"=========== Rebalance on {date_iter.date()} (Balance: {balance}), hold til: {end_date.date()} ===========")
             selected_stocks, analysis_ref = await self.pick_stocks(date_iter)
 
             investments: list[Investment] = []
@@ -181,7 +182,8 @@ class Simulator:
                 date_start=self.date_start,
                 date_end=self.date_end,
                 rule=self.rule_raw,
-                index=self.from_index
+                index=self.from_index,
+                involved_keys=extract_involved_keys(self.rule_raw)
             )
         )
 

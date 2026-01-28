@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { StockTable } from "@/components/StockTable"
 import type { AnalysisData } from "@/types/stock"
 import {
@@ -15,6 +15,7 @@ import { dateFormat } from "@/lib/utils"
 export function AnalysisView() {
   const { file: urlFile } = useParams<{ file?: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingFiles, setLoadingFiles] = useState(true)
@@ -22,6 +23,10 @@ export function AnalysisView() {
   const [availableFiles, setAvailableFiles] = useState<string[]>([])
   const [selectedFile, setSelectedFile] = useState<string>("")
   const [rule, setRule] = useState<string>("")
+  const tableRef = useRef<HTMLDivElement>(null)
+  
+  const targetSymbol = searchParams.get("symbol")
+  const urlRule = searchParams.get("rule")
 
   // Load available files on mount
   useEffect(() => {
@@ -60,7 +65,14 @@ export function AnalysisView() {
     }
   }, [urlFile, availableFiles, selectedFile])
 
-  // Load analysis data when selected file changes
+  // Set rule from URL query param on mount
+  useEffect(() => {
+    if (urlRule) {
+      setRule(urlRule)
+    }
+  }, [urlRule])
+
+  // Load analysis data when selected file or rule changes
   useEffect(() => {
     if (!selectedFile) return
 
@@ -74,7 +86,9 @@ export function AnalysisView() {
       }
     })
 
-    const url = `/api/analysis/${selectedFile}`
+    const url = rule.trim()
+      ? `/api/analysis/${selectedFile}?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/analysis/${selectedFile}`
 
     fetch(url)
       .then((res) => {
@@ -97,7 +111,29 @@ export function AnalysisView() {
     return () => {
       cancelled = true
     }
-  }, [selectedFile])
+  }, [selectedFile, rule])
+
+  // Scroll to target symbol when data loads
+  useEffect(() => {
+    if (!targetSymbol || !data || loading) return
+
+    // Wait for table to render, then scroll to the symbol
+    const timer = setTimeout(() => {
+      if (tableRef.current) {
+        const row = tableRef.current.querySelector(`[data-symbol="${targetSymbol}"]`) as HTMLElement
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "center" })
+          // Highlight the row temporarily
+          row.classList.add("bg-primary/10")
+          setTimeout(() => {
+            row.classList.remove("bg-primary/10")
+          }, 2000)
+        }
+      }
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, [targetSymbol, data, loading])
 
   const handleRuleSubmit = useCallback(() => {
     if (!selectedFile) return
@@ -166,7 +202,8 @@ export function AnalysisView() {
             </label>
             <Select value={selectedFile} onValueChange={(value) => {
               setSelectedFile(value)
-              navigate(`/analysis/${value}`)
+              const symbolParam = targetSymbol ? `?symbol=${targetSymbol}` : ""
+              navigate(`/analysis/${value}${symbolParam}`)
             }}>
               <SelectTrigger id="file-select" className="w-[250px]">
                 <SelectValue placeholder="Select a trend data file" />
@@ -236,7 +273,9 @@ export function AnalysisView() {
               <p className="text-muted-foreground">{error}</p>
             </div>
           ) : data ? (
-            <StockTable data={data.data} />
+            <div ref={tableRef}>
+              <StockTable data={data.data} highlightedSymbol={targetSymbol || undefined} />
+            </div>
           ) : null}
         </main>
 

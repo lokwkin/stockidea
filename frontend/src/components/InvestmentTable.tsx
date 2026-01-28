@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getColumnDisplayName } from "@/config/columnNames"
 
 type SortColumn = "buy_date" | "profit" | "profit_pct" | null
 type SortDirection = "asc" | "desc" | null
@@ -82,15 +83,15 @@ export function InvestmentTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Symbol</TableHead>
-            <TableHead>Position</TableHead>
-            <TableHead>Buy Price</TableHead>
+            <TableHead>{getColumnDisplayName("symbol")}</TableHead>
+            <TableHead>{getColumnDisplayName("position")}</TableHead>
+            <TableHead>{getColumnDisplayName("buy_price")}</TableHead>
             <TableHead
               className="cursor-pointer select-none hover:bg-muted/50"
               onClick={() => handleSort("buy_date")}
             >
               <div className="flex items-center gap-1">
-                Buy Date
+                {getColumnDisplayName("buy_date")}
                 {sortConfig.column === "buy_date" && (
                   <span className="text-primary">
                     {sortConfig.direction === "asc" ? (
@@ -102,14 +103,14 @@ export function InvestmentTable({
                 )}
               </div>
             </TableHead>
-            <TableHead>Sell Price</TableHead>
-            <TableHead>Sell Date</TableHead>
+            <TableHead>{getColumnDisplayName("sell_price")}</TableHead>
+            <TableHead>{getColumnDisplayName("sell_date")}</TableHead>
             <TableHead
               className="cursor-pointer select-none hover:bg-muted/50"
               onClick={() => handleSort("profit_pct")}
             >
               <div className="flex items-center gap-1">
-                Profit %
+                {getColumnDisplayName("profit_pct")}
                 {sortConfig.column === "profit_pct" && (
                   <span className="text-primary">
                     {sortConfig.direction === "asc" ? (
@@ -126,7 +127,7 @@ export function InvestmentTable({
               onClick={() => handleSort("profit")}
             >
               <div className="flex items-center gap-1">
-                Profit
+                {getColumnDisplayName("profit")}
                 {sortConfig.column === "profit" && (
                   <span className="text-primary">
                     {sortConfig.direction === "asc" ? (

@@ -217,3 +217,23 @@ def analyze_stock(
         log_slope=log_slope,
         log_r_squared=log_r_squared,
     )
+
+
+def rank_by_rising_stability_score(items: list[TrendAnalysis]) -> list[TrendAnalysis]:
+
+    slopes = np.array([i.linear_slope_pct for i in items], dtype=float)
+    r2s = np.array([i.linear_r_squared for i in items], dtype=float)
+
+    # Rank normalization (percentiles in [0, 1])
+    slope_rank = slopes.argsort().argsort() / (len(slopes) - 1)
+    r2_rank = r2s.argsort().argsort() / (len(r2s) - 1)
+
+    # Combine: "must rise AND be stable", slightly overweight stability
+    scores = slope_rank * (r2_rank ** 1.7)
+
+    ranked_items = [
+        item for _, item in
+        sorted(zip(scores, items), key=lambda x: x[0], reverse=True)
+    ]
+
+    return ranked_items

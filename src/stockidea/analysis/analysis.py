@@ -16,9 +16,8 @@ def apply_rule(analyses: list[TrendAnalysis], max_stocks: int, rule_func: Callab
 
     filtered_stocks = [analysis for analysis in analyses if rule_func(analysis)]
 
-    # Sort by weight
-    # TODO: use a more sophisticated algorithm
-    filtered_stocks.sort(key=lambda x: x.log_slope, reverse=True)
+    # Sort by rising stability score
+    filtered_stocks = trend_analyzer.rank_by_rising_stability_score(filtered_stocks)
     selected_stocks = filtered_stocks[: max_stocks]
     logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
     return selected_stocks

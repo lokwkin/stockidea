@@ -9,8 +9,9 @@ from pathlib import Path
 
 import uvicorn
 
+from stockidea.analysis import trend_analyzer
 from stockidea.config import ANALYSIS_DIR
-from stockidea.rule_engine import compile_rule
+from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
 from stockidea.types import SimulationConfig, StockIndex, TrendAnalysis
 from stockidea.datasource import market_data
@@ -89,11 +90,10 @@ def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
             rule_func = compile_rule(rule)
             # Filter analyses using the rule (no max_stocks limit for API)
             filtered_analyses = [a for a in analyses if rule_func(a)]
-            # Sort by trend_slope_pct (same as apply_rule does)
-            filtered_analyses.sort(key=lambda x: x.log_slope, reverse=True)
-            analyses = filtered_analyses
+            # Sort by rising stability score
+            analyses = trend_analyzer.rank_by_rising_stability_score(filtered_analyses)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid rul expression: {e}")
 
     # Convert back to dict format
     result_data = [a.model_dump() for a in analyses]
@@ -109,6 +109,10 @@ async def simulate(simulation_config: SimulationConfig) -> dict:
     """
     Simulate an investment strategy.
     """
+    # Populate involved_keys from rule if not provided
+    if not simulation_config.involved_keys:
+        simulation_config.involved_keys = extract_involved_keys(simulation_config.rule)
+    
     simulator = Simulator(
         max_stocks=simulation_config.max_stocks,
         rebalance_interval_weeks=simulation_config.rebalance_interval_weeks,

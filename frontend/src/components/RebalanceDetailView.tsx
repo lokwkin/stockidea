@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getColumnDisplayName } from "@/config/columnNames"
 
 interface RebalanceDetailViewProps {
   rebalance: RebalanceHistory
@@ -20,6 +21,7 @@ interface RebalanceDetailViewProps {
   formatCurrency: (value: number) => string
   formatPercent: (value: number) => string
   onClose: () => void
+  onOpenAnalysis?: (analysisFile: string) => void
 }
 
 export function RebalanceDetailView({
@@ -29,6 +31,7 @@ export function RebalanceDetailView({
   formatCurrency,
   formatPercent,
   onClose,
+  onOpenAnalysis,
 }: RebalanceDetailViewProps) {
   const navigate = useNavigate()
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
@@ -97,11 +100,15 @@ export function RebalanceDetailView({
               size="sm"
               onClick={() => {
                 // Remove .json extension if present, as API expects filename without extension
-                const file = rebalance.analysis_ref.replace(/\.json$/, "")
-                navigate(`/analysis/${file}`)
+                const file = rebalance.analysis_ref!.replace(/\.json$/, "")
+                if (onOpenAnalysis) {
+                  onOpenAnalysis(file)
+                } else {
+                  navigate(`/analysis/${file}`)
+                }
               }}
             >
-              Jump to Trend Data
+              Open Trend Data
             </Button>
           )}
           <button
@@ -138,14 +145,14 @@ export function RebalanceDetailView({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead>Position</TableHead>
-              <TableHead>Buy Price</TableHead>
-              <TableHead>Buy Date</TableHead>
-              <TableHead>Sell Price</TableHead>
-              <TableHead>Sell Date</TableHead>
-              <TableHead>Profit %</TableHead>
-              <TableHead>Profit</TableHead>
+              <TableHead>{getColumnDisplayName("symbol")}</TableHead>
+              <TableHead>{getColumnDisplayName("position")}</TableHead>
+              <TableHead>{getColumnDisplayName("buy_price")}</TableHead>
+              <TableHead>{getColumnDisplayName("buy_date")}</TableHead>
+              <TableHead>{getColumnDisplayName("sell_price")}</TableHead>
+              <TableHead>{getColumnDisplayName("sell_date")}</TableHead>
+              <TableHead>{getColumnDisplayName("profit_pct")}</TableHead>
+              <TableHead>{getColumnDisplayName("profit")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

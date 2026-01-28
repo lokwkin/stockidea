@@ -19,6 +19,7 @@ import type {
 
 interface StockTableProps {
   data: StockAnalysis[]
+  highlightedSymbol?: string
 }
 
 function getCellValue(
@@ -82,7 +83,7 @@ function getValueColor(value: number, type: string): string {
   return ""
 }
 
-export const StockTable = memo(function StockTable({ data }: StockTableProps) {
+export const StockTable = memo(function StockTable({ data, highlightedSymbol }: StockTableProps) {
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -157,7 +158,14 @@ export const StockTable = memo(function StockTable({ data }: StockTableProps) {
           </TableHeader>
           <TableBody>
             {sortedData.map((stock) => (
-              <TableRow key={stock.symbol} className="border-b-border">
+              <TableRow
+                key={stock.symbol}
+                data-symbol={stock.symbol}
+                className={cn(
+                  "border-b-border",
+                  highlightedSymbol === stock.symbol && "bg-primary/10 ring-2 ring-primary"
+                )}
+              >
                 {COLUMNS.map((column) => {
                   const value = getCellValue(stock, column)
 

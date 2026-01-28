@@ -124,6 +124,7 @@ class SimulationConfig(BaseModel):
     date_end: datetime
     rule: str
     index: StockIndex
+    involved_keys: list[str] = []
 
 
 class SimulationResult(BaseModel):

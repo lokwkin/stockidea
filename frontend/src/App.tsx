@@ -1,6 +1,6 @@
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp } from "lucide-react"
 import { AnalysisView } from "@/components/AnalysisView"
 import { SimulationView } from "@/components/SimulationView"
 import { CreateSimulationView } from "@/components/CreateSimulationView"
@@ -12,6 +12,7 @@ function Sidebar() {
   const [simulations, setSimulations] = useState<SimulationSummary[]>([])
   const [manuallyExpanded, setManuallyExpanded] = useState(false)
   const [loadingSimulations, setLoadingSimulations] = useState(true)
+  const [isHovered, setIsHovered] = useState(false)
 
   const isSimulationPath = location.pathname.startsWith("/simulation") && location.pathname !== "/simulation/create"
   const isCreatePath = location.pathname === "/simulation/create"
@@ -42,10 +43,20 @@ function Sidebar() {
   }, [])
 
   return (
-    <aside className="w-80 border-r bg-card/50 flex-shrink-0 flex flex-col">
-      <div className="p-6 border-b">
-        <h1 className="bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-2xl font-bold tracking-tight text-transparent">
-          StockPick
+    <aside 
+      className={cn(
+        "fixed left-0 top-0 h-screen border-r flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out z-50",
+        isHovered ? "w-80 bg-card shadow-xl" : "w-16 bg-card/50 shadow-lg"
+      )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className={cn("border-b transition-all duration-300", isHovered ? "p-6" : "p-4")}>
+        <h1 className={cn(
+          "bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text font-bold tracking-tight text-transparent transition-all duration-300",
+          isHovered ? "text-2xl" : "text-lg truncate"
+        )}>
+          {isHovered ? "StockPick" : "SP"}
         </h1>
       </div>
       <nav className="flex-1 p-2 overflow-y-auto">
@@ -53,13 +64,19 @@ function Sidebar() {
         <Link
           to="/simulation/create"
           className={cn(
-            "block w-full text-left px-3 py-2 rounded-md text-base font-medium transition-all mt-1",
+            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
+            isHovered ? "text-base" : "text-sm justify-center",
             isCreatePath
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
+          title={!isHovered ? "Create Simulations" : undefined}
         >
-          Create Simulations
+          {isHovered ? (
+            "Create Simulations"
+          ) : (
+            <Plus className="h-5 w-5" />
+          )}
         </Link>
 
         {/* Simulation Section */}
@@ -67,20 +84,28 @@ function Sidebar() {
           <button
             onClick={() => setManuallyExpanded(!manuallyExpanded)}
             className={cn(
-              "flex w-full items-center justify-between px-3 py-2 rounded-md text-base font-medium transition-all",
+              "flex w-full items-center justify-between px-3 py-2 rounded-md font-medium transition-all",
+              isHovered ? "text-base" : "text-sm justify-center",
               isSimulationPath
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
+            title={!isHovered ? "Simulation" : undefined}
           >
-            <span>Simulation</span>
-            {isSimulationExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+            {isHovered ? (
+              <>
+                <span>Simulation</span>
+                {isSimulationExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </>
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <FolderTree className="h-5 w-5" />
             )}
           </button>
-          {isSimulationExpanded && (
+          {isSimulationExpanded && isHovered && (
             <div className="ml-4 mt-1 space-y-1">
               {loadingSimulations ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
@@ -116,13 +141,19 @@ function Sidebar() {
         <Link
           to="/analysis"
           className={cn(
-            "block w-full text-left px-3 py-2 rounded-md text-base font-medium transition-all mt-1",
+            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
+            isHovered ? "text-base" : "text-sm justify-center",
             location.pathname.startsWith("/analysis")
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
+          title={!isHovered ? "Trend Data" : undefined}
         >
-          Trend Data
+          {isHovered ? (
+            "Trend Data"
+          ) : (
+            <TrendingUp className="h-5 w-5" />
+          )}
         </Link>
       </nav>
     </aside>
@@ -138,7 +169,7 @@ function App() {
         <Sidebar />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto ml-16">
           <Routes>
             <Route path="/" element={<Navigate to="/analysis" replace />} />
             <Route path="/analysis" element={<AnalysisView />} />

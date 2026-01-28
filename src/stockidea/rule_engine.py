@@ -1,5 +1,6 @@
 """Rule engine for evaluating string-based filter expressions on TrendAnalysis objects."""
 
+import re
 from typing import Callable
 
 from simpleeval import SimpleEval  # type: ignore
@@ -9,6 +10,16 @@ from stockidea.types import TrendAnalysis
 
 class RuleEngine:
     """Engine for parsing and evaluating string-based rules on TrendAnalysis objects."""
+
+    @staticmethod
+    def _get_trend_analysis_field_names() -> set[str]:
+        """
+        Dynamically extract field names from the TrendAnalysis Pydantic v2 model.
+
+        Returns:
+            Set of valid TrendAnalysis field names
+        """
+        return set(TrendAnalysis.model_fields.keys())
 
     def compile(self, rule_string: str) -> Callable[[TrendAnalysis], bool]:
         """
@@ -30,28 +41,10 @@ class RuleEngine:
 
         def evaluate(analysis: TrendAnalysis) -> bool:
             """Evaluate the rule against a TrendAnalysis object."""
-            # Create a context with all TrendAnalysis attributes
-            names = {
-                "symbol": analysis.symbol,
-                "weeks_above_1_week_ago": analysis.weeks_above_1_week_ago,
-                "weeks_above_2_weeks_ago": analysis.weeks_above_2_weeks_ago,
-                "weeks_above_4_weeks_ago": analysis.weeks_above_4_weeks_ago,
-                "biggest_weekly_jump_pct": analysis.biggest_weekly_jump_pct,
-                "biggest_weekly_drop_pct": analysis.biggest_weekly_drop_pct,
-                "biggest_biweekly_jump_pct": analysis.biggest_biweekly_jump_pct,
-                "biggest_biweekly_drop_pct": analysis.biggest_biweekly_drop_pct,
-                "biggest_monthly_jump_pct": analysis.biggest_monthly_jump_pct,
-                "biggest_monthly_drop_pct": analysis.biggest_monthly_drop_pct,
-                "change_1y_pct": analysis.change_1y_pct,
-                "change_6m_pct": analysis.change_6m_pct,
-                "change_3m_pct": analysis.change_3m_pct,
-                "change_1m_pct": analysis.change_1m_pct,
-                "total_weeks": analysis.total_weeks,
-                "linear_slope_pct": analysis.linear_slope_pct,
-                "linear_r_squared": analysis.linear_r_squared,
-                "log_slope": analysis.log_slope,
-                "log_r_squared": analysis.log_r_squared,
-            }
+            # Create a context with all TrendAnalysis attributes dynamically
+            # Use getattr to safely access fields, falling back to model_dump for compatibility
+            field_names = self._get_trend_analysis_field_names()
+            names = {field_name: getattr(analysis, field_name) for field_name in field_names}
             try:
                 # SimpleEval automatically validates the expression and only allows safe operations
                 evaluator = SimpleEval(names=names)
@@ -90,13 +83,52 @@ class RuleEngine:
         Returns:
             Normalized rule string with lowercase operators
         """
-        import re
-
         # Replace AND/OR (case-insensitive) with lowercase versions
         # Use word boundaries to avoid replacing parts of words
         normalized = re.sub(r"\bAND\b", "and", rule_string, flags=re.IGNORECASE)
         normalized = re.sub(r"\bOR\b", "or", normalized, flags=re.IGNORECASE)
         return normalized
+
+    def extract_involved_keys(self, rule_string: str) -> list[str]:
+        """
+        Extract the TrendAnalysis keys that are referenced in the rule string.
+
+        Args:
+            rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+
+        Returns:
+            List of TrendAnalysis field names that are used in the rule
+
+        Examples:
+            >>> engine = RuleEngine()
+            >>> keys = engine.extract_involved_keys("change_3m_pct > 1 AND linear_r_squared > 0.8")
+            >>> print(keys)
+            ['change_3m_pct', 'linear_r_squared']
+        """
+        # Dynamically get all valid TrendAnalysis field names
+        valid_keys = self._get_trend_analysis_field_names()
+
+        # Normalize the rule string
+        normalized = self._normalize_rule(rule_string)
+
+        # Find all identifiers in the rule string
+        # Match valid Python identifiers (word characters and underscores)
+        # Use word boundaries to avoid partial matches
+        pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b'
+        matches = re.findall(pattern, normalized)
+
+        # Filter to only include valid TrendAnalysis keys
+        involved_keys = [key for key in matches if key in valid_keys]
+
+        # Remove duplicates while preserving order
+        seen = set()
+        result = []
+        for key in involved_keys:
+            if key not in seen:
+                seen.add(key)
+                result.append(key)
+
+        return result
 
 
 def compile_rule(rule_string: str) -> Callable[[TrendAnalysis], bool]:
@@ -115,3 +147,22 @@ def compile_rule(rule_string: str) -> Callable[[TrendAnalysis], bool]:
     """
     engine = RuleEngine()
     return engine.compile(rule_string)
+
+
+def extract_involved_keys(rule_string: str) -> list[str]:
+    """
+    Convenience function to extract TrendAnalysis keys from a rule string.
+
+    Args:
+        rule_string: String expression like "change_3m_pct > 1 AND biggest_biweekly_drop_pct > 15"
+
+    Returns:
+        List of TrendAnalysis field names that are used in the rule
+
+    Examples:
+        >>> keys = extract_involved_keys("change_3m_pct > 1 AND linear_r_squared > 0.8")
+        >>> print(keys)
+        ['change_3m_pct', 'linear_r_squared']
+    """
+    engine = RuleEngine()
+    return engine.extract_involved_keys(rule_string)
