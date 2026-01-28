@@ -10,7 +10,7 @@ import { AnalysisPanel } from "@/components/AnalysisPanel"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { dateFormat } from "@/lib/utils"
+import { dateFormat, cn } from "@/lib/utils"
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -269,7 +269,11 @@ export function SimulationView() {
   }
 
   return (
-    <div className="relative mx-auto max-w-[2000px] px-4 py-8 sm:px-6 lg:px-8">
+    <div className="relative">
+      <div className={cn(
+        "relative mx-auto max-w-[2000px] px-4 py-8 sm:px-6 lg:px-8 transition-all duration-300",
+        analysisPanelFile && "mr-[600px]"
+      )}>
         {/* Header */}
         <header className="mb-8">
           <div className="mb-6 text-center">
@@ -580,16 +584,18 @@ export function SimulationView() {
           ) : null}
         </main>
 
-        {/* Analysis Panel */}
-        {analysisPanelFile && (
-          <AnalysisPanel
-            symbol={analysisPanelSymbol || undefined}
-            analysisFile={analysisPanelFile}
-            simulationRule={simulationRule}
-            involvedKeys={involvedKeys}
-            onClose={handleCloseAnalysis}
-          />
-        )}
+      </div>
+
+      {/* Analysis Panel */}
+      {analysisPanelFile && (
+        <AnalysisPanel
+          symbol={analysisPanelSymbol || undefined}
+          analysisFile={analysisPanelFile}
+          simulationRule={simulationRule}
+          involvedKeys={involvedKeys}
+          onClose={handleCloseAnalysis}
+        />
+      )}
     </div>
   )
 }

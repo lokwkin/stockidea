@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { AnalysisData, StockAnalysis } from "@/types/stock"
-import { cn } from "@/lib/utils"
+import { cn, dateFormat } from "@/lib/utils"
 import { COLUMNS } from "@/config/columns"
 
 type SortColumn = keyof StockAnalysis | null
@@ -36,6 +36,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rule, setRule] = useState<string>(simulationRule)
+  const [appliedRule, setAppliedRule] = useState<string>(simulationRule)
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -92,9 +93,10 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
   // Update rule when simulationRule prop changes
   useEffect(() => {
     setRule(simulationRule)
+    setAppliedRule(simulationRule)
   }, [simulationRule])
 
-  // Load analysis data when analysisFile changes
+  // Load analysis data when analysisFile or appliedRule changes
   useEffect(() => {
     if (!analysisFile) return
 
@@ -107,8 +109,8 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
       }
     })
 
-    const url = rule.trim()
-      ? `/api/analysis/${analysisFile}?rule=${encodeURIComponent(rule.trim())}`
+    const url = appliedRule.trim()
+      ? `/api/analysis/${analysisFile}?rule=${encodeURIComponent(appliedRule.trim())}`
       : `/api/analysis/${analysisFile}`
 
     fetch(url)
@@ -132,32 +134,12 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     return () => {
       cancelled = true
     }
-  }, [analysisFile, rule])
+  }, [analysisFile, appliedRule])
 
   const handleRuleSubmit = useCallback(() => {
-    if (!analysisFile) return
-
-    setLoading(true)
-    setError(null)
-
-    const url = rule.trim()
-      ? `/api/analysis/${analysisFile}?rule=${encodeURIComponent(rule.trim())}`
-      : `/api/analysis/${analysisFile}`
-
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis data")
-        return res.json()
-      })
-      .then((json: AnalysisData) => {
-        setData(json)
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
-      })
-      }, [analysisFile, rule])
+    // Update the applied rule, which will trigger the useEffect to fetch data
+    setAppliedRule(rule)
+      }, [rule])
 
   // Use all data (filtered by rule), not just the selected symbol
   const filteredData = useMemo(() => {
@@ -286,7 +268,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
   }
 
   return (
-    <div className="fixed right-0 top-0 h-screen w-[600px] bg-card border-l shadow-2xl z-40 flex flex-col">
+    <div className="fixed right-0 top-0 h-screen w-[600px] bg-card border-l shadow-2xl flex flex-col shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <h2 className="text-xl font-semibold">
@@ -297,7 +279,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
             variant="outline"
             size="sm"
             onClick={() => {
-              const ruleParam = rule.trim() ? `?rule=${encodeURIComponent(rule.trim())}` : ""
+              const ruleParam = appliedRule.trim() ? `?rule=${encodeURIComponent(appliedRule.trim())}` : ""
               navigate(`/analysis/${analysisFile}${ruleParam}`)
             }}
             className="flex items-center gap-2"
@@ -327,6 +309,16 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
             {analysisFile}
           </div>
         </div>
+
+        {/* Analysis Date Display */}
+        {data?.analysis_date && (
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-1 block">
+              Analysis Date:
+            </label>
+            <p className="text-sm">{dateFormat(data.analysis_date)}</p>
+          </div>
+        )}
 
         {/* Rule Input */}
         <div>
