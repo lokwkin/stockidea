@@ -12,8 +12,14 @@ The frontend dashboard allows users to define custom strategy configurations, ru
 
 First clone a `.env` from `.env.example` and supply your own credentials.
 
-Then start database, backend and frontend container using docker compose
+```bash
+cp .env.example .env
 ```
+
+```
+
+Start the components using docker compose
+```bash
 docker-compose up -d
 ```
 
