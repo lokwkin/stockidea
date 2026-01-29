@@ -16,8 +16,6 @@ First clone a `.env` from `.env.example` and supply your own credentials.
 cp .env.example .env
 ```
 
-```
-
 Start the components using docker compose
 ```bash
 docker-compose up -d
