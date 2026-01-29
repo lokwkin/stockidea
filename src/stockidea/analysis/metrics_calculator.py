@@ -1,12 +1,10 @@
-"""Analyze stock price data with weekly metrics."""
-
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 import numpy as np
 from scipy import stats  # type: ignore
 
-from stockidea.types import TrendAnalysis, StockPrice
+from stockidea.types import StockMetrics, StockPrice
 
 
 @dataclass
@@ -75,9 +73,9 @@ def _calculate_pct_change(old: float, new: float) -> float:
     return ((new - old) / old) * 100
 
 
-def analyze_stock(
+def compute_stock_metrics(
     symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
-) -> TrendAnalysis | None:
+) -> StockMetrics | None:
     """
     Analyze stock price data and return weekly metrics.
 
@@ -85,7 +83,7 @@ def analyze_stock(
         prices: List of StockPrice objects (as returned by fetch_stock_prices)
 
     Returns:
-        TrendAnalysis with all computed metrics, or None if insufficient data
+        StockMetrics with all computed metrics, or None if insufficient data
     """
     if not prices:
         return None
@@ -202,30 +200,34 @@ def analyze_stock(
     # R² is r_value squared
     linear_r_squared = linear_r_value**2
 
-    return TrendAnalysis(
+    return StockMetrics(
         symbol=symbol,
+        date=to_date.date(),
+        total_weeks=total_weeks,
+        # Trend metrics
+        linear_slope_pct=linear_slope_pct,
+        linear_r_squared=linear_r_squared,
+        log_slope=log_slope,
+        log_r_squared=log_r_squared,
+        # Return metrics
+        change_1w_pct=change_1w,
+        change_2w_pct=change_2w,
+        change_1m_pct=change_1m,
+        change_3m_pct=change_3m,
+        change_6m_pct=change_6m,
+        change_1y_pct=change_1y,
+        # Volatility metrics
         max_jump_1w_pct=max_jump_1w,
         max_drop_1w_pct=max_drop_1w,
         max_jump_2w_pct=max_jump_2w,
         max_drop_2w_pct=max_drop_2w,
         max_jump_4w_pct=max_jump_4w,
         max_drop_4w_pct=max_drop_4w,
-        change_1y_pct=change_1y,
-        change_6m_pct=change_6m,
-        change_3m_pct=change_3m,
-        change_1m_pct=change_1m,
-        change_2w_pct=change_2w,
-        change_1w_pct=change_1w,
-        total_weeks=total_weeks,
-        linear_slope_pct=linear_slope_pct,
-        linear_r_squared=linear_r_squared,
-        log_slope=log_slope,
-        log_r_squared=log_r_squared,
     )
 
 
-def rank_by_rising_stability_score(items: list[TrendAnalysis]) -> list[TrendAnalysis]:
-    
+def rank_by_rising_stability_score(items: list[StockMetrics]) -> list[StockMetrics]:
+    """Rank items by rising stability score (slope * r² weighted)."""
     if len(items) <= 1:
         return items  # no ranking needed
 
@@ -247,16 +249,16 @@ def rank_by_rising_stability_score(items: list[TrendAnalysis]) -> list[TrendAnal
     return ranked_items
 
 
-def slope_outlier_mask(items: list[TrendAnalysis], k: float = 3.0) -> list[TrendAnalysis]:
+def slope_outlier_mask(items: list[StockMetrics], k: float = 3.0) -> list[StockMetrics]:
     """
-    Remove outliers from the list of TrendAnalysis objects based on the linear slope percentage.
+    Remove outliers from the list of StockMetrics objects based on the linear slope percentage.
 
     Args:
-        items: List of TrendAnalysis objects
+        items: List of StockMetrics objects
         k: Multiplier for the median absolute deviation (MAD) to define outliers
 
     Returns:
-        List of TrendAnalysis objects without outliers
+        List of StockMetrics objects without outliers
     """
     if not items or len(items) <= 2:
         return items  # no outliers found or not enough data to determine outliers

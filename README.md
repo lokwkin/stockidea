@@ -10,13 +10,13 @@ The frontend dashboard allows users to define custom strategy configurations, ru
 
 ## Setup local development
 
-First clone a `.env` from `.env.example` and supply your own credentials.
+1. Clone a `.env` from `.env.example` and provide your own credentials.
 
 ```bash
 cp .env.example .env
 ```
 
-Start the components using docker compose
+2. Start the components using docker compose
 ```bash
 docker-compose up -d
 ```

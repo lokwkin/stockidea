@@ -173,10 +173,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/analysis" replace />} />
             <Route path="/analysis" element={<AnalysisView />} />
-            <Route path="/analysis/:file" element={<AnalysisView />} />
+            <Route path="/analysis/:date" element={<AnalysisView />} />
             <Route path="/simulation" element={<SimulationView />} />
             <Route path="/simulation/create" element={<CreateSimulationView />} />
-            <Route path="/simulation/:file" element={<SimulationView />} />
+            <Route path="/simulation/:id" element={<SimulationView />} />
           </Routes>
         </main>
       </div>

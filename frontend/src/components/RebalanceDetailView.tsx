@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import type { RebalanceHistory, Simulation } from "@/types/simulation"
-import type { AnalysisData } from "@/types/stock"
+import { useNavigate } from "react-router-dom"
+import type { RebalanceHistory } from "@/types/simulation"
+import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
 import { StockTable } from "@/components/StockTable"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,17 +16,15 @@ import { getColumnDisplayName } from "@/config/columnNames"
 
 interface RebalanceDetailViewProps {
   rebalance: RebalanceHistory
-  simulationData: Simulation
   formatDate: (dateStr: string) => string
   formatCurrency: (value: number) => string
   formatPercent: (value: number) => string
   onClose: () => void
-  onOpenAnalysis?: (analysisFile: string) => void
+  onOpenAnalysis?: (analysisDate: string) => void
 }
 
 export function RebalanceDetailView({
   rebalance,
-  simulationData,
   formatDate,
   formatCurrency,
   formatPercent,
@@ -34,12 +32,12 @@ export function RebalanceDetailView({
   onOpenAnalysis,
 }: RebalanceDetailViewProps) {
   const navigate = useNavigate()
-  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
+  const [analysisData, setAnalysisData] = useState<{ date: string; data: StockMetrics[] } | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
 
-  // Load analysis data when rebalance changes
+  // Load metrics data when rebalance changes
   useEffect(() => {
-    if (!rebalance.analysis_ref) {
+    if (!rebalance.date) {
       setAnalysisData(null)
       return
     }
@@ -49,23 +47,23 @@ export function RebalanceDetailView({
     setLoadingAnalysis(true)
     setAnalysisData(null)
 
-    // Remove .json extension if present, as API expects filename without extension
-    const file = rebalance.analysis_ref.replace(/\.json$/, "")
+    // Use the rebalance date to query metrics
+    const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
 
-    fetch(`/api/analysis/${file}`)
+    fetch(`/api/metrics/${metricsDate}/`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis data")
+        if (!res.ok) throw new Error("Failed to load metrics data")
         return res.json()
       })
-      .then((json: AnalysisData) => {
+      .then((json: MetricsDataAPI) => {
         if (!cancelled) {
-          setAnalysisData(json)
+          setAnalysisData({ date: json.date, data: json.data })
           setLoadingAnalysis(false)
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error("Failed to load analysis data:", err)
+          console.error("Failed to load metrics data:", err)
           setAnalysisData(null)
           setLoadingAnalysis(false)
         }
@@ -94,23 +92,20 @@ export function RebalanceDetailView({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Rebalance Details - {formatDate(rebalance.date)}</h2>
         <div className="flex items-center gap-2">
-          {rebalance.analysis_ref && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // Remove .json extension if present, as API expects filename without extension
-                const file = rebalance.analysis_ref!.replace(/\.json$/, "")
-                if (onOpenAnalysis) {
-                  onOpenAnalysis(file)
-                } else {
-                  navigate(`/analysis/${file}`)
-                }
-              }}
-            >
-              Open Trend Data
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
+              if (onOpenAnalysis) {
+                onOpenAnalysis(metricsDate)
+              } else {
+                navigate(`/analysis/${metricsDate}`)
+              }
+            }}
+          >
+            Open Trend Data
+          </Button>
           <button
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground transition-colors"
@@ -185,25 +180,23 @@ export function RebalanceDetailView({
       </div>
 
       {/* Trend Data Section */}
-      {rebalance.analysis_ref && (
-        <div className="mt-8">
-          <h3 className="mb-4 text-xl font-semibold">Trend Data (Filtered by Selected Stocks)</h3>
-          {loadingAnalysis ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="flex flex-col items-center gap-4">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                <p className="text-sm text-muted-foreground">Loading trend data...</p>
-              </div>
+      <div className="mt-8">
+        <h3 className="mb-4 text-xl font-semibold">Trend Data (Filtered by Selected Stocks)</h3>
+        {loadingAnalysis ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              <p className="text-sm text-muted-foreground">Loading trend data...</p>
             </div>
-          ) : filteredAnalysisData ? (
-            <StockTable data={filteredAnalysisData.data} />
-          ) : (
-            <div className="rounded-lg border border-muted bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-              Trend data not available
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        ) : filteredAnalysisData ? (
+          <StockTable data={filteredAnalysisData.data} />
+        ) : (
+          <div className="rounded-lg border border-muted bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+            Trend data not available for this date
+          </div>
+        )}
+      </div>
     </div>
   )
 }

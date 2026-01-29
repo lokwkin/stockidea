@@ -85,7 +85,6 @@ class DBRebalanceHistory(Base):
         "simulations.id", ondelete="CASCADE"), nullable=False, index=True)
     date: Mapped[datetime] = mapped_column(Date, nullable=False, index=True)
     balance: Mapped[float] = mapped_column(Float, nullable=False)
-    analysis_ref: Mapped[str] = mapped_column(String, nullable=True)
     profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
     profit: Mapped[float] = mapped_column(Float, nullable=False)
     baseline_profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
@@ -120,3 +119,37 @@ class DBInvestment(Base):
 
     def __repr__(self) -> str:
         return f"<Investment(id={self.id}, symbol={self.symbol}, profit={self.profit})>"
+
+
+# =============================================================================
+# Stock Metrics Model
+# =============================================================================
+class DBStockMetrics(Base):
+    __tablename__ = "stock_metrics"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    total_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Trend metrics (regression-based)
+    linear_slope_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    linear_r_squared: Mapped[float] = mapped_column(Float, nullable=False)
+    log_slope: Mapped[float] = mapped_column(Float, nullable=False)
+    log_r_squared: Mapped[float] = mapped_column(Float, nullable=False)
+    # Return metrics (point-to-point changes)
+    change_1w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_1m_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_3m_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_6m_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_1y_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    # Volatility metrics (max swings)
+    max_jump_1w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    max_drop_1w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    max_jump_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    max_drop_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    max_jump_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    max_drop_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+
+    def __repr__(self) -> str:
+        return f"<StockMetrics(symbol={self.symbol}, date={self.date}, slope={self.linear_slope_pct:.2f}%)>"

@@ -27,7 +27,7 @@ function formatPercent(value: number): string {
 
 
 export function SimulationView() {
-  const { file: urlFile } = useParams<{ file?: string }>()
+  const { id: simulationId } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [simulationData, setSimulationData] = useState<Simulation | null>(null)
@@ -38,12 +38,12 @@ export function SimulationView() {
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
   const [analysisPanelSymbol, setAnalysisPanelSymbol] = useState<string | undefined>(undefined)
-  const [analysisPanelFile, setAnalysisPanelFile] = useState<string | null>(null)
+  const [analysisPanelDate, setAnalysisPanelDate] = useState<string | null>(null)
 
-  // Load simulation data when URL file changes
+  // Load simulation data when simulation ID changes
   useEffect(() => {
-    if (!urlFile) {
-      // If no file in URL, redirect to first available simulation or show error
+    if (!simulationId) {
+      // If no ID in URL, redirect to first available simulation or show error
       fetch("/api/simulations")
         .then((res) => {
           if (!res.ok) throw new Error("Failed to load simulations list")
@@ -74,8 +74,7 @@ export function SimulationView() {
       }
     })
 
-    // urlFile is now a simulation ID (number as string)
-    fetch(`/api/simulations/${urlFile}`)
+    fetch(`/api/simulations/${simulationId}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load simulation data")
         return res.json()
@@ -98,7 +97,7 @@ export function SimulationView() {
     return () => {
       cancelled = true
     }
-  }, [urlFile, navigate])
+  }, [simulationId, navigate])
 
   // Sync URL query param with selectedRebalanceIndex when simulationData loads or URL changes
   useEffect(() => {
@@ -221,26 +220,22 @@ export function SimulationView() {
       r.investments.some((inv) => inv.symbol === symbol && inv.buy_date === buyDate)
     )
     
-    if (rebalance?.analysis_ref) {
-      // Remove .json extension if present
-      const analysisFile = rebalance.analysis_ref.replace(/\.json$/, "")
+    if (rebalance) {
+      // Use rebalance date to query metrics
+      const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
       setAnalysisPanelSymbol(symbol)
-      setAnalysisPanelFile(analysisFile)
-    } else {
-      // Fallback: use the first available analysis file
-      setAnalysisPanelSymbol(symbol)
-      setAnalysisPanelFile(null)
+      setAnalysisPanelDate(metricsDate)
     }
   }, [simulationData])
 
-  const handleOpenAnalysisFromRebalance = useCallback((analysisFile: string) => {
+  const handleOpenAnalysisFromDate = useCallback((analysisDate: string) => {
     setAnalysisPanelSymbol(undefined)
-    setAnalysisPanelFile(analysisFile)
+    setAnalysisPanelDate(analysisDate)
   }, [])
 
   const handleCloseAnalysis = useCallback(() => {
     setAnalysisPanelSymbol(undefined)
-    setAnalysisPanelFile(null)
+    setAnalysisPanelDate(null)
   }, [])
 
   if (loading) {
@@ -261,7 +256,7 @@ export function SimulationView() {
           <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
           <p className="text-muted-foreground">{error ?? "No data available"}</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Make sure the API server is running and simulation files are available
+            Make sure the API server is running and simulation data is available
           </p>
         </div>
       </div>
@@ -272,7 +267,7 @@ export function SimulationView() {
     <div className="relative">
       <div className={cn(
         "relative mx-auto max-w-[2000px] px-4 py-8 sm:px-6 lg:px-8 transition-all duration-300",
-        analysisPanelFile && "mr-[600px]"
+        analysisPanelDate && "mr-[600px]"
       )}>
         {/* Header */}
         <header className="mb-8">
@@ -280,8 +275,8 @@ export function SimulationView() {
             <h1 className="mb-4 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
               Simulation Results
             </h1>
-            {urlFile && (
-              <p className="text-muted-foreground font-mono text-sm">{urlFile}</p>
+            {simulationId && (
+              <p className="text-muted-foreground font-mono text-sm">ID: {simulationId}</p>
             )}
           </div>
 
@@ -463,12 +458,11 @@ export function SimulationView() {
               {selectedRebalance && (
                 <RebalanceDetailView
                   rebalance={selectedRebalance}
-                  simulationData={simulationData}
                   formatDate={dateFormat}
                   formatCurrency={formatCurrency}
                   formatPercent={formatPercent}
                   onClose={handleCloseRebalance}
-                  onOpenAnalysis={handleOpenAnalysisFromRebalance}
+                  onOpenAnalysis={handleOpenAnalysisFromDate}
                 />
               )}
 
@@ -614,10 +608,10 @@ export function SimulationView() {
       </div>
 
       {/* Analysis Panel */}
-      {analysisPanelFile && (
+      {analysisPanelDate && (
         <AnalysisPanel
           symbol={analysisPanelSymbol || undefined}
-          analysisFile={analysisPanelFile}
+          analysisDate={analysisPanelDate}
           simulationRule={simulationRule}
           involvedKeys={involvedKeys}
           onClose={handleCloseAnalysis}

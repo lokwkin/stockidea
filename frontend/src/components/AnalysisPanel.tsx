@@ -10,11 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { AnalysisData, StockAnalysis } from "@/types/stock"
+import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
 import { cn, dateFormat } from "@/lib/utils"
 import { COLUMNS } from "@/config/columns"
 
-type SortColumn = keyof StockAnalysis | null
+type SortColumn = keyof StockMetrics | null
 type SortDirection = "asc" | "desc" | null
 
 interface SortConfig {
@@ -22,15 +22,21 @@ interface SortConfig {
   direction: SortDirection
 }
 
+interface AnalysisData {
+  date: string
+  analysis_date?: string
+  data: StockMetrics[]
+}
+
 interface AnalysisPanelProps {
   symbol?: string
-  analysisFile: string
+  analysisDate: string
   simulationRule: string
   involvedKeys?: string[]
   onClose: () => void
 }
 
-export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKeys = [], onClose }: AnalysisPanelProps) {
+export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKeys = [], onClose }: AnalysisPanelProps) {
   const navigate = useNavigate()
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -96,9 +102,9 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     setAppliedRule(simulationRule)
   }, [simulationRule])
 
-  // Load analysis data when analysisFile or appliedRule changes
+  // Load metrics data when analysisDate or appliedRule changes
   useEffect(() => {
-    if (!analysisFile) return
+    if (!analysisDate) return
 
     let cancelled = false
 
@@ -110,17 +116,17 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     })
 
     const url = appliedRule.trim()
-      ? `/api/analysis/${analysisFile}?rule=${encodeURIComponent(appliedRule.trim())}`
-      : `/api/analysis/${analysisFile}`
+      ? `/api/metrics/${analysisDate}/?rule=${encodeURIComponent(appliedRule.trim())}`
+      : `/api/metrics/${analysisDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis data")
+        if (!res.ok) throw new Error("Failed to load metrics data")
         return res.json()
       })
-      .then((json: AnalysisData) => {
+      .then((json: MetricsDataAPI) => {
         if (!cancelled) {
-          setData(json)
+          setData({ date: json.date, analysis_date: json.date, data: json.data })
           setLoading(false)
         }
       })
@@ -134,7 +140,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     return () => {
       cancelled = true
     }
-  }, [analysisFile, appliedRule])
+  }, [analysisDate, appliedRule])
 
   const handleRuleSubmit = useCallback(() => {
     // Update the applied rule, which will trigger the useEffect to fetch data
@@ -149,7 +155,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
 
   const handleSort = useCallback((columnKey: string) => {
     setSortConfig((prev): SortConfig => {
-      const column = columnKey as keyof StockAnalysis
+      const column = columnKey as keyof StockMetrics
       if (prev.column === column) {
         if (prev.direction === "asc") return { column, direction: "desc" }
         if (prev.direction === "desc") return { column: null, direction: null }
@@ -165,11 +171,8 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
       const column = COLUMNS.find((c) => c.key === sortConfig.column)
       if (column) {
         result.sort((a, b) => {
-          let aVal: number | string | { count: number; total: number }
-          let bVal: number | string | { count: number; total: number }
-
-          aVal = a[column.key as keyof StockAnalysis] as number | string
-          bVal = b[column.key as keyof StockAnalysis] as number | string
+          const aVal = a[column.key as keyof StockMetrics] as number | string
+          const bVal = b[column.key as keyof StockMetrics] as number | string
 
           if (typeof aVal === "string" && typeof bVal === "string") {
             return sortConfig.direction === "asc"
@@ -208,8 +211,8 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
     return String(value)
   }
 
-  const getCellValue = (stock: StockAnalysis, columnKey: string): number | string => {
-    return stock[columnKey as keyof StockAnalysis] as number | string
+  const getCellValue = (stock: StockMetrics, columnKey: string): number | string => {
+    return stock[columnKey as keyof StockMetrics] as number | string
   }
 
   return (
@@ -225,7 +228,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
             size="sm"
             onClick={() => {
               const ruleParam = appliedRule.trim() ? `?rule=${encodeURIComponent(appliedRule.trim())}` : ""
-              navigate(`/analysis/${analysisFile}${ruleParam}`)
+              navigate(`/analysis/${analysisDate}${ruleParam}`)
             }}
             className="flex items-center gap-2"
           >
@@ -245,25 +248,13 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Analysis File Display */}
+        {/* Analysis Date Display */}
         <div>
           <label className="text-sm font-medium text-muted-foreground mb-1 block">
-            Analysis File:
+            Analysis Date:
           </label>
-          <div className="w-full rounded-md border border-input bg-muted px-3 py-2 text-sm">
-            {analysisFile}
-          </div>
+          <p className="text-sm font-medium">{dateFormat(analysisDate)}</p>
         </div>
-
-        {/* Analysis Date Display */}
-        {data?.analysis_date && (
-          <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1 block">
-              Analysis Date:
-            </label>
-            <p className="text-sm">{dateFormat(data.analysis_date)}</p>
-          </div>
-        )}
 
         {/* Rule Input */}
         <div>
@@ -300,7 +291,7 @@ export function AnalysisPanel({ symbol, analysisFile, simulationRule, involvedKe
           <div className="flex items-center justify-center py-12">
             <div className="flex flex-col items-center gap-4">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              <p className="text-muted-foreground">Loading analysis data...</p>
+              <p className="text-muted-foreground">Loading metrics data...</p>
             </div>
           </div>
         ) : error ? (

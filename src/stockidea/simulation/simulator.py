@@ -4,13 +4,13 @@ import logging
 from typing import Callable
 from uuid import UUID
 
-from stockidea.analysis import analysis
+from stockidea.analysis import metrics
 from stockidea.datasource import constituent, market_data
 from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import save_simulation_result as save_simulation_to_db
 from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
-from stockidea.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, TrendAnalysis
+from stockidea.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, StockMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class Simulator:
     date_end: datetime
     rebalance_interval_weeks: int
     max_stocks: int
-    rule_func: Callable[[TrendAnalysis], bool]
+    rule_func: Callable[[StockMetrics], bool]
     rule_raw: str
 
     def __init__(
@@ -30,7 +30,7 @@ class Simulator:
         rebalance_interval_weeks: int,
         date_start: datetime,
         date_end: datetime,
-        rule_func: Callable[[TrendAnalysis], bool],
+        rule_func: Callable[[StockMetrics], bool],
         rule_raw: str,
         from_index: StockIndex,
         baseline_index: StockIndex
@@ -45,7 +45,7 @@ class Simulator:
         self.from_index = from_index
         self.baseline_index = baseline_index
 
-    async def pick_stocks(self, today: datetime) -> tuple[list[TrendAnalysis], str]:
+    async def pick_stocks(self, today: datetime) -> list[StockMetrics]:
         # Get the symbols of the constituent
         symbols = await constituent.get_constituent_at(self.from_index, today.date())
 
@@ -53,26 +53,22 @@ class Simulator:
         stock_prices = await market_data.get_stock_price_batch_histories(
             symbols, from_date=today.date() - timedelta(weeks=52), to_date=today.date())
 
-        result = analysis.load_analysis(today)
-        if result is not None:
-            # Got the analysis from the cache
-            analyses, filename = result
-        else:
-            # No analysis found in the cache, analyze the data
+        # Try to load from database first
+        result = await metrics.has_metrics(today)
+        if not result:
+            # No metrics found in the cache, analyze the data
             logger.info(f"Analyzing data from {today.date()} to {today.date()}")
+            stock_metrics_batch = await metrics.compute_stock_metrics_batch(
+                stock_prices=stock_prices, metrics_date=today, back_period_weeks=52)
+        else:
+            stock_metrics_batch = await metrics.load_stock_metrics_batch(today)
 
-            analyses, filename = analysis.analyze_stock_batch(stock_prices=stock_prices,
-                                                              analysis_date=today, back_period_weeks=52)
-
-        if filename.endswith(".json"):
-            filename = filename[:-5]
-
-        filtered_stocks = analysis.apply_rule(analyses=analyses, rule_func=self.rule_func)
+        filtered_stocks = metrics.apply_rule(stock_metrics_batch, rule_func=self.rule_func)
 
         selected_stocks = filtered_stocks[: self.max_stocks]
         logger.info(f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)")
 
-        return selected_stocks, filename
+        return selected_stocks
 
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
@@ -131,7 +127,7 @@ class Simulator:
 
             logger.info(
                 f"=========== Rebalance on {date_iter.date()} (Balance: {balance}), hold til: {end_date.date()} ===========")
-            selected_stocks, analysis_ref = await self.pick_stocks(date_iter)
+            selected_stocks = await self.pick_stocks(date_iter)
 
             investments: list[Investment] = []
             for stock in selected_stocks:
@@ -151,7 +147,6 @@ class Simulator:
             rebalance_history.append(RebalanceHistory(
                 date=date_iter,
                 balance=balance,
-                analysis_ref=analysis_ref,
                 investments=investments,
                 profit_pct=profit_pct,
                 profit=profit,

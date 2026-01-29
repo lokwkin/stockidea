@@ -12,7 +12,6 @@ export interface Investment {
 export interface RebalanceHistory {
   date: string
   balance: number
-  analysis_ref: string
   investments: Investment[]
   profit_pct: number
   profit: number

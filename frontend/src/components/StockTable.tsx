@@ -11,24 +11,24 @@ import {
 import { COLUMNS } from "@/config/columns"
 import { cn } from "@/lib/utils"
 import type {
-  StockAnalysis,
+  StockMetrics,
   SortConfig,
   ColumnConfig,
 } from "@/types/stock"
 
 interface StockTableProps {
-  data: StockAnalysis[]
+  data: StockMetrics[]
   highlightedSymbol?: string
 }
 
 function getCellValue(
-  stock: StockAnalysis,
+  stock: StockMetrics,
   column: ColumnConfig
 ): number | string {
-  return stock[column.key as keyof StockAnalysis]
+  return stock[column.key as keyof StockMetrics]
 }
 
-function getSortValue(stock: StockAnalysis, column: ColumnConfig): number | string {
+function getSortValue(stock: StockMetrics, column: ColumnConfig): number | string {
   return getCellValue(stock, column) as number | string
 }
 
@@ -69,10 +69,10 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
   const handleSort = useCallback((columnKey: string) => {
     setSortConfig((prev): SortConfig => {
       if (prev.column === columnKey) {
-        if (prev.direction === "asc") return { column: columnKey as keyof StockAnalysis, direction: "desc" }
+        if (prev.direction === "asc") return { column: columnKey as keyof StockMetrics, direction: "desc" }
         if (prev.direction === "desc") return { column: null, direction: null }
       }
-      return { column: columnKey as keyof StockAnalysis, direction: "asc" }
+      return { column: columnKey as keyof StockMetrics, direction: "asc" }
     })
   }, [])
 

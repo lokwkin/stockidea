@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { StockTable } from "@/components/StockTable"
-import type { AnalysisData } from "@/types/stock"
+import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
 import {
   Select,
   SelectContent,
@@ -13,57 +13,57 @@ import { Button } from "@/components/ui/button"
 import { dateFormat } from "@/lib/utils"
 
 export function AnalysisView() {
-  const { file: urlFile } = useParams<{ file?: string }>()
+  const { date: urlDate } = useParams<{ date?: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [data, setData] = useState<AnalysisData | null>(null)
+  const [data, setData] = useState<{ date: string; data: StockMetrics[] } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingFiles, setLoadingFiles] = useState(true)
+  const [loadingDates, setLoadingDates] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [availableFiles, setAvailableFiles] = useState<string[]>([])
-  const [selectedFile, setSelectedFile] = useState<string>("")
+  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>("")
   const [rule, setRule] = useState<string>("")
   const tableRef = useRef<HTMLDivElement>(null)
   
   const targetSymbol = searchParams.get("symbol")
   const urlRule = searchParams.get("rule")
 
-  // Load available files on mount
+  // Load available dates on mount
   useEffect(() => {
-    fetch("/api/analysis")
+    fetch("/api/metrics")
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis list")
+        if (!res.ok) throw new Error("Failed to load metrics list")
         return res.json()
       })
-      .then((files: string[]) => {
-        if (files.length === 0) {
-          throw new Error("No analysis files available")
+      .then((dates: string[]) => {
+        if (dates.length === 0) {
+          throw new Error("No metrics data available")
         }
-        setAvailableFiles(files)
-        // Use URL file if provided and valid, otherwise use the most recent file
-        if (urlFile && files.includes(urlFile)) {
-          setSelectedFile(urlFile)
+        setAvailableDates(dates)
+        // Use URL date if provided and valid, otherwise use the most recent date
+        if (urlDate && dates.includes(urlDate)) {
+          setSelectedDate(urlDate)
         } else {
-          setSelectedFile(files[0])
-          // Update URL if no file in URL or invalid file
-          if (!urlFile || !files.includes(urlFile)) {
-            navigate(`/analysis/${files[0]}`, { replace: true })
+          setSelectedDate(dates[0])
+          // Update URL if no date in URL or invalid date
+          if (!urlDate || !dates.includes(urlDate)) {
+            navigate(`/analysis/${dates[0]}`, { replace: true })
           }
         }
-        setLoadingFiles(false)
+        setLoadingDates(false)
       })
       .catch((err) => {
         setError(err.message)
-        setLoadingFiles(false)
+        setLoadingDates(false)
       })
   }, [])
 
-  // Handle URL file changes
+  // Handle URL date changes
   useEffect(() => {
-    if (urlFile && availableFiles.includes(urlFile) && selectedFile !== urlFile) {
-      setSelectedFile(urlFile)
+    if (urlDate && availableDates.includes(urlDate) && selectedDate !== urlDate) {
+      setSelectedDate(urlDate)
     }
-  }, [urlFile, availableFiles, selectedFile])
+  }, [urlDate, availableDates, selectedDate])
 
   // Set rule from URL query param on mount
   useEffect(() => {
@@ -72,9 +72,9 @@ export function AnalysisView() {
     }
   }, [urlRule])
 
-  // Load analysis data when selected file or rule changes
+  // Load metrics data when selected date or rule changes
   useEffect(() => {
-    if (!selectedFile) return
+    if (!selectedDate) return
 
     let cancelled = false
 
@@ -87,17 +87,17 @@ export function AnalysisView() {
     })
 
     const url = rule.trim()
-      ? `/api/analysis/${selectedFile}?rule=${encodeURIComponent(rule.trim())}`
-      : `/api/analysis/${selectedFile}`
+      ? `/api/metrics/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/metrics/${selectedDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis data")
+        if (!res.ok) throw new Error("Failed to load metrics data")
         return res.json()
       })
-      .then((json: AnalysisData) => {
+      .then((json: MetricsDataAPI) => {
         if (!cancelled) {
-          setData(json)
+          setData({ date: json.date, data: json.data })
           setLoading(false)
         }
       })
@@ -111,7 +111,7 @@ export function AnalysisView() {
     return () => {
       cancelled = true
     }
-  }, [selectedFile, rule])
+  }, [selectedDate, rule])
 
   // Scroll to target symbol when data loads
   useEffect(() => {
@@ -136,40 +136,36 @@ export function AnalysisView() {
   }, [targetSymbol, data, loading])
 
   const handleRuleSubmit = useCallback(() => {
-    if (!selectedFile) return
+    if (!selectedDate) return
 
     setLoading(true)
     setError(null)
 
     const url = rule.trim()
-      ? `/api/analysis/${selectedFile}?rule=${encodeURIComponent(rule.trim())}`
-      : `/api/analysis/${selectedFile}`
+      ? `/api/metrics/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/metrics/${selectedDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load analysis data")
+        if (!res.ok) throw new Error("Failed to load metrics data")
         return res.json()
       })
-      .then((json: AnalysisData) => {
-        setData(json)
+      .then((json: MetricsDataAPI) => {
+        setData({ date: json.date, data: json.data })
         setLoading(false)
       })
       .catch((err) => {
         setError(err.message)
         setLoading(false)
       })
-  }, [selectedFile, rule])
+  }, [selectedDate, rule])
 
-  const generatedDate = useMemo(() => {
-    return dateFormat(new Date())
-  }, [])
-
-  if (loadingFiles) {
+  if (loadingDates) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Loading trend data files...</p>
+          <p className="text-muted-foreground">Loading metrics dates...</p>
         </div>
       </div>
     )
@@ -182,7 +178,7 @@ export function AnalysisView() {
           <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
           <p className="text-muted-foreground">{error ?? "No data available"}</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Make sure the API server is running and trend data files are available
+            Make sure the API server is running and metrics data is available
           </p>
         </div>
       </div>
@@ -197,21 +193,21 @@ export function AnalysisView() {
             Stock Trend Data
           </h1>
           <div className="mb-4 flex items-center justify-center gap-4">
-            <label htmlFor="file-select" className="text-sm font-medium text-muted-foreground">
-              Select Trend Data:
+            <label htmlFor="date-select" className="text-sm font-medium text-muted-foreground">
+              Select Date:
             </label>
-            <Select value={selectedFile} onValueChange={(value) => {
-              setSelectedFile(value)
+            <Select value={selectedDate} onValueChange={(value) => {
+              setSelectedDate(value)
               const symbolParam = targetSymbol ? `?symbol=${targetSymbol}` : ""
               navigate(`/analysis/${value}${symbolParam}`)
             }}>
-              <SelectTrigger id="file-select" className="w-[250px]">
-                <SelectValue placeholder="Select a trend data file" />
+              <SelectTrigger id="date-select" className="w-[250px]">
+                <SelectValue placeholder="Select a date" />
               </SelectTrigger>
               <SelectContent>
-                {availableFiles.map((file) => (
-                  <SelectItem key={file} value={file}>
-                    {file}
+                {availableDates.map((date) => (
+                  <SelectItem key={date} value={date}>
+                    {date}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -219,8 +215,7 @@ export function AnalysisView() {
           </div>
           {data && (
             <p className="text-sm text-muted-foreground">
-              Trend Data Date: {dateFormat(data.analysis_date)} • Generated on{" "}
-              {generatedDate} • {data.data.length} stocks analyzed • 52-week metrics
+              {dateFormat(data.date)} • {data.data.length} stocks analyzed • 52-week metrics
             </p>
           )}
         </header>

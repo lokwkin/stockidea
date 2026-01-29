@@ -1,19 +1,14 @@
-"""FastAPI endpoints for stock analysis and simulations."""
-
 from datetime import datetime, timedelta
 from uuid import UUID
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
-import json
-from pathlib import Path
 
 import uvicorn
 
-from stockidea.analysis import trend_analyzer
-from stockidea.config import ANALYSIS_DIR
+from stockidea.analysis import metrics, metrics_calculator
 from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
-from stockidea.types import SimulationConfig, StockIndex, TrendAnalysis
+from stockidea.types import SimulationConfig, StockIndex
 from stockidea.datasource import market_data
 from stockidea.datasource.database import conn, queries
 from typing import Optional
@@ -28,24 +23,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def _list_json_files(directory: Path) -> list[str]:
-    """List JSON files in a directory, returning filenames without .json extension."""
-    if not directory.exists():
-        return []
-    return sorted(
-        [f.stem for f in directory.glob("*.json")],
-        reverse=True,  # Most recent first
-    )
-
-
-def _read_json_file(directory: Path, filename: str) -> dict:
-    """Read and return JSON content from a file."""
-    filepath = directory / f"{filename}.json"
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
-    return json.loads(filepath.read_text())
 
 
 @app.get("/simulations")
@@ -66,41 +43,36 @@ async def get_simulation(simulation_id: UUID) -> dict:
         return simulation_result.model_dump()
 
 
-@app.get("/analysis")
-def list_analysis() -> list[str]:
-    """Return list of available analysis filenames (without .json extension)."""
-    return _list_json_files(ANALYSIS_DIR)
+@app.get("/metrics")
+async def list_analysis() -> list[str]:
+    dates = await metrics.list_metrics_dates()
+    return [date.strftime("%Y-%m-%d") for date in dates]
 
 
-@app.get("/analysis/{filename}")
-def get_analysis(filename: str, rule: Optional[str] = None) -> dict:
+@app.get("/metrics/{date}/")
+async def get_analysis(date: str, rule: Optional[str] = None) -> dict:
     """
     Return the full JSON content of an analysis file.
 
     If rule is provided, applies the rule to filter the trend analysis results.
     """
-    data = _read_json_file(ANALYSIS_DIR, filename)
-
-    # Convert JSON data to TrendAnalysis objects
-    analyses = [TrendAnalysis(**item) for item in data["data"]]
+    metrics_date = datetime.strptime(date, "%Y-%m-%d")
+    stock_metrics_batch = await metrics.load_stock_metrics_batch(metrics_date)
 
     # Apply rule if provided
     if rule:
         try:
             rule_func = compile_rule(rule)
             # Filter analyses using the rule (no max_stocks limit for API)
-            filtered_analyses = [a for a in analyses if rule_func(a)]
+            stock_metrics_batch = [stock_metric for stock_metric in stock_metrics_batch if rule_func(stock_metric)]
             # Sort by rising stability score
-            analyses = trend_analyzer.rank_by_rising_stability_score(filtered_analyses)
+            stock_metrics_batch = metrics_calculator.rank_by_rising_stability_score(stock_metrics_batch)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid rul expression: {e}")
-
-    # Convert back to dict format
-    result_data = [a.model_dump() for a in analyses]
+            raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     return {
-        "analysis_date": data["analysis_date"],
-        "data": result_data,
+        "date": metrics_date.strftime("%Y-%m-%d"),
+        "data": [stock_metric.model_dump() for stock_metric in stock_metrics_batch],
     }
 
 
@@ -112,7 +84,7 @@ async def simulate(simulation_config: SimulationConfig) -> dict:
     # Populate involved_keys from rule if not provided
     if not simulation_config.involved_keys:
         simulation_config.involved_keys = extract_involved_keys(simulation_config.rule)
-    
+
     simulator = Simulator(
         max_stocks=simulation_config.max_stocks,
         rebalance_interval_weeks=simulation_config.rebalance_interval_weeks,
