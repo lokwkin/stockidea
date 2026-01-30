@@ -2,14 +2,11 @@ from datetime import datetime, timedelta
 from math import floor
 import logging
 from typing import Callable
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockidea.analysis import metrics
 from stockidea.datasource import constituent, market_data
-from stockidea.datasource.database import conn
-from stockidea.datasource.database.queries import save_simulation_result as save_simulation_to_db
 from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import Investment, RebalanceHistory, SimulationConfig, SimulationResult, StockIndex, StockMetrics
@@ -179,13 +176,3 @@ class Simulator:
                 involved_keys=extract_involved_keys(self.rule_raw)
             )
         )
-
-
-async def save_simulation_result(result: SimulationResult) -> UUID:
-    """
-    Save simulation result to database.
-    Returns the simulation ID.
-    """
-    async with conn.get_db_session() as db_session:
-        simulation_id = await save_simulation_to_db(db_session, result)
-        return simulation_id

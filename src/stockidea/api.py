@@ -50,7 +50,8 @@ async def get_simulation(simulation_id: UUID) -> dict:
 
 @app.get("/metrics")
 async def list_analysis() -> list[str]:
-    dates = await metrics.list_metrics_dates()
+    async with conn.get_db_session() as db_session:
+        dates = await metrics.list_metrics_dates(db_session)
     return [date.strftime("%Y-%m-%d") for date in dates]
 
 
@@ -62,8 +63,9 @@ async def get_analysis(date: str, rule: Optional[str] = None, index: StockIndex 
     symbols = await constituent.get_constituent_at(index, metrics_date.date())
 
     # Analyze the stock prices and save to database
-    stock_metrics_batch = await metrics.get_stock_metrics_batch(
-        symbols=symbols, metrics_date=metrics_date, back_period_weeks=52)
+    async with conn.get_db_session() as db_session:
+        stock_metrics_batch = await metrics.get_stock_metrics_batch(
+            db_session, symbols=symbols, metrics_date=metrics_date, back_period_weeks=52)
 
     # Apply rule if provided
     if rule:
