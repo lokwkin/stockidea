@@ -32,8 +32,17 @@ function getSortValue(stock: StockMetrics, column: ColumnConfig): number | strin
   return getCellValue(stock, column) as number | string
 }
 
-function formatValue(value: number, type: string, decimals = 2): string {
+// Check if a column represents a "drop" metric (values are positive but represent drops)
+function isDropColumn(columnKey: string): boolean {
+  return columnKey.includes("_drop_")
+}
+
+function formatValue(value: number, type: string, decimals = 2, columnKey = ""): string {
   if (type === "percent") {
+    // Drop columns: values are positive but represent drops, so display with "-"
+    if (isDropColumn(columnKey)) {
+      return `-${value.toFixed(decimals)}%`
+    }
     const sign = value > 0 ? "+" : ""
     return `${sign}${value.toFixed(decimals)}%`
   }
@@ -46,8 +55,12 @@ function formatValue(value: number, type: string, decimals = 2): string {
   return String(value)
 }
 
-function getValueColor(value: number, type: string): string {
+function getValueColor(value: number, type: string, columnKey = ""): string {
   if (type === "percent") {
+    // Drop columns: always show as destructive (red) since they represent drops
+    if (isDropColumn(columnKey)) {
+      return value > 0 ? "text-destructive" : "text-muted-foreground"
+    }
     if (value > 0) return "text-positive"
     if (value < 0) return "text-destructive"
     return "text-muted-foreground"
@@ -163,10 +176,10 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
                       key={column.key}
                       className={cn(
                         "px-4 py-3 font-mono text-sm",
-                        getValueColor(numValue, column.type)
+                        getValueColor(numValue, column.type, column.key)
                       )}
                     >
-                      {formatValue(numValue, column.type, column.decimals)}
+                      {formatValue(numValue, column.type, column.decimals, column.key)}
                     </TableCell>
                   )
                 })}

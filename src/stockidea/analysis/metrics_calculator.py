@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import logging
 
 import numpy as np
 from scipy import stats  # type: ignore
 
 from stockidea.types import StockMetrics, StockPrice
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,7 +78,7 @@ def _calculate_pct_change(old: float, new: float) -> float:
 
 def compute_stock_metrics(
     symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
-) -> StockMetrics | None:
+) -> StockMetrics:
     """
     Analyze stock price data and return weekly metrics.
 
@@ -86,12 +89,12 @@ def compute_stock_metrics(
         StockMetrics with all computed metrics, or None if insufficient data
     """
     if not prices:
-        return None
+        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
 
     weekly_data = _aggregate_to_weekly(prices, date_from=from_date.date(), date_to=to_date.date())
 
     if len(weekly_data) < 5:
-        return None
+        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
 
     total_weeks = len(weekly_data)
 
@@ -273,4 +276,5 @@ def slope_outlier_mask(items: list[StockMetrics], k: float = 3.0) -> list[StockM
 
     modified_z = 0.6745 * (slopes - median) / mad
     is_not_outlier = np.abs(modified_z) <= 2.5
-    return [item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier]
+    filtered_items = [item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier]
+    return filtered_items

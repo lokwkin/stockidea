@@ -4,6 +4,8 @@ import logging
 from typing import Callable
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from stockidea.analysis import metrics
 from stockidea.datasource import constituent, market_data
 from stockidea.datasource.database import conn
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class Simulator:
+    db_session: AsyncSession
     initial_balance: float
     date_start: datetime
     date_end: datetime
@@ -26,6 +29,7 @@ class Simulator:
 
     def __init__(
         self,
+        db_session: AsyncSession,
         max_stocks: int,
         rebalance_interval_weeks: int,
         date_start: datetime,
@@ -35,6 +39,7 @@ class Simulator:
         from_index: StockIndex,
         baseline_index: StockIndex
     ):
+        self.db_session = db_session
         self.initial_balance = 10000
         self.max_stocks = max_stocks
         self.rebalance_interval_weeks = rebalance_interval_weeks
@@ -49,19 +54,8 @@ class Simulator:
         # Get the symbols of the constituent
         symbols = await constituent.get_constituent_at(self.from_index, today.date())
 
-        # Get the stock price histories
-        stock_prices = await market_data.get_stock_price_batch_histories(
-            symbols, from_date=today.date() - timedelta(weeks=52), to_date=today.date())
-
-        # Try to load from database first
-        result = await metrics.has_metrics(today)
-        if not result:
-            # No metrics found in the cache, analyze the data
-            logger.info(f"Analyzing data from {today.date()} to {today.date()}")
-            stock_metrics_batch = await metrics.compute_stock_metrics_batch(
-                stock_prices=stock_prices, metrics_date=today, back_period_weeks=52)
-        else:
-            stock_metrics_batch = await metrics.load_stock_metrics_batch(today)
+        stock_metrics_batch = await metrics.get_stock_metrics_batch(
+            self.db_session, symbols=symbols, metrics_date=today, back_period_weeks=52, compute_if_not_exists=True)
 
         filtered_stocks = metrics.apply_rule(stock_metrics_batch, rule_func=self.rule_func)
 
@@ -73,8 +67,8 @@ class Simulator:
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
-        buy_stock_price = (await market_data.get_stock_price_at_date(symbol, buy_date.date(), nearest=True)).adj_close
-        sell_stock_price = (await market_data.get_stock_price_at_date(symbol, sell_date.date(), nearest=True)).adj_close
+        buy_stock_price = (await market_data.get_stock_price_at_date(self.db_session, symbol, buy_date.date(), nearest=True)).adj_close
+        sell_stock_price = (await market_data.get_stock_price_at_date(self.db_session, symbol, sell_date.date(), nearest=True)).adj_close
         position = floor(amount / buy_stock_price)
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
@@ -93,9 +87,9 @@ class Simulator:
 
     async def invest_baseline(self, buy_date: datetime, sell_date: datetime, amount: float) -> Investment:
         baseline_index_price_buy = (await market_data.get_index_price_at_date(
-            self.baseline_index, buy_date.date(), nearest=True)).adj_close
+            self.db_session, self.baseline_index, buy_date.date(), nearest=True)).adj_close
         baseline_index_price_sell = (await market_data.get_index_price_at_date(
-            self.baseline_index, sell_date.date(), nearest=True)).adj_close
+            self.db_session, self.baseline_index, sell_date.date(), nearest=True)).adj_close
         position = floor(amount / baseline_index_price_buy)
         profit = (baseline_index_price_sell - baseline_index_price_buy) * position
         profit_pct = (baseline_index_price_sell - baseline_index_price_buy) / baseline_index_price_buy * 100

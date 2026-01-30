@@ -3,15 +3,17 @@
 import asyncio
 import logging
 import click
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Import config to initialize logging
 import stockidea.config  # noqa: F401
 from stockidea.analysis import metrics
-from stockidea.datasource import constituent, market_data
+from stockidea.datasource import constituent
+from stockidea.datasource.database import conn
+from stockidea.datasource.database.queries import save_simulation_result as save_simulation_to_db
 from stockidea.rule_engine import compile_rule
 
-from stockidea.simulation.simulator import Simulator, save_simulation_result
+from stockidea.simulation.simulator import Simulator
 from stockidea.types import StockIndex, StockMetrics
 
 logger = logging.getLogger(__name__)
@@ -24,20 +26,15 @@ def cli():
 
 
 async def _analyze(date: datetime, index: StockIndex) -> list[StockMetrics]:
+    async with conn.get_db_session() as db_session:
+        # Get the symbols of the constituent
+        symbols = await constituent.get_constituent_at(index, date.date())
 
-    # Get the symbols of the constituent
-    symbols = await constituent.get_constituent_at(index, date.date())
+        # Analyze the stock prices and save to database
+        stock_metrics_batch = await metrics.get_stock_metrics_batch(
+            db_session, symbols=symbols, metrics_date=date, back_period_weeks=52)
 
-    # Get the stock price histories
-    logger.info(f"Getting stock price histories for {len(symbols)} symbols")
-    stock_prices = await market_data.get_stock_price_batch_histories(
-        symbols, from_date=date.date() - timedelta(weeks=52), to_date=date.date())
-
-    # Analyze the stock prices and save to database
-    stock_metrics_batch = await metrics.compute_stock_metrics_batch(
-        stock_prices=stock_prices, metrics_date=date, back_period_weeks=52)
-
-    return stock_metrics_batch
+        return stock_metrics_batch
 
 
 @cli.command("analyze", help="Analyze stock prices for a given date")
@@ -130,22 +127,24 @@ def simulate(max_stocks: int, rebalance_interval_weeks: int, date_start: str, da
     click.echo(f"Running simulation from {date_start_parsed.date()} to {date_end_parsed.date()}")
     click.echo(f"Max stocks: {max_stocks}, Rebalance interval: {rebalance_interval_weeks} weeks")
     click.echo(f"Rule: {rule}")
-
-    simulator = Simulator(
-        max_stocks=max_stocks,
-        rebalance_interval_weeks=rebalance_interval_weeks,
-        date_start=date_start_parsed,
-        date_end=date_end_parsed,
-        rule_func=rule_func,
-        rule_raw=rule,
-        from_index=stock_index,
-        baseline_index=StockIndex.SP500,
-    )
+    click.echo(f"Stock index: {stock_index}")
 
     async def _simulate_and_save():
-        simulation_result = await simulator.simulate()
-        simulation_id = await save_simulation_result(simulation_result)
-        return simulation_result, simulation_id
+        async with conn.get_db_session() as db_session:
+            simulator = Simulator(
+                db_session=db_session,
+                max_stocks=max_stocks,
+                rebalance_interval_weeks=rebalance_interval_weeks,
+                date_start=date_start_parsed,
+                date_end=date_end_parsed,
+                rule_func=rule_func,
+                rule_raw=rule,
+                from_index=stock_index,
+                baseline_index=StockIndex.SP500,
+            )
+            simulation_result = await simulator.simulate()
+            simulation_id = await save_simulation_to_db(db_session, simulation_result)
+            return simulation_result, simulation_id
 
     simulation_result, simulation_id = asyncio.run(_simulate_and_save())
     click.echo(

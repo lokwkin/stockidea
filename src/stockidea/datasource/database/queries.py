@@ -319,72 +319,62 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
 
 async def save_stock_metrics(
     db_session: AsyncSession,
-    stock_metrics_batch: list[StockMetrics],
+    stock_metrics: StockMetrics,
     metrics_date: date,
 ) -> None:
     """
     Save stock metrics to the database for a specific date.
     """
-    logger.info(f"Saving metrics for {len(stock_metrics_batch)} stocks on {metrics_date}")
+    logger.info(f"Saving metrics for {stock_metrics.symbol} on {metrics_date}")
 
-    for stock_metrics in stock_metrics_batch:
-        # Upsert stock metrics (single flat record)
-        record = DBStockMetrics(**stock_metrics.model_dump())
-        await db_session.merge(record)
+    # Upsert stock metrics (single flat record)
+    record = DBStockMetrics(**stock_metrics.model_dump())
+    await db_session.merge(record)
 
     await db_session.commit()
-    logger.info(f"✓ Metrics saved for {len(stock_metrics_batch)} stocks on {metrics_date}")
 
 
 async def load_stock_metrics(
     db_session: AsyncSession,
+    symbol: str,
     metrics_date: date,
-) -> list[StockMetrics]:
+) -> StockMetrics | None:
     """
     Load stock metrics for a specific date from the database.
-    Returns a list of StockMetrics objects, or empty list if no data found.
+    Returns a StockMetrics object, or None if no data found.
     """
-    stmt = select(DBStockMetrics).where(DBStockMetrics.date == metrics_date)
+    stmt = select(DBStockMetrics).where(DBStockMetrics.symbol ==
+                                        symbol.upper()).where(DBStockMetrics.date == metrics_date)
     result = await db_session.execute(stmt)
-    records = result.scalars().all()
+    record = result.scalar_one_or_none()
 
-    stock_metrics_batch = [
-        StockMetrics(
-            symbol=r.symbol,
-            date=r.date,
-            total_weeks=r.total_weeks,
-            linear_slope_pct=r.linear_slope_pct,
-            linear_r_squared=r.linear_r_squared,
-            log_slope=r.log_slope,
-            log_r_squared=r.log_r_squared,
-            change_1w_pct=r.change_1w_pct,
-            change_2w_pct=r.change_2w_pct,
-            change_1m_pct=r.change_1m_pct,
-            change_3m_pct=r.change_3m_pct,
-            change_6m_pct=r.change_6m_pct,
-            change_1y_pct=r.change_1y_pct,
-            max_jump_1w_pct=r.max_jump_1w_pct,
-            max_drop_1w_pct=r.max_drop_1w_pct,
-            max_jump_2w_pct=r.max_jump_2w_pct,
-            max_drop_2w_pct=r.max_drop_2w_pct,
-            max_jump_4w_pct=r.max_jump_4w_pct,
-            max_drop_4w_pct=r.max_drop_4w_pct,
-        )
-        for r in records
-    ]
+    if record is None:
+        return None
 
-    logger.info(f"Loaded {len(stock_metrics_batch)} stock metrics for {metrics_date}")
-    return stock_metrics_batch
+    return StockMetrics(
+        symbol=record.symbol,
+        date=record.date,
+        total_weeks=record.total_weeks,
+        linear_slope_pct=record.linear_slope_pct,
+        linear_r_squared=record.linear_r_squared,
+        log_slope=record.log_slope,
+        log_r_squared=record.log_r_squared,
+        change_1w_pct=record.change_1w_pct,
+        change_2w_pct=record.change_2w_pct,
+        change_1m_pct=record.change_1m_pct,
+        change_3m_pct=record.change_3m_pct,
+        change_6m_pct=record.change_6m_pct,
+        change_1y_pct=record.change_1y_pct,
+        max_jump_1w_pct=record.max_jump_1w_pct,
+        max_drop_1w_pct=record.max_drop_1w_pct,
+        max_jump_2w_pct=record.max_jump_2w_pct,
+        max_drop_2w_pct=record.max_drop_2w_pct,
+        max_jump_4w_pct=record.max_jump_4w_pct,
+        max_drop_4w_pct=record.max_drop_4w_pct,
+    )
 
 
 async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
     stmt = select(DBStockMetrics.date).distinct()
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]
-
-
-async def has_metrics_for_date(db_session: AsyncSession, metrics_date: date) -> bool:
-    """Check if metrics exist for a given analysis date."""
-    stmt = select(DBStockMetrics.symbol).where(DBStockMetrics.date == metrics_date).limit(1)
-    result = await db_session.execute(stmt)
-    return result.first() is not None

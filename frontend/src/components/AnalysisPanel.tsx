@@ -191,6 +191,11 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     return result
   }, [filteredData, sortConfig])
 
+  // Check if a column represents a "drop" metric (values are positive but represent drops)
+  const isDropColumn = (columnKey: string): boolean => {
+    return columnKey.includes("_drop_")
+  }
+
   // Format functions
   const formatValue = (value: number, columnKey: string): string => {
     const column = COLUMNS.find((c) => c.key === columnKey)
@@ -199,6 +204,10 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     const decimals = column.decimals ?? 2
 
     if (column.type === "percent") {
+      // Drop columns: values are positive but represent drops, so display with "-"
+      if (isDropColumn(columnKey)) {
+        return `-${value.toFixed(decimals)}%`
+      }
       const sign = value >= 0 ? "+" : ""
       return `${sign}${value.toFixed(decimals)}%`
     }
