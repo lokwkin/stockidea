@@ -96,6 +96,10 @@ def compute_stock_metrics(
     if len(weekly_data) < 5:
         raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
 
+    # Check if the last week is more than 4 weeks old
+    if weekly_data[-1].week_ending < (to_date - timedelta(weeks=4)).date():
+        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
+
     total_weeks = len(weekly_data)
 
     # Calculate weekly changes (percentage)

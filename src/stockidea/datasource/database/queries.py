@@ -375,6 +375,6 @@ async def load_stock_metrics(
 
 
 async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
-    stmt = select(DBStockMetrics.date).distinct()
+    stmt = select(DBStockMetrics.date).distinct().order_by(DBStockMetrics.date.desc())
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]

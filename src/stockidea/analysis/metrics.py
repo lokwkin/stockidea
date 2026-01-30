@@ -42,7 +42,7 @@ async def get_stock_metrics_batch(
         try:
             # Try to load from database first
             stock_metrics = await queries.load_stock_metrics(db_session, symbol, metrics_date.date())
-            if not stock_metrics and not compute_if_not_exists:
+            if not stock_metrics and compute_if_not_exists:
                 prices = await market_data.get_stock_price_history(db_session, symbol, from_date, to_date)
 
                 stock_metrics = metrics_calculator.compute_stock_metrics(

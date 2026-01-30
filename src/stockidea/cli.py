@@ -32,7 +32,7 @@ async def _analyze(date: datetime, index: StockIndex) -> list[StockMetrics]:
 
         # Analyze the stock prices and save to database
         stock_metrics_batch = await metrics.get_stock_metrics_batch(
-            db_session, symbols=symbols, metrics_date=date, back_period_weeks=52)
+            db_session, symbols=symbols, metrics_date=date, back_period_weeks=52, compute_if_not_exists=True)
 
         return stock_metrics_batch
 
