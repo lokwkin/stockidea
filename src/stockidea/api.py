@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import logging
 from uuid import UUID
@@ -9,7 +11,7 @@ import uvicorn
 from stockidea.analysis import metrics, metrics_calculator
 from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
-from stockidea.types import SimulationConfig, StockIndex
+from stockidea.types import EnqueuedJob, SimulationConfig, SimulationJob, StockIndex
 from stockidea.datasource import constituent, market_data
 from stockidea.datasource.database import conn, queries
 from typing import Optional
@@ -18,7 +20,67 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="StockPick API", version="0.1.0")
+async def _worker_loop() -> None:
+    """Background worker that processes pending simulation jobs."""
+    logger.info("Simulation worker started")
+    while True:
+        try:
+            async with conn.get_db_session() as db_session:
+                job = await queries.claim_next_pending_job(db_session)
+
+            if job is None:
+                await asyncio.sleep(2)
+                continue
+
+            logger.info(f"Processing simulation job {job.id}")
+            try:
+                config = SimulationConfig.model_validate_json(job.config_json)
+                async with conn.get_db_session() as db_session:
+                    simulator = Simulator(
+                        db_session=db_session,
+                        max_stocks=config.max_stocks,
+                        rebalance_interval_weeks=config.rebalance_interval_weeks,
+                        date_start=config.date_start,
+                        date_end=config.date_end,
+                        rule_func=compile_rule(config.rule),
+                        rule_raw=config.rule,
+                        from_index=config.index,
+                        baseline_index=StockIndex.SP500,
+                    )
+                    simulation_result = await simulator.simulate()
+                    simulation_id = await queries.save_simulation_result(db_session, simulation_result)
+
+                async with conn.get_db_session() as db_session:
+                    await queries.mark_job_completed(db_session, job.id, simulation_id)
+
+                logger.info(f"Job {job.id} completed → simulation {simulation_id}")
+
+            except Exception as exc:
+                logger.exception(f"Job {job.id} failed: {exc}")
+                async with conn.get_db_session() as db_session:
+                    await queries.mark_job_failed(db_session, job.id, str(exc))
+
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.exception(f"Worker loop error: {exc}")
+            await asyncio.sleep(5)
+
+    logger.info("Simulation worker stopped")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker_task = asyncio.create_task(_worker_loop())
+    yield
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="StockPick API", version="0.1.0", lifespan=lifespan)
 
 # Enable CORS for frontend
 app.add_middleware(
@@ -85,32 +147,41 @@ async def get_analysis(date: str, rule: Optional[str] = None, index: StockIndex 
 
 
 @app.post("/simulate")
-async def simulate(simulation_config: SimulationConfig) -> dict:
+async def simulate(simulation_config: SimulationConfig) -> EnqueuedJob:
     """
-    Simulate an investment strategy.
+    Enqueue a simulation job and return the job ID for status polling.
     """
     # Populate involved_keys from rule if not provided
     if not simulation_config.involved_keys:
         simulation_config.involved_keys = extract_involved_keys(simulation_config.rule)
 
-    async with conn.get_db_session() as db_session:
-        simulator = Simulator(
-            db_session=db_session,
-            max_stocks=simulation_config.max_stocks,
-            rebalance_interval_weeks=simulation_config.rebalance_interval_weeks,
-            date_start=simulation_config.date_start,
-            date_end=simulation_config.date_end,
-            rule_func=compile_rule(simulation_config.rule),
-            rule_raw=simulation_config.rule,
-            from_index=simulation_config.index,
-            baseline_index=StockIndex.SP500,
-        )
-        simulation_result = await simulator.simulate()
-        simulation_id = await queries.save_simulation_result(db_session, simulation_result)
+    # Validate rule before enqueuing
+    try:
+        compile_rule(simulation_config.rule)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
-    result_dict = simulation_result.model_dump()
-    result_dict["id"] = simulation_id
-    return result_dict
+    async with conn.get_db_session() as db_session:
+        job_id = await queries.create_simulation_job(db_session, simulation_config)
+
+    return EnqueuedJob(job_id=job_id, status="pending")
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(job_id: UUID) -> SimulationJob:
+    """Return the status of a simulation job."""
+    async with conn.get_db_session() as db_session:
+        job = await queries.get_job_by_id(db_session, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    return job
+
+
+@app.get("/jobs")
+async def list_jobs() -> list[SimulationJob]:
+    """Return the most recent simulation jobs."""
+    async with conn.get_db_session() as db_session:
+        return await queries.list_recent_jobs(db_session)
 
 
 @app.get("/snp500")

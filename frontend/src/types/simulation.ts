@@ -56,3 +56,20 @@ export interface SimulationSummary {
   baseline_profit_pct: number
   created_at: string
 }
+
+export type JobStatus = "pending" | "running" | "completed" | "failed"
+
+export interface SimulationJob {
+  id: string
+  status: JobStatus
+  simulation_id: string | null
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}
+
+export interface EnqueuedJob {
+  job_id: string
+  status: JobStatus
+}

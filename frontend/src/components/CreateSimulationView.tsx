@@ -136,14 +136,13 @@ export function CreateSimulationView() {
 
       const result = await response.json()
 
-      // The API now returns the simulation with an ID
-      if (result.id) {
+      // API now returns a job; navigate to job status page
+      if (result.job_id) {
         setLoading(false)
-        navigate(`/simulation/${result.id}`)
+        navigate(`/simulation/job/${result.job_id}`)
         return
       }
 
-      // Fallback: navigate to simulation list
       setLoading(false)
       navigate("/simulation")
     } catch (err) {

@@ -121,3 +121,25 @@ class SimulationResult(BaseModel):
     baseline_profit: float
     baseline_balance: float
     simulation_config: SimulationConfig
+
+
+# =============================================================================
+# Job Queue Models
+# =============================================================================
+
+import uuid as _uuid
+
+
+class SimulationJob(BaseModel):
+    id: _uuid.UUID
+    status: str  # pending | running | completed | failed
+    simulation_id: _uuid.UUID | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class EnqueuedJob(BaseModel):
+    job_id: _uuid.UUID
+    status: str
