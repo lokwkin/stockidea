@@ -76,6 +76,31 @@ def _calculate_pct_change(old: float, new: float) -> float:
     return ((new - old) / old) * 100
 
 
+def _max_drawdown(prices_arr: np.ndarray) -> float:
+    """Max peak-to-trough decline as a positive percentage."""
+    if len(prices_arr) < 2:
+        return 0.0
+    peak = np.maximum.accumulate(prices_arr)
+    drawdowns = (prices_arr - peak) / peak * 100
+    return float(-np.min(drawdowns))
+
+
+def _pct_positive(changes: list[float]) -> float:
+    """Fraction of values greater than zero."""
+    return sum(1 for c in changes if c > 0) / len(changes) if changes else 0.0
+
+
+def _linregress_slope_r2(window: list[WeeklyData]) -> tuple[float, float]:
+    """Linear regression slope (% of window starting price per week) and R²."""
+    if len(window) < 3:
+        return 0.0, 0.0
+    x = np.arange(len(window))
+    y = np.array([w.closing_price for w in window])
+    slope, _, r_value, _, _ = stats.linregress(x, y)
+    slope_pct = float((slope / window[0].closing_price) * 100) if window[0].closing_price != 0 else 0.0
+    return slope_pct, float(r_value ** 2)
+
+
 def compute_stock_metrics(
     symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
 ) -> StockMetrics:
@@ -96,223 +121,141 @@ def compute_stock_metrics(
     if len(weekly_data) < 5:
         raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
 
-    # Check if the last week is more than 4 weeks old
     if weekly_data[-1].week_ending < (to_date - timedelta(weeks=4)).date():
         raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
 
     total_weeks = len(weekly_data)
-
-    # Calculate weekly changes (percentage)
-    weekly_changes = []
-    for i in range(1, len(weekly_data)):
-        change = _calculate_pct_change(
-            weekly_data[i - 1].closing_price, weekly_data[i].closing_price
-        )
-        weekly_changes.append(change)
-
-    # Calculate biweekly changes (percentage)
-    biweekly_changes = []
-    for i in range(2, len(weekly_data)):
-        change = _calculate_pct_change(
-            weekly_data[i - 2].closing_price, weekly_data[i].closing_price
-        )
-        biweekly_changes.append(change)
-
-    # Calculate monthly changes (4 weeks, percentage)
-    monthly_changes = []
-    for i in range(4, len(weekly_data)):
-        change = _calculate_pct_change(
-            weekly_data[i - 4].closing_price, weekly_data[i].closing_price
-        )
-        monthly_changes.append(change)
-
-    # Find max movements
-    max_jump_1w = max(weekly_changes) if weekly_changes else 0.0
-    max_drop_1w = - min(weekly_changes) if weekly_changes else 0.0
-    max_jump_2w = max(biweekly_changes) if biweekly_changes else 0.0
-    max_drop_2w = - min(biweekly_changes) if biweekly_changes else 0.0
-    max_jump_4w = max(monthly_changes) if monthly_changes else 0.0
-    max_drop_4w = - min(monthly_changes) if monthly_changes else 0.0
-
-    # Overall change (first week to last week)
-    weeks_1y = min(52, len(weekly_data) - 1)
-    change_1y = _calculate_pct_change(
-        weekly_data[-weeks_1y - 1].closing_price, weekly_data[-1].closing_price
-    )
-
-    # 26-week change
-    weeks_26w = min(26, len(weekly_data) - 1)
-    change_26w = (
-        _calculate_pct_change(
-            weekly_data[-weeks_26w - 1].closing_price, weekly_data[-1].closing_price
-        )
-        if weeks_26w > 0
-        else 0.0
-    )
-
-    # 13-week change
-    weeks_13w = min(13, len(weekly_data) - 1)
-    change_13w = (
-        _calculate_pct_change(
-            weekly_data[-weeks_13w - 1].closing_price, weekly_data[-1].closing_price
-        )
-        if weeks_13w > 0
-        else 0.0
-    )
-
-    # 4-week change
-    weeks_4w = min(4, len(weekly_data) - 1)
-    change_4w = (
-        _calculate_pct_change(
-            weekly_data[-weeks_4w - 1].closing_price, weekly_data[-1].closing_price
-        )
-        if weeks_4w > 0
-        else 0.0
-    )
-
-    # Calculate 1-week and 2-week changes
-    weeks_2w = min(2, len(weekly_data) - 1)
-    change_2w = (
-        _calculate_pct_change(
-            weekly_data[-weeks_2w - 1].closing_price, weekly_data[-1].closing_price
-        )
-        if weeks_2w > 0
-        else 0.0
-    )
-
-    weeks_1w = min(1, len(weekly_data) - 1)
-    change_1w = (
-        _calculate_pct_change(
-            weekly_data[-weeks_1w - 1].closing_price, weekly_data[-1].closing_price
-        )
-        if weeks_1w > 0
-        else 0.0
-    )
-
-    # Trend analysis using linear regression
-    # x = week number (0, 1, 2, ...), y = closing price
-    x = np.arange(len(weekly_data))
     weekly_close = np.array([w.closing_price for w in weekly_data])
-    log_weekly_close = np.log(weekly_close)
 
-    log_slope, _log_intercept, log_r_value, _log_p_value, _log_std_err = stats.linregress(x, log_weekly_close)
-    log_r_squared = log_r_value**2
+    # ── Weekly change series ──────────────────────────────────────────────────
+    weekly_changes = [
+        _calculate_pct_change(weekly_data[i - 1].closing_price, weekly_data[i].closing_price)
+        for i in range(1, len(weekly_data))
+    ]
+    biweekly_changes = [
+        _calculate_pct_change(weekly_data[i - 2].closing_price, weekly_data[i].closing_price)
+        for i in range(2, len(weekly_data))
+    ]
+    monthly_changes = [
+        _calculate_pct_change(weekly_data[i - 4].closing_price, weekly_data[i].closing_price)
+        for i in range(4, len(weekly_data))
+    ]
 
-    linear_slope, _linear_intercept, linear_r_value, _linear_p_value, _linear_std_err = stats.linregress(
-        x, weekly_close)
-    starting_price = weekly_data[0].closing_price
-    linear_slope_pct = (linear_slope / starting_price) * 100 if starting_price != 0 else 0.0
-    linear_r_squared = linear_r_value**2
+    # ── Point-to-point change ─────────────────────────────────────────────────
+    def _pt_change(n: int) -> float:
+        n = min(n, len(weekly_data) - 1)
+        return _calculate_pct_change(weekly_data[-n - 1].closing_price, weekly_data[-1].closing_price) if n > 0 else 0.0
 
-    # Max drawdown (positive value: e.g. 18.5 means fell 18.5% from peak)
-    peak = np.maximum.accumulate(weekly_close)
-    drawdowns = (weekly_close - peak) / peak * 100
-    max_drawdown_pct = float(-np.min(drawdowns))
+    # ── Max jump / drop ───────────────────────────────────────────────────────
+    def _max_jump(changes: list[float]) -> float:
+        return max(changes) if changes else 0.0
 
-    # Fraction of weeks that closed higher than the prior week
-    pct_weeks_positive = sum(1 for c in weekly_changes if c > 0) / len(weekly_changes) if weekly_changes else 0.0
+    def _max_drop(changes: list[float]) -> float:
+        return -min(changes) if changes else 0.0
 
-    # 13-week regression
-    w13 = weekly_data[-min(13, len(weekly_data)):]
-    if len(w13) >= 3:
-        x13 = np.arange(len(w13))
-        y13 = np.array([w.closing_price for w in w13])
-        s13, _, r13, _, _ = stats.linregress(x13, y13)
-        slope_13w_pct = float((s13 / w13[0].closing_price) * 100) if w13[0].closing_price != 0 else 0.0
-        r_squared_13w = float(r13 ** 2)
-    else:
-        slope_13w_pct, r_squared_13w = 0.0, 0.0
+    # ── Slope & R² per window ─────────────────────────────────────────────────
+    slope_pct_13w, r_squared_13w = _linregress_slope_r2(weekly_data[-min(13, len(weekly_data)):])
+    slope_pct_26w, r_squared_26w = _linregress_slope_r2(weekly_data[-min(26, len(weekly_data)):])
+    slope_pct_52w, r_squared_52w = _linregress_slope_r2(weekly_data)
 
-    # 26-week regression
-    w26 = weekly_data[-min(26, len(weekly_data)):]
-    if len(w26) >= 3:
-        x26 = np.arange(len(w26))
-        y26 = np.array([w.closing_price for w in w26])
-        s26, _, r26, _, _ = stats.linregress(x26, y26)
-        slope_26w_pct = float((s26 / w26[0].closing_price) * 100) if w26[0].closing_price != 0 else 0.0
-        r_squared_26w = float(r26 ** 2)
-    else:
-        slope_26w_pct, r_squared_26w = 0.0, 0.0
+    # ── Log regression per window ─────────────────────────────────────────────
+    def _log_slope_r2(window: list[WeeklyData]) -> tuple[float, float]:
+        if len(window) < 3:
+            return 0.0, 0.0
+        x = np.arange(len(window))
+        y = np.log(np.array([w.closing_price for w in window]))
+        s, _, r, _, _ = stats.linregress(x, y)
+        return float(s), float(r ** 2)
+
+    log_slope_13w, log_r_squared_13w = _log_slope_r2(weekly_data[-min(13, len(weekly_data)):])
+    log_slope_26w, log_r_squared_26w = _log_slope_r2(weekly_data[-min(26, len(weekly_data)):])
+    log_slope_52w, log_r_squared_52w = _log_slope_r2(weekly_data)
+
+    # ── Max drawdown per window ───────────────────────────────────────────────
+    max_drawdown_pct_4w  = _max_drawdown(weekly_close[-min(4,  len(weekly_close)):])
+    max_drawdown_pct_13w = _max_drawdown(weekly_close[-min(13, len(weekly_close)):])
+    max_drawdown_pct_26w = _max_drawdown(weekly_close[-min(26, len(weekly_close)):])
+    max_drawdown_pct_52w = _max_drawdown(weekly_close)
+
+    # ── % up-weeks per window ─────────────────────────────────────────────────
+    pct_weeks_positive_4w  = _pct_positive(weekly_changes[-min(4,  len(weekly_changes)):])
+    pct_weeks_positive_13w = _pct_positive(weekly_changes[-min(13, len(weekly_changes)):])
+    pct_weeks_positive_26w = _pct_positive(weekly_changes[-min(26, len(weekly_changes)):])
+    pct_weeks_positive_52w = _pct_positive(weekly_changes)
 
     return StockMetrics(
         symbol=symbol,
         date=to_date.date(),
         total_weeks=total_weeks,
-        # Trend metrics
-        linear_slope_pct=linear_slope_pct,
-        linear_r_squared=linear_r_squared,
-        log_slope=log_slope,
-        log_r_squared=log_r_squared,
-        # Return metrics
-        change_1w_pct=change_1w,
-        change_2w_pct=change_2w,
-        change_4w_pct=change_4w,
-        change_13w_pct=change_13w,
-        change_26w_pct=change_26w,
-        change_1y_pct=change_1y,
-        # Volatility metrics
-        max_jump_1w_pct=max_jump_1w,
-        max_drop_1w_pct=max_drop_1w,
-        max_jump_2w_pct=max_jump_2w,
-        max_drop_2w_pct=max_drop_2w,
-        max_jump_4w_pct=max_jump_4w,
-        max_drop_4w_pct=max_drop_4w,
-        # Stability metrics
-        max_drawdown_pct=max_drawdown_pct,
-        pct_weeks_positive=pct_weeks_positive,
-        slope_13w_pct=slope_13w_pct,
+        # Slope
+        slope_pct_13w=slope_pct_13w,
+        slope_pct_26w=slope_pct_26w,
+        slope_pct_52w=slope_pct_52w,
+        # R²
         r_squared_13w=r_squared_13w,
-        slope_26w_pct=slope_26w_pct,
         r_squared_26w=r_squared_26w,
+        r_squared_52w=r_squared_52w,
+        # Log trend
+        log_slope_13w=log_slope_13w,
+        log_r_squared_13w=log_r_squared_13w,
+        log_slope_26w=log_slope_26w,
+        log_r_squared_26w=log_r_squared_26w,
+        log_slope_52w=log_slope_52w,
+        log_r_squared_52w=log_r_squared_52w,
+        # Point-to-point change
+        change_pct_1w=_pt_change(1),
+        change_pct_2w=_pt_change(2),
+        change_pct_4w=_pt_change(4),
+        change_pct_13w=_pt_change(13),
+        change_pct_26w=_pt_change(26),
+        change_pct_52w=_pt_change(52),
+        # Max single-period swing
+        max_jump_pct_1w=_max_jump(weekly_changes),
+        max_drop_pct_1w=_max_drop(weekly_changes),
+        max_jump_pct_2w=_max_jump(biweekly_changes),
+        max_drop_pct_2w=_max_drop(biweekly_changes),
+        max_jump_pct_4w=_max_jump(monthly_changes),
+        max_drop_pct_4w=_max_drop(monthly_changes),
+        # Max drawdown
+        max_drawdown_pct_4w=max_drawdown_pct_4w,
+        max_drawdown_pct_13w=max_drawdown_pct_13w,
+        max_drawdown_pct_26w=max_drawdown_pct_26w,
+        max_drawdown_pct_52w=max_drawdown_pct_52w,
+        # % up-weeks
+        pct_weeks_positive_4w=pct_weeks_positive_4w,
+        pct_weeks_positive_13w=pct_weeks_positive_13w,
+        pct_weeks_positive_26w=pct_weeks_positive_26w,
+        pct_weeks_positive_52w=pct_weeks_positive_52w,
     )
 
 
 def rank_by_rising_stability_score(items: list[StockMetrics]) -> list[StockMetrics]:
     """Rank items by rising stability score (slope * r² weighted)."""
     if len(items) <= 1:
-        return items  # no ranking needed
+        return items
 
-    slopes = np.array([i.linear_slope_pct for i in items], dtype=float)
-    r2s = np.array([i.linear_r_squared for i in items], dtype=float)
+    slopes = np.array([i.slope_pct_52w for i in items], dtype=float)
+    r2s = np.array([i.r_squared_52w for i in items], dtype=float)
 
-    # Rank normalization (percentiles in [0, 1])
     slope_rank = slopes.argsort().argsort() / (len(slopes) - 1)
     r2_rank = r2s.argsort().argsort() / (len(r2s) - 1)
 
-    # Combine: "must rise AND be stable", slightly overweight stability
     scores = slope_rank * (r2_rank ** 1.7)
 
-    ranked_items = [
-        item for _, item in
-        sorted(zip(scores, items), key=lambda x: x[0], reverse=True)
-    ]
-
-    return ranked_items
+    return [item for _, item in sorted(zip(scores, items), key=lambda x: x[0], reverse=True)]
 
 
 def slope_outlier_mask(items: list[StockMetrics], k: float = 3.0) -> list[StockMetrics]:
-    """
-    Remove outliers from the list of StockMetrics objects based on the linear slope percentage.
-
-    Args:
-        items: List of StockMetrics objects
-        k: Multiplier for the median absolute deviation (MAD) to define outliers
-
-    Returns:
-        List of StockMetrics objects without outliers
-    """
+    """Remove outliers based on 52-week slope using modified Z-score."""
     if not items or len(items) <= 2:
-        return items  # no outliers found or not enough data to determine outliers
+        return items
 
-    slopes = np.asarray([i.linear_slope_pct for i in items], dtype=float)
-
+    slopes = np.asarray([i.slope_pct_52w for i in items], dtype=float)
     median = np.median(slopes)
     mad = np.median(np.abs(slopes - median))
 
     if mad == 0:
-        return items  # no outliers found
+        return items
 
     modified_z = 0.6745 * (slopes - median) / mad
-    is_not_outlier = np.abs(modified_z) <= 2.5
-    filtered_items = [item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier]
-    return filtered_items
+    return [item for item, ok in zip(items, np.abs(modified_z) <= 2.5) if ok]
