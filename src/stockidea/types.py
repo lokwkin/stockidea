@@ -58,9 +58,9 @@ class StockMetrics(BaseModel):
     # Return metrics (point-to-point changes)
     change_1w_pct: float
     change_2w_pct: float
-    change_1m_pct: float
-    change_3m_pct: float
-    change_6m_pct: float
+    change_4w_pct: float
+    change_13w_pct: float
+    change_26w_pct: float
     change_1y_pct: float
     # Volatility metrics (max swings)
     max_jump_1w_pct: float
@@ -69,6 +69,13 @@ class StockMetrics(BaseModel):
     max_drop_2w_pct: float
     max_jump_4w_pct: float
     max_drop_4w_pct: float
+    # Stability metrics
+    max_drawdown_pct: float      # positive value: e.g. 18.5 means fell 18.5% from peak
+    pct_weeks_positive: float    # 0.0–1.0 fraction of up-weeks
+    slope_13w_pct: float         # linear slope over last 13 weeks (% per week)
+    r_squared_13w: float         # R² of 13-week regression
+    slope_26w_pct: float         # linear slope over last 26 weeks (% per week)
+    r_squared_26w: float         # R² of 26-week regression
 
 # =============================================================================
 # Simulation Models

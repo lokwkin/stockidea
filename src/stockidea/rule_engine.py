@@ -26,14 +26,14 @@ class RuleEngine:
         Compile a string rule into a callable function.
 
         Args:
-            rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
+            rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
 
         Returns:
             A callable function that takes StockMetrics and returns bool
 
         Examples:
             >>> engine = RuleEngine()
-            >>> rule = engine.compile("change_3m_pct > 1 AND linear_r_squared > 0.8")
+            >>> rule = engine.compile("change_13w_pct > 1 AND linear_r_squared > 0.8")
             >>> result = rule(analysis)
         """
         # Normalize the rule string (handle case-insensitive AND/OR)
@@ -94,16 +94,16 @@ class RuleEngine:
         Extract the StockMetrics keys that are referenced in the rule string.
 
         Args:
-            rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
+            rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
 
         Returns:
             List of StockMetrics field names that are used in the rule
 
         Examples:
             >>> engine = RuleEngine()
-            >>> keys = engine.extract_involved_keys("change_3m_pct > 1 AND linear_r_squared > 0.8")
+            >>> keys = engine.extract_involved_keys("change_13w_pct > 1 AND linear_r_squared > 0.8")
             >>> print(keys)
-            ['change_3m_pct', 'linear_r_squared']
+            ['change_13w_pct', 'linear_r_squared']
         """
         # Dynamically get all valid StockMetrics field names
         valid_keys = self._get_trend_analysis_field_names()
@@ -136,13 +136,13 @@ def compile_rule(rule_string: str) -> Callable[[StockMetrics], bool]:
     Convenience function to compile a rule string.
 
     Args:
-        rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
+        rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
 
     Returns:
         A callable function that takes StockMetrics and returns bool
 
     Examples:
-        >>> rule = compile_rule("change_3m_pct > 1 AND linear_r_squared > 0.8")
+        >>> rule = compile_rule("change_13w_pct > 1 AND linear_r_squared > 0.8")
         >>> result = rule(analysis)
     """
     engine = RuleEngine()
@@ -154,15 +154,15 @@ def extract_involved_keys(rule_string: str) -> list[str]:
     Convenience function to extract StockMetrics keys from a rule string.
 
     Args:
-        rule_string: String expression like "change_3m_pct > 1 AND max_drop_2w_pct > 15"
+        rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
 
     Returns:
         List of StockMetrics field names that are used in the rule
 
     Examples:
-        >>> keys = extract_involved_keys("change_3m_pct > 1 AND linear_r_squared > 0.8")
+        >>> keys = extract_involved_keys("change_13w_pct > 1 AND linear_r_squared > 0.8")
         >>> print(keys)
-        ['change_3m_pct', 'linear_r_squared']
+        ['change_13w_pct', 'linear_r_squared']
     """
     engine = RuleEngine()
     return engine.extract_involved_keys(rule_string)
