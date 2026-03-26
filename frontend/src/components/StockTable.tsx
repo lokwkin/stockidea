@@ -171,6 +171,13 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
                   }
 
                   const numValue = value as number
+                  if (numValue === undefined || numValue === null) {
+                    return (
+                      <TableCell key={column.key} className="px-4 py-3 font-mono text-sm text-muted-foreground/30">
+                        —
+                      </TableCell>
+                    )
+                  }
                   return (
                     <TableCell
                       key={column.key}
