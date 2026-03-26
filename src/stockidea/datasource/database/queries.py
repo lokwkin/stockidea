@@ -1,12 +1,14 @@
 """PostgreSQL database implementation for storing price data using SQLAlchemy."""
 
 from datetime import date, datetime, timedelta
+import json
 import logging
 from uuid import UUID
 
 from sqlalchemy import (
     delete,
     select,
+    update,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,6 +20,7 @@ from stockidea.datasource.database.models import (
     DBRebalanceHistory,
     DBInvestment,
     DBStockMetrics,
+    DBSimulationJob,
 )
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
@@ -30,6 +33,7 @@ from stockidea.types import (
     RebalanceHistory,
     SimulationConfig,
     StockMetrics,
+    SimulationJob,
 )
 
 logger = logging.getLogger(__name__)
@@ -378,3 +382,96 @@ async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
     stmt = select(DBStockMetrics.date).distinct().order_by(DBStockMetrics.date.desc())
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]
+
+
+# =============================================================================
+# Simulation Job Queue Queries
+# =============================================================================
+
+
+async def create_simulation_job(db_session: AsyncSession, config: SimulationConfig) -> UUID:
+    """Enqueue a new simulation job. Returns the job ID."""
+    job = DBSimulationJob(
+        status="pending",
+        config_json=config.model_dump_json(),
+    )
+    db_session.add(job)
+    await db_session.flush()
+    job_id = job.id
+    await db_session.commit()
+    logger.info(f"Simulation job enqueued: {job_id}")
+    return job_id
+
+
+async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> SimulationJob | None:
+    """Return SimulationJob or None if not found."""
+    stmt = select(DBSimulationJob).where(DBSimulationJob.id == job_id)
+    result = await db_session.execute(stmt)
+    job = result.scalar_one_or_none()
+    if job is None:
+        return None
+    return _job_to_model(job)
+
+
+async def list_recent_jobs(db_session: AsyncSession, limit: int = 50) -> list[SimulationJob]:
+    """List recent simulation jobs ordered by creation time descending."""
+    stmt = select(DBSimulationJob).order_by(DBSimulationJob.created_at.desc()).limit(limit)
+    result = await db_session.execute(stmt)
+    return [_job_to_model(job) for job in result.scalars().all()]
+
+
+async def claim_next_pending_job(db_session: AsyncSession) -> DBSimulationJob | None:
+    """
+    Atomically claim the oldest pending job by setting its status to 'running'.
+    Uses SKIP LOCKED so concurrent workers don't double-claim.
+    Returns the claimed job row, or None if no pending jobs exist.
+    """
+    stmt = (
+        select(DBSimulationJob)
+        .where(DBSimulationJob.status == "pending")
+        .order_by(DBSimulationJob.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    result = await db_session.execute(stmt)
+    job = result.scalar_one_or_none()
+    if job is None:
+        return None
+
+    job.status = "running"
+    job.started_at = datetime.now()
+    await db_session.commit()
+    await db_session.refresh(job)
+    return job
+
+
+async def mark_job_completed(db_session: AsyncSession, job_id: UUID, simulation_id: UUID) -> None:
+    stmt = (
+        update(DBSimulationJob)
+        .where(DBSimulationJob.id == job_id)
+        .values(status="completed", simulation_id=simulation_id, completed_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def mark_job_failed(db_session: AsyncSession, job_id: UUID, error_message: str) -> None:
+    stmt = (
+        update(DBSimulationJob)
+        .where(DBSimulationJob.id == job_id)
+        .values(status="failed", error_message=error_message, completed_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+def _job_to_model(job: DBSimulationJob) -> SimulationJob:
+    return SimulationJob(
+        id=job.id,
+        status=job.status,
+        simulation_id=job.simulation_id,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
