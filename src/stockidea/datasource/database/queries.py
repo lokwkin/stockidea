@@ -365,9 +365,9 @@ async def load_stock_metrics(
         log_r_squared=record.log_r_squared,
         change_1w_pct=record.change_1w_pct,
         change_2w_pct=record.change_2w_pct,
-        change_1m_pct=record.change_1m_pct,
-        change_3m_pct=record.change_3m_pct,
-        change_6m_pct=record.change_6m_pct,
+        change_4w_pct=record.change_4w_pct,
+        change_13w_pct=record.change_13w_pct,
+        change_26w_pct=record.change_26w_pct,
         change_1y_pct=record.change_1y_pct,
         max_jump_1w_pct=record.max_jump_1w_pct,
         max_drop_1w_pct=record.max_drop_1w_pct,
@@ -375,6 +375,12 @@ async def load_stock_metrics(
         max_drop_2w_pct=record.max_drop_2w_pct,
         max_jump_4w_pct=record.max_jump_4w_pct,
         max_drop_4w_pct=record.max_drop_4w_pct,
+        max_drawdown_pct=record.max_drawdown_pct,
+        pct_weeks_positive=record.pct_weeks_positive,
+        slope_13w_pct=record.slope_13w_pct,
+        r_squared_13w=record.r_squared_13w,
+        slope_26w_pct=record.slope_26w_pct,
+        r_squared_26w=record.r_squared_26w,
     )
 
 

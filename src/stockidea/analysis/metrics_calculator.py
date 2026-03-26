@@ -140,32 +140,33 @@ def compute_stock_metrics(
         weekly_data[-weeks_1y - 1].closing_price, weekly_data[-1].closing_price
     )
 
-    # 6-month change (approximately 26 weeks)
-    weeks_6m = min(26, len(weekly_data) - 1)
-    change_6m = (
+    # 26-week change
+    weeks_26w = min(26, len(weekly_data) - 1)
+    change_26w = (
         _calculate_pct_change(
-            weekly_data[-weeks_6m - 1].closing_price, weekly_data[-1].closing_price
+            weekly_data[-weeks_26w - 1].closing_price, weekly_data[-1].closing_price
         )
-        if weeks_6m > 0
+        if weeks_26w > 0
         else 0.0
     )
 
-    # 3-month change (approximately 13 weeks)
-    weeks_3m = min(13, len(weekly_data) - 1)
-    change_3m = (
+    # 13-week change
+    weeks_13w = min(13, len(weekly_data) - 1)
+    change_13w = (
         _calculate_pct_change(
-            weekly_data[-weeks_3m - 1].closing_price, weekly_data[-1].closing_price
+            weekly_data[-weeks_13w - 1].closing_price, weekly_data[-1].closing_price
         )
-        if weeks_3m > 0
+        if weeks_13w > 0
         else 0.0
     )
 
-    weeks_1m = min(4, len(weekly_data) - 1)
-    change_1m = (
+    # 4-week change
+    weeks_4w = min(4, len(weekly_data) - 1)
+    change_4w = (
         _calculate_pct_change(
-            weekly_data[-weeks_1m - 1].closing_price, weekly_data[-1].closing_price
+            weekly_data[-weeks_4w - 1].closing_price, weekly_data[-1].closing_price
         )
-        if weeks_1m > 0
+        if weeks_4w > 0
         else 0.0
     )
 
@@ -199,13 +200,39 @@ def compute_stock_metrics(
 
     linear_slope, _linear_intercept, linear_r_value, _linear_p_value, _linear_std_err = stats.linregress(
         x, weekly_close)
-    # Convert slope to percentage of starting price (per week)
-    # weekly_slope = stats.linregress(x, y)
     starting_price = weekly_data[0].closing_price
     linear_slope_pct = (linear_slope / starting_price) * 100 if starting_price != 0 else 0.0
-
-    # R² is r_value squared
     linear_r_squared = linear_r_value**2
+
+    # Max drawdown (positive value: e.g. 18.5 means fell 18.5% from peak)
+    peak = np.maximum.accumulate(weekly_close)
+    drawdowns = (weekly_close - peak) / peak * 100
+    max_drawdown_pct = float(-np.min(drawdowns))
+
+    # Fraction of weeks that closed higher than the prior week
+    pct_weeks_positive = sum(1 for c in weekly_changes if c > 0) / len(weekly_changes) if weekly_changes else 0.0
+
+    # 13-week regression
+    w13 = weekly_data[-min(13, len(weekly_data)):]
+    if len(w13) >= 3:
+        x13 = np.arange(len(w13))
+        y13 = np.array([w.closing_price for w in w13])
+        s13, _, r13, _, _ = stats.linregress(x13, y13)
+        slope_13w_pct = float((s13 / w13[0].closing_price) * 100) if w13[0].closing_price != 0 else 0.0
+        r_squared_13w = float(r13 ** 2)
+    else:
+        slope_13w_pct, r_squared_13w = 0.0, 0.0
+
+    # 26-week regression
+    w26 = weekly_data[-min(26, len(weekly_data)):]
+    if len(w26) >= 3:
+        x26 = np.arange(len(w26))
+        y26 = np.array([w.closing_price for w in w26])
+        s26, _, r26, _, _ = stats.linregress(x26, y26)
+        slope_26w_pct = float((s26 / w26[0].closing_price) * 100) if w26[0].closing_price != 0 else 0.0
+        r_squared_26w = float(r26 ** 2)
+    else:
+        slope_26w_pct, r_squared_26w = 0.0, 0.0
 
     return StockMetrics(
         symbol=symbol,
@@ -219,9 +246,9 @@ def compute_stock_metrics(
         # Return metrics
         change_1w_pct=change_1w,
         change_2w_pct=change_2w,
-        change_1m_pct=change_1m,
-        change_3m_pct=change_3m,
-        change_6m_pct=change_6m,
+        change_4w_pct=change_4w,
+        change_13w_pct=change_13w,
+        change_26w_pct=change_26w,
         change_1y_pct=change_1y,
         # Volatility metrics
         max_jump_1w_pct=max_jump_1w,
@@ -230,6 +257,13 @@ def compute_stock_metrics(
         max_drop_2w_pct=max_drop_2w,
         max_jump_4w_pct=max_jump_4w,
         max_drop_4w_pct=max_drop_4w,
+        # Stability metrics
+        max_drawdown_pct=max_drawdown_pct,
+        pct_weeks_positive=pct_weeks_positive,
+        slope_13w_pct=slope_13w_pct,
+        r_squared_13w=r_squared_13w,
+        slope_26w_pct=slope_26w_pct,
+        r_squared_26w=r_squared_26w,
     )
 
 

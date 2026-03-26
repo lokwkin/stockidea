@@ -157,9 +157,9 @@ class DBStockMetrics(Base):
     # Return metrics (point-to-point changes)
     change_1w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     change_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
-    change_1m_pct: Mapped[float] = mapped_column(Float, nullable=False)
-    change_3m_pct: Mapped[float] = mapped_column(Float, nullable=False)
-    change_6m_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_13w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    change_26w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     change_1y_pct: Mapped[float] = mapped_column(Float, nullable=False)
     # Volatility metrics (max swings)
     max_jump_1w_pct: Mapped[float] = mapped_column(Float, nullable=False)
@@ -168,6 +168,13 @@ class DBStockMetrics(Base):
     max_drop_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     max_jump_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     max_drop_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    # Stability metrics
+    max_drawdown_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    pct_weeks_positive: Mapped[float] = mapped_column(Float, nullable=False)
+    slope_13w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    r_squared_13w: Mapped[float] = mapped_column(Float, nullable=False)
+    slope_26w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    r_squared_26w: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
 
     def __repr__(self) -> str:
