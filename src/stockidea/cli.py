@@ -30,7 +30,9 @@ def cli():
 async def _analyze(date: datetime, index: StockIndex) -> list[StockIndicators]:
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
-        symbols = await datasource_service.get_constituent_at(db_session, index, date.date())
+        symbols = await datasource_service.get_constituent_at(
+            db_session, index, date.date()
+        )
 
         # Compute stock indicators and save to database
         stock_indicators_batch = await indicators_service.get_stock_indicators_batch(

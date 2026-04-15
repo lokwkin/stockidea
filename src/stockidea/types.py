@@ -42,7 +42,7 @@ class ConstituentChange(BaseModel):
 
 
 # =============================================================================
-# Stock Metrics Model
+# Stock Indicators Model
 # =============================================================================
 class StockIndicators(BaseModel):
     symbol: str
@@ -67,13 +67,20 @@ class StockIndicators(BaseModel):
     max_drop_2w_pct: float
     max_jump_4w_pct: float
     max_drop_4w_pct: float
+    # Volatility metrics (statistical)
+    weekly_return_std: float  # std dev of weekly % returns
+    downside_std: float  # std dev of negative weekly returns only
     # Stability metrics
     max_drawdown_pct: float  # positive value: e.g. 18.5 means fell 18.5% from peak
     pct_weeks_positive: float  # 0.0–1.0 fraction of up-weeks
     slope_13w_pct: float  # linear slope over last 13 weeks (% per week)
     r_squared_13w: float  # R² of 13-week regression
+    r_squared_4w: float  # R² of 4-week regression (short-term trend consistency)
     slope_26w_pct: float  # linear slope over last 26 weeks (% per week)
     r_squared_26w: float  # R² of 26-week regression
+    # Momentum shape
+    acceleration_13w: float  # recent-half slope minus earlier-half slope over 13w
+    pct_from_4w_high: float  # distance from 4-week high (always <= 0)
 
 
 # =============================================================================

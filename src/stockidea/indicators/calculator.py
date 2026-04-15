@@ -264,6 +264,49 @@ def compute_stock_indicators(
     else:
         slope_26w_pct, r_squared_26w = 0.0, 0.0
 
+    # 4-week regression (short-term trend consistency)
+    w4 = weekly_data[-min(4, len(weekly_data)) :]
+    if len(w4) >= 3:
+        x4 = np.arange(len(w4))
+        y4 = np.array([w.closing_price for w in w4])
+        _, _, r4, _, _ = stats.linregress(x4, y4)
+        r_squared_4w = float(r4**2)
+    else:
+        r_squared_4w = 0.0
+
+    # Weekly return volatility
+    weekly_return_std = float(np.std(weekly_changes)) if weekly_changes else 0.0
+
+    # Downside volatility (std of negative weekly returns only)
+    negative_changes = [c for c in weekly_changes if c < 0]
+    downside_std = float(np.std(negative_changes)) if negative_changes else 0.0
+
+    # Momentum acceleration over 13 weeks (recent half slope minus earlier half slope)
+    if len(w13) >= 6:
+        mid = len(w13) // 2
+        w13_early = w13[:mid]
+        w13_late = w13[mid:]
+        x_early = np.arange(len(w13_early))
+        y_early = np.array([w.closing_price for w in w13_early])
+        s_early, _, _, _, _ = stats.linregress(x_early, y_early)
+        x_late = np.arange(len(w13_late))
+        y_late = np.array([w.closing_price for w in w13_late])
+        s_late, _, _, _, _ = stats.linregress(x_late, y_late)
+        base_price = w13[0].closing_price
+        acceleration_13w = (
+            float(((s_late - s_early) / base_price) * 100) if base_price != 0 else 0.0
+        )
+    else:
+        acceleration_13w = 0.0
+
+    # Distance from 4-week high (always <= 0)
+    w4_prices = np.array([w.closing_price for w in w4])
+    high_4w = float(np.max(w4_prices))
+    current_price = weekly_data[-1].closing_price
+    pct_from_4w_high = (
+        float(((current_price - high_4w) / high_4w) * 100) if high_4w != 0 else 0.0
+    )
+
     return StockIndicators(
         symbol=symbol,
         date=to_date.date(),
@@ -287,17 +330,26 @@ def compute_stock_indicators(
         max_drop_2w_pct=max_drop_2w,
         max_jump_4w_pct=max_jump_4w,
         max_drop_4w_pct=max_drop_4w,
+        # Volatility metrics (statistical)
+        weekly_return_std=weekly_return_std,
+        downside_std=downside_std,
         # Stability metrics
         max_drawdown_pct=max_drawdown_pct,
         pct_weeks_positive=pct_weeks_positive,
         slope_13w_pct=slope_13w_pct,
-        r_squared_13w=r_squared_13w,
         slope_26w_pct=slope_26w_pct,
+        r_squared_4w=r_squared_4w,
+        r_squared_13w=r_squared_13w,
         r_squared_26w=r_squared_26w,
+        # Momentum shape
+        acceleration_13w=acceleration_13w,
+        pct_from_4w_high=pct_from_4w_high,
     )
 
 
-def rank_by_rising_stability_score(items: list[StockIndicators]) -> list[StockIndicators]:
+def rank_by_rising_stability_score(
+    items: list[StockIndicators],
+) -> list[StockIndicators]:
     """Rank items by rising stability score (slope * r² weighted)."""
     if len(items) <= 1:
         return items  # no ranking needed
@@ -319,7 +371,9 @@ def rank_by_rising_stability_score(items: list[StockIndicators]) -> list[StockIn
     return ranked_items
 
 
-def slope_outlier_mask(items: list[StockIndicators], k: float = 3.0) -> list[StockIndicators]:
+def slope_outlier_mask(
+    items: list[StockIndicators], k: float = 3.0
+) -> list[StockIndicators]:
     """
     Remove outliers from the list of StockIndicators objects based on the linear slope percentage.
 

@@ -501,17 +501,26 @@ async def load_stock_indicators(
         max_drop_2w_pct=record.max_drop_2w_pct,
         max_jump_4w_pct=record.max_jump_4w_pct,
         max_drop_4w_pct=record.max_drop_4w_pct,
+        weekly_return_std=record.weekly_return_std,
+        downside_std=record.downside_std,
         max_drawdown_pct=record.max_drawdown_pct,
         pct_weeks_positive=record.pct_weeks_positive,
         slope_13w_pct=record.slope_13w_pct,
         r_squared_13w=record.r_squared_13w,
+        r_squared_4w=record.r_squared_4w,
         slope_26w_pct=record.slope_26w_pct,
         r_squared_26w=record.r_squared_26w,
+        acceleration_13w=record.acceleration_13w,
+        pct_from_4w_high=record.pct_from_4w_high,
     )
 
 
 async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
-    stmt = select(DBStockIndicators.date).distinct().order_by(DBStockIndicators.date.desc())
+    stmt = (
+        select(DBStockIndicators.date)
+        .distinct()
+        .order_by(DBStockIndicators.date.desc())
+    )
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]
 

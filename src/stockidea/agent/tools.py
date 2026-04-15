@@ -115,7 +115,7 @@ OPENAI_TOOLS = [
 
 INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "symbol": "Stock ticker symbol (string, not usable in rules)",
-    "date": "Metrics computation date (not usable in rules)",
+    "date": "Indicator computation date (not usable in rules)",
     "total_weeks": "Number of weeks of data available (integer)",
     # Trend metrics
     "linear_slope_pct": "Weekly linear regression slope as % of starting price. Positive = uptrend. Typical range: -2 to +3",
@@ -136,13 +136,20 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "max_drop_2w_pct": "Largest 2-week negative move in % (stored as positive). Typical: 3-20",
     "max_jump_4w_pct": "Largest 4-week positive move in %. Typical: 5-25",
     "max_drop_4w_pct": "Largest 4-week negative move in % (stored as positive). Typical: 5-25",
+    # Volatility metrics (statistical)
+    "weekly_return_std": "Standard deviation of weekly % returns. Measures typical weekly variability. Typical: 1-8. Lower = smoother",
+    "downside_std": "Standard deviation of negative weekly returns only. Measures downside risk. Typical: 1-6. Lower = less downside volatility",
     # Stability metrics
     "max_drawdown_pct": "Maximum peak-to-trough decline in % (stored as positive). Typical: 5-40. Lower is better",
     "pct_weeks_positive": "Fraction of weeks with positive return (0.0-1.0). >0.55 is good",
     "slope_13w_pct": "Linear slope over last 13 weeks as % of starting price per week",
     "r_squared_13w": "R² of 13-week regression (0-1)",
+    "r_squared_4w": "R² of 4-week regression (0-1). Short-term trend consistency. >0.7 means clean recent trend",
     "slope_26w_pct": "Linear slope over last 26 weeks as % of starting price per week",
     "r_squared_26w": "R² of 26-week regression (0-1)",
+    # Momentum shape
+    "acceleration_13w": "Momentum acceleration over 13 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = speeding up, negative = slowing down. Typical: -1 to +1",
+    "pct_from_4w_high": "Distance from 4-week high in %. Always <= 0. Typical: -10 to 0. Closer to 0 = near recent high",
 }
 
 

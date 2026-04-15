@@ -123,9 +123,7 @@ async def get_constituent_at(
 # =============================================================================
 
 
-async def fetch_constituent_changes(
-    db_session: AsyncSession, index: StockIndex
-) -> int:
+async def fetch_constituent_changes(db_session: AsyncSession, index: StockIndex) -> int:
     """Fetch constituent change history from FMP and store in database.
 
     Returns the number of constituent changes fetched.

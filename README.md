@@ -131,33 +131,40 @@ cd frontend && npm run dev
 
 | Field | Description |
 |-------|-------------|
-| **Return metrics** | |
+| **Return indicators** | |
 | `change_1w_pct` | Percentage change over 1 week |
 | `change_2w_pct` | Percentage change over 2 weeks |
 | `change_4w_pct` | Percentage change over 4 weeks |
 | `change_13w_pct` | Percentage change over 13 weeks (~3 months) |
 | `change_26w_pct` | Percentage change over 26 weeks (~6 months) |
 | `change_1y_pct` | Percentage change over 1 year (52 weeks) |
-| **Trend metrics** | |
+| **Trend indicators** | |
 | `linear_slope_pct` | Linear trend slope as % of starting price per week |
 | `linear_r_squared` | R² of the linear trend fit (0--1, higher = more consistent) |
 | `log_slope` | Annualized log trend slope |
 | `log_r_squared` | R² of the log trend fit (0--1) |
 | `slope_13w_pct` | Linear slope over last 13 weeks (% per week) |
 | `r_squared_13w` | R² of 13-week regression |
+| `r_squared_4w` | R² of 4-week regression (short-term trend consistency) |
 | `slope_26w_pct` | Linear slope over last 26 weeks (% per week) |
 | `r_squared_26w` | R² of 26-week regression |
-| **Volatility metrics** | |
+| **Volatility indicators (max swings)** | |
 | `max_jump_1w_pct` | Maximum 1-week percentage increase |
 | `max_drop_1w_pct` | Maximum 1-week percentage decrease |
 | `max_jump_2w_pct` | Maximum 2-week percentage increase |
 | `max_drop_2w_pct` | Maximum 2-week percentage decrease |
 | `max_jump_4w_pct` | Maximum 4-week percentage increase |
 | `max_drop_4w_pct` | Maximum 4-week percentage decrease |
-| **Stability metrics** | |
+| **Volatility indicators (statistical)** | |
+| `weekly_return_std` | Standard deviation of weekly returns (typical weekly variability) |
+| `downside_std` | Standard deviation of negative weekly returns only (downside risk) |
+| **Stability indicators** | |
 | `max_drawdown_pct` | Maximum peak-to-trough drawdown (e.g. 18.5 = fell 18.5% from peak) |
 | `pct_weeks_positive` | Fraction of weeks with positive returns (0.0--1.0) |
 | `total_weeks` | Total number of weeks analyzed |
+| **Momentum shape** | |
+| `acceleration_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
+| `pct_from_4w_high` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
 
 ## Simulation Scores
 

@@ -227,13 +227,20 @@ class DBStockIndicators(Base):
     max_drop_2w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     max_jump_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     max_drop_4w_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    # Volatility metrics (statistical)
+    weekly_return_std: Mapped[float] = mapped_column(Float, nullable=False)
+    downside_std: Mapped[float] = mapped_column(Float, nullable=False)
     # Stability metrics
     max_drawdown_pct: Mapped[float] = mapped_column(Float, nullable=False)
     pct_weeks_positive: Mapped[float] = mapped_column(Float, nullable=False)
     slope_13w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     r_squared_13w: Mapped[float] = mapped_column(Float, nullable=False)
+    r_squared_4w: Mapped[float] = mapped_column(Float, nullable=False)
     slope_26w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     r_squared_26w: Mapped[float] = mapped_column(Float, nullable=False)
+    # Momentum shape
+    acceleration_13w: Mapped[float] = mapped_column(Float, nullable=False)
+    pct_from_4w_high: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now
     )

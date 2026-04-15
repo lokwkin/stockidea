@@ -91,13 +91,20 @@ def upgrade() -> None:
         sa.Column("max_drop_2w_pct", sa.Float(), nullable=False),
         sa.Column("max_jump_4w_pct", sa.Float(), nullable=False),
         sa.Column("max_drop_4w_pct", sa.Float(), nullable=False),
+        # Volatility metrics (statistical)
+        sa.Column("weekly_return_std", sa.Float(), nullable=False),
+        sa.Column("downside_std", sa.Float(), nullable=False),
         # Stability metrics
         sa.Column("max_drawdown_pct", sa.Float(), nullable=False),
         sa.Column("pct_weeks_positive", sa.Float(), nullable=False),
         sa.Column("slope_13w_pct", sa.Float(), nullable=False),
         sa.Column("r_squared_13w", sa.Float(), nullable=False),
+        sa.Column("r_squared_4w", sa.Float(), nullable=False),
         sa.Column("slope_26w_pct", sa.Float(), nullable=False),
         sa.Column("r_squared_26w", sa.Float(), nullable=False),
+        # Momentum shape
+        sa.Column("acceleration_13w", sa.Float(), nullable=False),
+        sa.Column("pct_from_4w_high", sa.Float(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("symbol", "date"),
     )
@@ -172,9 +179,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_simulation_jobs_id", "simulation_jobs", ["id"])
     op.create_index("ix_simulation_jobs_status", "simulation_jobs", ["status"])
-    op.create_index(
-        "ix_simulation_jobs_created_at", "simulation_jobs", ["created_at"]
-    )
+    op.create_index("ix_simulation_jobs_created_at", "simulation_jobs", ["created_at"])
 
     op.create_table(
         "investments",

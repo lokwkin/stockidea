@@ -11,9 +11,9 @@ export interface StockIndicators {
   // Return indicators (point-to-point changes)
   change_1w_pct: number;
   change_2w_pct: number;
-  change_1m_pct: number;
-  change_3m_pct: number;
-  change_6m_pct: number;
+  change_4w_pct: number;
+  change_13w_pct: number;
+  change_26w_pct: number;
   change_1y_pct: number;
   // Volatility indicators (max swings)
   max_jump_1w_pct: number;
@@ -22,6 +22,20 @@ export interface StockIndicators {
   max_drop_2w_pct: number;
   max_jump_4w_pct: number;
   max_drop_4w_pct: number;
+  // Volatility indicators (statistical)
+  weekly_return_std: number;
+  downside_std: number;
+  // Stability indicators
+  max_drawdown_pct: number;
+  pct_weeks_positive: number;
+  slope_13w_pct: number;
+  r_squared_13w: number;
+  r_squared_4w: number;
+  slope_26w_pct: number;
+  r_squared_26w: number;
+  // Momentum shape
+  acceleration_13w: number;
+  pct_from_4w_high: number;
 }
 
 // API response type

@@ -153,7 +153,10 @@ async def get_analysis(
             db_session, index, indicators_date.date()
         )
         stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
-            db_session, symbols=symbols, indicators_date=indicators_date, back_period_weeks=52
+            db_session,
+            symbols=symbols,
+            indicators_date=indicators_date,
+            back_period_weeks=52,
         )
 
     # Apply rule if provided
@@ -167,15 +170,19 @@ async def get_analysis(
                 if rule_func(stock_indicator)
             ]
             # Sort by rising stability score
-            stock_indicators_batch = indicators_calculator.rank_by_rising_stability_score(
-                stock_indicators_batch
+            stock_indicators_batch = (
+                indicators_calculator.rank_by_rising_stability_score(
+                    stock_indicators_batch
+                )
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     return {
         "date": indicators_date.strftime("%Y-%m-%d"),
-        "data": [stock_indicator.model_dump() for stock_indicator in stock_indicators_batch],
+        "data": [
+            stock_indicator.model_dump() for stock_indicator in stock_indicators_batch
+        ],
     }
 
 

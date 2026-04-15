@@ -19,10 +19,24 @@ export const COLUMN_NAMES: Record<string, string> = {
   log_r_squared: "Log R²",
   change_1w_pct: "1W",
   change_2w_pct: "2W",
-  change_1m_pct: "1M",
-  change_3m_pct: "3M",
-  change_6m_pct: "6M",
+  change_4w_pct: "4W",
+  change_13w_pct: "13W",
+  change_26w_pct: "26W",
   change_1y_pct: "1Y",
+  // Volatility (statistical)
+  weekly_return_std: "Vol (Std)",
+  downside_std: "Downside Vol",
+  // Stability
+  max_drawdown_pct: "Max DD",
+  pct_weeks_positive: "% Wks +",
+  slope_13w_pct: "Slope 13W",
+  r_squared_13w: "R² 13W",
+  r_squared_4w: "R² 4W",
+  slope_26w_pct: "Slope 26W",
+  r_squared_26w: "R² 26W",
+  // Momentum shape
+  acceleration_13w: "Accel 13W",
+  pct_from_4w_high: "From 4W High",
   
   // Investment columns
   position: "Position",
