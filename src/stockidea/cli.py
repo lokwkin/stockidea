@@ -334,15 +334,34 @@ def fetch_constituents(index: str):
     default="claude-sonnet-4-20250514",
     help="Anthropic model to use",
 )
-def agent(instruction: str, model: str):
+@click.option(
+    "--date-start",
+    type=str,
+    default=None,
+    help="Backtest start date (YYYY-MM-DD). Default: 1 year before date-end",
+)
+@click.option(
+    "--date-end",
+    type=str,
+    default=None,
+    help="Backtest end date (YYYY-MM-DD). Default: today",
+)
+def agent(instruction: str, model: str, date_start: str | None, date_end: str | None):
+    from datetime import date
+
     from stockidea.agent.agent import run_agent
+
+    ds = date.fromisoformat(date_start) if date_start else None
+    de = date.fromisoformat(date_end) if date_end else None
 
     click.echo("Starting AI strategy agent...")
     click.echo(f"Instruction: {instruction}")
     click.echo(f"Model: {model}")
     click.echo("---")
 
-    final_response = asyncio.run(run_agent(instruction=instruction, model=model))
+    final_response = asyncio.run(
+        run_agent(instruction=instruction, model=model, date_start=ds, date_end=de)
+    )
 
     click.echo("---")
     click.echo("Final recommendation:")

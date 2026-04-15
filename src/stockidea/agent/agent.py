@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import date, timedelta
 from typing import AsyncGenerator
 
 from stockidea.agent.tools import ANTHROPIC_TOOLS, OPENAI_TOOLS, execute_tool
@@ -46,19 +47,20 @@ to inspect why a particular stock was or wasn't selected, or to understand its c
 
 ## Workflow
 
-1. Start by calling `list_indicator_fields` to see what indicators are available.
-2. Based on the user's idea, design an initial rule.
-3. Use `preview_filter` on a recent date to check the rule produces a reasonable number of matches.
-4. Run a backtest with `run_backtest` to test it.
-5. Analyze the scores AND diagnostics:
+1. The user message includes a backtest period — use those dates for your backtests.
+2. Start by calling `list_indicator_fields` to see what indicators are available.
+3. Based on the user's idea, design an initial rule.
+4. Use `preview_filter` on a recent date to check the rule produces a reasonable number of matches.
+5. Run a backtest with `run_backtest` using the provided date range.
+6. Analyze the scores AND diagnostics:
    - Check `worst_periods` — if losses cluster in specific dates, consider adding volatility guards.
    - Check `cash_periods` — if too many, the rule is too restrictive.
    - Check `top_held_symbols` — if one stock dominates, the strategy may lack diversification.
    - Aim for Sharpe > 1.0, reasonable drawdown, win rate > 50%.
-6. Iterate: adjust thresholds, add/remove conditions, try different parameters.
-7. Save your notes with `write_strategy_notes` to track your reasoning and iterations.
-8. Run 2-5 iterations to find a good balance.
-9. Present your final recommendation with the rule and key performance metrics.
+7. Iterate: adjust thresholds, add/remove conditions, try different parameters.
+8. Save your notes with `write_strategy_notes` to track your reasoning and iterations.
+9. Run 2-5 iterations to find a good balance.
+10. Present your final recommendation with the rule and key performance metrics.
 
 ## Guidelines
 
@@ -194,7 +196,7 @@ async def _run_openai_stream(
         try:
             response = await client.chat.completions.create(
                 model=model,
-                max_tokens=4096,
+                max_completion_tokens=4096,
                 tools=OPENAI_TOOLS,  # type: ignore[arg-type]
                 messages=messages,  # type: ignore[arg-type]
             )
@@ -254,8 +256,20 @@ async def _run_openai_stream(
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 
+def _build_instruction(
+    instruction: str, date_start: date | None, date_end: date | None
+) -> str:
+    """Prepend backtest date range context to the user instruction."""
+    end = date_end or date.today()
+    start = date_start or (end - timedelta(days=365))
+    return f"Backtest period: {start.isoformat()} to {end.isoformat()}\n\n{instruction}"
+
+
 async def run_agent_stream(
-    instruction: str, model: str = DEFAULT_MODEL
+    instruction: str,
+    model: str = DEFAULT_MODEL,
+    date_start: date | None = None,
+    date_end: date | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Run the strategy agent, yielding SSE-compatible event dicts.
 
@@ -269,21 +283,28 @@ async def run_agent_stream(
     provider = _detect_provider(model)
     logger.info(f"Using provider: {provider}, model: {model}")
 
+    full_instruction = _build_instruction(instruction, date_start, date_end)
+
     if provider == "openai":
-        async for event in _run_openai_stream(instruction, model):
+        async for event in _run_openai_stream(full_instruction, model):
             yield event
     else:
-        async for event in _run_anthropic_stream(instruction, model):
+        async for event in _run_anthropic_stream(full_instruction, model):
             yield event
 
 
-async def run_agent(instruction: str, model: str = DEFAULT_MODEL) -> str:
+async def run_agent(
+    instruction: str,
+    model: str = DEFAULT_MODEL,
+    date_start: date | None = None,
+    date_end: date | None = None,
+) -> str:
     """Run the strategy agent (non-streaming, for CLI use).
 
     Returns the agent's final text response.
     """
     texts: list[str] = []
-    async for event in run_agent_stream(instruction, model):
+    async for event in run_agent_stream(instruction, model, date_start, date_end):
         if event["event"] == "text":
             content = event["data"]["content"]
             texts.append(content)

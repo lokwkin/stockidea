@@ -254,16 +254,25 @@ async def get_snp500_prices() -> list[dict]:
 class AgentRequest(BaseModel):
     instruction: str
     model: str = "claude-sonnet-4-20250514"
+    date_start: str | None = None
+    date_end: str | None = None
 
 
 @app.post("/agent/run")
 async def agent_run(request: AgentRequest):
     """Run the AI strategy agent and stream events via SSE."""
+    from datetime import date
+
     from stockidea.agent.agent import run_agent_stream
+
+    ds = date.fromisoformat(request.date_start) if request.date_start else None
+    de = date.fromisoformat(request.date_end) if request.date_end else None
 
     async def event_stream():
         try:
-            async for event in run_agent_stream(request.instruction, request.model):
+            async for event in run_agent_stream(
+                request.instruction, request.model, ds, de
+            ):
                 event_type = event["event"]
                 data = json.dumps(event["data"])
                 yield f"event: {event_type}\ndata: {data}\n\n"
