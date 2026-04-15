@@ -112,7 +112,7 @@ def upgrade() -> None:
     op.create_index("ix_stock_indicators_date", "stock_indicators", ["date"])
 
     op.create_table(
-        "simulations",
+        "backtests",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("initial_balance", sa.Float(), nullable=False),
         sa.Column("final_balance", sa.Float(), nullable=False),
@@ -131,17 +131,17 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_simulations_id", "simulations", ["id"])
-    op.create_index("ix_simulations_date_start", "simulations", ["date_start"])
-    op.create_index("ix_simulations_date_end", "simulations", ["date_end"])
-    op.create_index("ix_simulations_created_at", "simulations", ["created_at"])
+    op.create_index("ix_backtests_id", "backtests", ["id"])
+    op.create_index("ix_backtests_date_start", "backtests", ["date_start"])
+    op.create_index("ix_backtests_date_end", "backtests", ["date_end"])
+    op.create_index("ix_backtests_created_at", "backtests", ["created_at"])
 
     # -- Tables with foreign keys --
 
     op.create_table(
         "rebalance_histories",
         sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("simulation_id", sa.UUID(), nullable=False),
+        sa.Column("backtest_id", sa.UUID(), nullable=False),
         sa.Column("date", sa.Date(), nullable=False),
         sa.Column("balance", sa.Float(), nullable=False),
         sa.Column("profit_pct", sa.Float(), nullable=False),
@@ -150,36 +150,36 @@ def upgrade() -> None:
         sa.Column("baseline_profit", sa.Float(), nullable=False),
         sa.Column("baseline_balance", sa.Float(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["simulation_id"], ["simulations.id"], ondelete="CASCADE"
+            ["backtest_id"], ["backtests.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_rebalance_histories_id", "rebalance_histories", ["id"])
     op.create_index(
-        "ix_rebalance_histories_simulation_id",
+        "ix_rebalance_histories_backtest_id",
         "rebalance_histories",
-        ["simulation_id"],
+        ["backtest_id"],
     )
     op.create_index("ix_rebalance_histories_date", "rebalance_histories", ["date"])
 
     op.create_table(
-        "simulation_jobs",
+        "backtest_jobs",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("status", sa.String(), nullable=False),
         sa.Column("config_json", sa.Text(), nullable=False),
-        sa.Column("simulation_id", sa.UUID(), nullable=True),
+        sa.Column("backtest_id", sa.UUID(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(
-            ["simulation_id"], ["simulations.id"], ondelete="SET NULL"
+            ["backtest_id"], ["backtests.id"], ondelete="SET NULL"
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_simulation_jobs_id", "simulation_jobs", ["id"])
-    op.create_index("ix_simulation_jobs_status", "simulation_jobs", ["status"])
-    op.create_index("ix_simulation_jobs_created_at", "simulation_jobs", ["created_at"])
+    op.create_index("ix_backtest_jobs_id", "backtest_jobs", ["id"])
+    op.create_index("ix_backtest_jobs_status", "backtest_jobs", ["status"])
+    op.create_index("ix_backtest_jobs_created_at", "backtest_jobs", ["created_at"])
 
     op.create_table(
         "investments",
@@ -212,9 +212,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Drop all tables."""
     op.drop_table("investments")
-    op.drop_table("simulation_jobs")
+    op.drop_table("backtest_jobs")
     op.drop_table("rebalance_histories")
-    op.drop_table("simulations")
+    op.drop_table("backtests")
     op.drop_table("stock_indicators")
     op.drop_table("stock_price_metadata")
     op.drop_table("stock_prices")

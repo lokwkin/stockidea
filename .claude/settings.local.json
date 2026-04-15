@@ -4,7 +4,8 @@
       "Bash(uv sync:*)",
       "Bash(uv run:*)",
       "Bash(npm run:*)",
-      "Bash(find *)"
+      "Bash(find *)",
+      "Bash(git mv *)"
     ]
   }
 }

@@ -1,10 +1,10 @@
-"""Compute objective scores from simulation results for strategy evaluation."""
+"""Compute objective scores from backtest results for strategy evaluation."""
 
 import math
 
 import numpy as np
 
-from stockidea.types import RebalanceHistory, SimulationScores
+from stockidea.types import RebalanceHistory, BacktestScores
 
 
 def compute_scores(
@@ -14,21 +14,21 @@ def compute_scores(
     final_balance: float,
     date_start_ts: float,
     date_end_ts: float,
-) -> SimulationScores:
-    """Compute objective scores from a simulation's rebalance history.
+) -> BacktestScores:
+    """Compute objective scores from a backtest's rebalance history.
 
     Args:
         rebalance_history: List of rebalance periods with returns
         rebalance_interval_weeks: Weeks per rebalance period
         initial_balance: Starting portfolio value
         final_balance: Ending portfolio value
-        date_start_ts: Simulation start as timestamp
-        date_end_ts: Simulation end as timestamp
+        date_start_ts: Backtest start as timestamp
+        date_end_ts: Backtest end as timestamp
     """
     total_rebalances = len(rebalance_history)
 
     if total_rebalances == 0:
-        return SimulationScores(
+        return BacktestScores(
             sharpe_ratio=0.0,
             sortino_ratio=0.0,
             calmar_ratio=0.0,
@@ -104,7 +104,7 @@ def compute_scores(
         else 0.0
     )
 
-    return SimulationScores(
+    return BacktestScores(
         sharpe_ratio=round(sharpe_ratio, 4),
         sortino_ratio=round(sortino_ratio, 4),
         calmar_ratio=round(calmar_ratio, 4),

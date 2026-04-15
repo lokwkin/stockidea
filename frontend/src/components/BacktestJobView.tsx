@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { SimulationJob } from "@/types/simulation"
+import { BacktestJob } from "@/types/backtest"
 
 const POLL_INTERVAL_MS = 2000
 
-function StatusBadge({ status }: { status: SimulationJob["status"] }) {
-  const styles: Record<SimulationJob["status"], string> = {
+function StatusBadge({ status }: { status: BacktestJob["status"] }) {
+  const styles: Record<BacktestJob["status"], string> = {
     pending: "bg-yellow-100 text-yellow-800 border-yellow-300",
     running: "bg-blue-100 text-blue-800 border-blue-300",
     completed: "bg-green-100 text-green-800 border-green-300",
     failed: "bg-red-100 text-red-800 border-red-300",
   }
-  const labels: Record<SimulationJob["status"], string> = {
+  const labels: Record<BacktestJob["status"], string> = {
     pending: "Pending",
     running: "Running",
     completed: "Completed",
@@ -27,10 +27,10 @@ function StatusBadge({ status }: { status: SimulationJob["status"] }) {
   )
 }
 
-export function SimulationJobView() {
+export function BacktestJobView() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
-  const [job, setJob] = useState<SimulationJob | null>(null)
+  const [job, setJob] = useState<BacktestJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -42,12 +42,12 @@ export function SimulationJobView() {
         setError(`Failed to fetch job status (${res.status})`)
         return
       }
-      const data: SimulationJob = await res.json()
+      const data: BacktestJob = await res.json()
       setJob(data)
 
-      if (data.status === "completed" && data.simulation_id) {
+      if (data.status === "completed" && data.backtest_id) {
         clearInterval(intervalRef.current!)
-        navigate(`/simulation/${data.simulation_id}`)
+        navigate(`/backtest/${data.backtest_id}`)
       } else if (data.status === "failed") {
         clearInterval(intervalRef.current!)
       }
@@ -66,9 +66,9 @@ export function SimulationJobView() {
     <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
       <header className="mb-10 text-center">
         <h1 className="mb-2 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent">
-          Simulation Running
+          Backtest Running
         </h1>
-        <p className="text-muted-foreground">Your simulation has been queued and will run shortly.</p>
+        <p className="text-muted-foreground">Your backtest has been queued and will run shortly.</p>
       </header>
 
       {error && (
@@ -94,12 +94,12 @@ export function SimulationJobView() {
           )}
 
           {job.status === "running" && (
-            <p className="text-muted-foreground text-sm">Simulation is running. This may take a minute.</p>
+            <p className="text-muted-foreground text-sm">Backtest is running. This may take a minute.</p>
           )}
 
           {job.status === "failed" && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-left">
-              <p className="text-sm font-medium text-destructive mb-1">Simulation failed</p>
+              <p className="text-sm font-medium text-destructive mb-1">Backtest failed</p>
               <p className="text-xs text-destructive/80 font-mono whitespace-pre-wrap">
                 {job.error_message ?? "Unknown error"}
               </p>
@@ -121,7 +121,7 @@ export function SimulationJobView() {
 
           {job.status === "failed" && (
             <button
-              onClick={() => navigate("/simulation/create")}
+              onClick={() => navigate("/backtest/create")}
               className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               Try Again

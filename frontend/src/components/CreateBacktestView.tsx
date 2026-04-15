@@ -21,7 +21,7 @@ import { dateFormat } from "@/lib/utils"
 
 type StockIndex = "SP500" | "NASDAQ"
 
-interface SimulateRequest {
+interface BacktestRequest {
   max_stocks: number
   rebalance_interval_weeks: number
   date_start: string // ISO datetime string
@@ -30,14 +30,14 @@ interface SimulateRequest {
   index: StockIndex
 }
 
-export function CreateSimulationView() {
+export function CreateBacktestView() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   // Initialize form data from URL parameters if available, otherwise use defaults
-  const getInitialFormData = (): SimulateRequest => {
+  const getInitialFormData = (): BacktestRequest => {
     const maxStocks = searchParams.get("max_stocks")
     const rebalanceInterval = searchParams.get("rebalance_interval_weeks")
     const dateStart = searchParams.get("date_start") || ""
@@ -55,7 +55,7 @@ export function CreateSimulationView() {
     }
   }
   
-  const [formData, setFormData] = useState<SimulateRequest>(getInitialFormData())
+  const [formData, setFormData] = useState<BacktestRequest>(getInitialFormData())
   
   // Store string values for numeric inputs to allow empty state
   const [maxStocksInput, setMaxStocksInput] = useState<string>(() => {
@@ -115,7 +115,7 @@ export function CreateSimulationView() {
       const dateStart = new Date(formData.date_start + "T00:00:00").toISOString()
       const dateEnd = new Date(formData.date_end + "T23:59:59").toISOString()
 
-      const response = await fetch("/api/simulate", {
+      const response = await fetch("/api/backtest", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -130,7 +130,7 @@ export function CreateSimulationView() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Failed to create simulation" }))
+        const errorData = await response.json().catch(() => ({ detail: "Failed to create backtest" }))
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
 
@@ -139,19 +139,19 @@ export function CreateSimulationView() {
       // API now returns a job; navigate to job status page
       if (result.job_id) {
         setLoading(false)
-        navigate(`/simulation/job/${result.job_id}`)
+        navigate(`/backtest/job/${result.job_id}`)
         return
       }
 
       setLoading(false)
-      navigate("/simulation")
+      navigate("/backtest")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create simulation")
+      setError(err instanceof Error ? err.message : "Failed to create backtest")
       setLoading(false)
     }
   }
 
-  const handleChange = (field: keyof SimulateRequest, value: string | number) => {
+  const handleChange = (field: keyof BacktestRequest, value: string | number) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -215,10 +215,10 @@ export function CreateSimulationView() {
     <div className="relative mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8">
         <h1 className="mb-2 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
-          Create Simulation
+          Create Backtest
         </h1>
         <p className="text-muted-foreground">
-          Configure and run a new investment strategy simulation
+          Configure and run a new investment strategy backtest
         </p>
       </header>
 
@@ -359,7 +359,7 @@ export function CreateSimulationView() {
                 }}
                 required
               />
-              <p className="text-xs text-muted-foreground">Simulation start date (yyyy/mm/dd)</p>
+              <p className="text-xs text-muted-foreground">Backtest start date (yyyy/mm/dd)</p>
             </div>
 
             <div className="space-y-2">
@@ -395,7 +395,7 @@ export function CreateSimulationView() {
                 }}
                 required
               />
-              <p className="text-xs text-muted-foreground">Simulation end date (yyyy/mm/dd)</p>
+              <p className="text-xs text-muted-foreground">Backtest end date (yyyy/mm/dd)</p>
             </div>
           </div>
 
@@ -739,7 +739,7 @@ export function CreateSimulationView() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate("/simulation")}
+            onClick={() => navigate("/backtest")}
             disabled={loading}
           >
             Cancel
@@ -751,7 +751,7 @@ export function CreateSimulationView() {
                 Creating...
               </>
             ) : (
-              "Create Simulation"
+              "Create Backtest"
             )}
           </Button>
         </div>

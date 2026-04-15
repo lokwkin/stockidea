@@ -31,18 +31,18 @@ interface AnalysisData {
 interface AnalysisPanelProps {
   symbol?: string
   analysisDate: string
-  simulationRule: string
+  backtestRule: string
   involvedKeys?: string[]
   onClose: () => void
 }
 
-export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKeys = [], onClose }: AnalysisPanelProps) {
+export function AnalysisPanel({ symbol, analysisDate, backtestRule, involvedKeys = [], onClose }: AnalysisPanelProps) {
   const navigate = useNavigate()
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [rule, setRule] = useState<string>(simulationRule)
-  const [appliedRule, setAppliedRule] = useState<string>(simulationRule)
+  const [rule, setRule] = useState<string>(backtestRule)
+  const [appliedRule, setAppliedRule] = useState<string>(backtestRule)
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -96,11 +96,11 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     })
   }, [])
 
-  // Update rule when simulationRule prop changes
+  // Update rule when backtestRule prop changes
   useEffect(() => {
-    setRule(simulationRule)
-    setAppliedRule(simulationRule)
-  }, [simulationRule])
+    setRule(backtestRule)
+    setAppliedRule(backtestRule)
+  }, [backtestRule])
 
   // Load indicator data when analysisDate or appliedRule changes
   useEffect(() => {

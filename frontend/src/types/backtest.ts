@@ -20,7 +20,7 @@ export interface RebalanceHistory {
   baseline_balance?: number
 }
 
-export interface SimulationConfig {
+export interface BacktestConfig {
   max_stocks: number
   rebalance_interval_weeks: number
   date_start: string
@@ -30,7 +30,7 @@ export interface SimulationConfig {
   involved_keys?: string[]
 }
 
-export interface Simulation {
+export interface Backtest {
   id?: number
   initial_balance: number
   final_balance: number
@@ -44,10 +44,10 @@ export interface Simulation {
   baseline_profit?: number
   baseline_balance?: number
   rule_ref?: string | null
-  simulation_config?: SimulationConfig
+  backtest_config?: BacktestConfig
 }
 
-export interface SimulationSummary {
+export interface BacktestSummary {
   id: number
   date_start: string
   date_end: string
@@ -59,10 +59,10 @@ export interface SimulationSummary {
 
 export type JobStatus = "pending" | "running" | "completed" | "failed"
 
-export interface SimulationJob {
+export interface BacktestJob {
   id: string
   status: JobStatus
-  simulation_id: string | null
+  backtest_id: string | null
   error_message: string | null
   created_at: string
   started_at: string | null

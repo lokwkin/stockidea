@@ -16,8 +16,8 @@ from stockidea.indicators import (
     calculator as indicators_calculator,
 )
 from stockidea.rule_engine import compile_rule, extract_involved_keys
-from stockidea.simulation.simulator import Simulator
-from stockidea.types import EnqueuedJob, SimulationConfig, SimulationJob, StockIndex
+from stockidea.backtest.backtester import Backtester
+from stockidea.types import EnqueuedJob, BacktestConfig, BacktestJob, StockIndex
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn, queries
 from typing import Optional
@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 async def _worker_loop() -> None:
-    """Background worker that processes pending simulation jobs."""
-    logger.info("Simulation worker started")
+    """Background worker that processes pending backtest jobs."""
+    logger.info("Backtest worker started")
     while True:
         try:
             async with conn.get_db_session() as db_session:
@@ -38,11 +38,11 @@ async def _worker_loop() -> None:
                 await asyncio.sleep(2)
                 continue
 
-            logger.info(f"Processing simulation job {job.id}")
+            logger.info(f"Processing backtest job {job.id}")
             try:
-                config = SimulationConfig.model_validate_json(job.config_json)
+                config = BacktestConfig.model_validate_json(job.config_json)
                 async with conn.get_db_session() as db_session:
-                    simulator = Simulator(
+                    backtester = Backtester(
                         db_session=db_session,
                         max_stocks=config.max_stocks,
                         rebalance_interval_weeks=config.rebalance_interval_weeks,
@@ -53,15 +53,15 @@ async def _worker_loop() -> None:
                         from_index=config.index,
                         baseline_index=StockIndex.SP500,
                     )
-                    simulation_result = await simulator.simulate()
-                    simulation_id = await queries.save_simulation_result(
-                        db_session, simulation_result
+                    backtest_result = await backtester.backtest()
+                    backtest_id = await queries.save_backtest_result(
+                        db_session, backtest_result
                     )
 
                 async with conn.get_db_session() as db_session:
-                    await queries.mark_job_completed(db_session, job.id, simulation_id)
+                    await queries.mark_job_completed(db_session, job.id, backtest_id)
 
-                logger.info(f"Job {job.id} completed → simulation {simulation_id}")
+                logger.info(f"Job {job.id} completed → backtest {backtest_id}")
 
             except Exception as exc:
                 logger.exception(f"Job {job.id} failed: {exc}")
@@ -74,7 +74,7 @@ async def _worker_loop() -> None:
             logger.exception(f"Worker loop error: {exc}")
             await asyncio.sleep(5)
 
-    logger.info("Simulation worker stopped")
+    logger.info("Backtest worker stopped")
 
 
 @asynccontextmanager
@@ -111,26 +111,26 @@ app.add_middleware(
 )
 
 
-@app.get("/simulations")
-async def list_simulations() -> list[dict]:
-    """Return list of available simulations from database."""
+@app.get("/backtests")
+async def list_backtests() -> list[dict]:
+    """Return list of available backtests from database."""
     async with conn.get_db_session() as db_session:
-        simulations = await queries.list_simulations(db_session)
-        return simulations
+        backtests = await queries.list_backtests(db_session)
+        return backtests
 
 
-@app.get("/simulations/{simulation_id}")
-async def get_simulation(simulation_id: UUID) -> dict:
-    """Return the full JSON content of a simulation by ID."""
+@app.get("/backtests/{backtest_id}")
+async def get_backtest(backtest_id: UUID) -> dict:
+    """Return the full JSON content of a backtest by ID."""
     async with conn.get_db_session() as db_session:
-        simulation_result = await queries.get_simulation_by_id(
-            db_session, simulation_id
+        backtest_result = await queries.get_backtest_by_id(
+            db_session, backtest_id
         )
-        if simulation_result is None:
+        if backtest_result is None:
             raise HTTPException(
-                status_code=404, detail=f"Simulation not found: {simulation_id}"
+                status_code=404, detail=f"Backtest not found: {backtest_id}"
             )
-        return simulation_result.model_dump()
+        return backtest_result.model_dump()
 
 
 @app.get("/indicators")
@@ -186,30 +186,30 @@ async def get_analysis(
     }
 
 
-@app.post("/simulate")
-async def simulate(simulation_config: SimulationConfig) -> EnqueuedJob:
+@app.post("/backtest")
+async def backtest(backtest_config: BacktestConfig) -> EnqueuedJob:
     """
-    Enqueue a simulation job and return the job ID for status polling.
+    Enqueue a backtest job and return the job ID for status polling.
     """
     # Populate involved_keys from rule if not provided
-    if not simulation_config.involved_keys:
-        simulation_config.involved_keys = extract_involved_keys(simulation_config.rule)
+    if not backtest_config.involved_keys:
+        backtest_config.involved_keys = extract_involved_keys(backtest_config.rule)
 
     # Validate rule before enqueuing
     try:
-        compile_rule(simulation_config.rule)
+        compile_rule(backtest_config.rule)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     async with conn.get_db_session() as db_session:
-        job_id = await queries.create_simulation_job(db_session, simulation_config)
+        job_id = await queries.create_backtest_job(db_session, backtest_config)
 
     return EnqueuedJob(job_id=job_id, status="pending")
 
 
 @app.get("/jobs/{job_id}")
-async def get_job(job_id: UUID) -> SimulationJob:
-    """Return the status of a simulation job."""
+async def get_job(job_id: UUID) -> BacktestJob:
+    """Return the status of a backtest job."""
     async with conn.get_db_session() as db_session:
         job = await queries.get_job_by_id(db_session, job_id)
     if job is None:
@@ -218,8 +218,8 @@ async def get_job(job_id: UUID) -> SimulationJob:
 
 
 @app.get("/jobs")
-async def list_jobs() -> list[SimulationJob]:
-    """Return the most recent simulation jobs."""
+async def list_jobs() -> list[BacktestJob]:
+    """Return the most recent backtest jobs."""
     async with conn.get_db_session() as db_session:
         return await queries.list_recent_jobs(db_session)
 

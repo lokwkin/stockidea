@@ -1,4 +1,4 @@
-import type { RebalanceHistory } from "@/types/simulation"
+import type { RebalanceHistory } from "@/types/backtest"
 import {
   Table,
   TableBody,

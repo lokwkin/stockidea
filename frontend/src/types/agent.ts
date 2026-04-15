@@ -16,7 +16,7 @@ export interface AgentToolResultEvent {
       rule?: string
       profit_pct?: number
       baseline_profit_pct?: number
-      scores?: SimulationScores
+      scores?: BacktestScores
       error?: string
       fields?: IndicatorField[]
       [key: string]: unknown
@@ -41,7 +41,7 @@ export type AgentEvent =
   | AgentDoneEvent
   | AgentErrorEvent
 
-export interface SimulationScores {
+export interface BacktestScores {
   sharpe_ratio: number
   sortino_ratio: number
   calmar_ratio: number

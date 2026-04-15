@@ -8,16 +8,16 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 - [Architecture](#architecture)
   - [Datasource](#datasource)
   - [Indicators](#indicators)
-  - [Simulation](#simulation)
+  - [Backtest](#backtest)
   - [Agent](#agent)
 - [Setup](#setup)
 - [Stock Indicators and Rule Syntax](#stock-indicators-and-rule-syntax)
-- [Simulation Scores](#simulation-scores)
+- [Backtest Scores](#backtest-scores)
 - [License](#license)
 
 ## Dashboard
 
-The frontend dashboard allows users to define custom strategy configurations, run simulations, and inspect detailed analytics for each rebalance action at every point in time. An AI agent chat interface lets users describe strategies in plain English and have them automatically translated, backtested, and refined.
+The frontend dashboard allows users to define custom strategy configurations, run backtests, and inspect detailed analytics for each rebalance action at every point in time. An AI agent chat interface lets users describe strategies in plain English and have them automatically translated, backtested, and refined.
 
 <img src="docs/dashboard.gif" alt="Dashboard" width="60%">
 
@@ -25,7 +25,7 @@ The frontend dashboard allows users to define custom strategy configurations, ru
 
 <img src="docs/architecture.svg" alt="Architecture" width="100%">
 
-The project is organized around four core components: **Datasource**, **Indicators**, **Simulation**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
+The project is organized around four core components: **Datasource**, **Indicators**, **Backtest**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
 
 ### Datasource
 
@@ -56,27 +56,27 @@ Stocks are ranked by a composite rising-stability score that balances trend stre
 
 ```bash
 # Compute indicators for all SP500 constituents at a given date
-uv run python -m stockidea.cli analyze -d 2026-01-20
+uv run python -m stockidea.cli compute -d 2026-01-20
 
 # Compute indicators and filter by a rule
 uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
 ```
 
-### Simulation
+### Backtest
 
 The backtest engine that evaluates a strategy over a historical date range. At each rebalance point, it:
 
 1. Computes indicators for all index constituents at that date
 2. Filters stocks using the user's rule expression
 3. Ranks and selects the top N stocks
-4. Simulates buying equal-weight positions and selling at the next rebalance
+4. Backtests buying equal-weight positions and selling at the next rebalance
 
 The engine tracks portfolio value over time against a baseline index (S&P 500) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
 
-Simulations submitted through the web dashboard are processed asynchronously via a job queue -- the request is enqueued and a background worker picks it up, so long-running backtests don't block the API.
+Backtests submitted through the web dashboard are processed asynchronously via a job queue -- the request is enqueued and a background worker picks it up, so long-running backtests don't block the API.
 
 ```bash
-uv run python -m stockidea.cli simulate \
+uv run python -m stockidea.cli backtest \
   --date-start=2022-01-01 \
   --date-end=2026-01-20 \
   --rule='change_13w_pct > 10 AND max_drop_2w_pct < 15'
@@ -88,7 +88,7 @@ An AI-powered strategy designer that sits on top of the other three components. 
 
 1. Discovers available indicator fields
 2. Translates the idea into a concrete rule expression
-3. Runs a backtest simulation
+3. Runs a backtest
 4. Analyzes the performance scores
 5. Iterates 2-5 times, adjusting thresholds and conditions to improve the strategy
 6. Presents the final recommendation with its performance summary
@@ -166,7 +166,7 @@ cd frontend && npm run dev
 | `acceleration_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
 | `pct_from_4w_high` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
 
-## Simulation Scores
+## Backtest Scores
 
 Backtests produce the following performance scores:
 

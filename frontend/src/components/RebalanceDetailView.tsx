@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import type { RebalanceHistory } from "@/types/simulation"
+import type { RebalanceHistory } from "@/types/backtest"
 import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import { StockTable } from "@/components/StockTable"
 import { Button } from "@/components/ui/button"

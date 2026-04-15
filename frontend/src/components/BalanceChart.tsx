@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import type { Simulation } from "@/types/simulation"
+import type { Backtest } from "@/types/backtest"
 
 interface ChartDataPoint {
   date: string
@@ -12,7 +12,7 @@ interface ChartDataPoint {
 }
 
 interface BalanceChartProps {
-  simulationData: Simulation
+  backtestData: Backtest
   selectedRebalanceIndex: number | null
   onRebalanceSelect: (index: number | null) => void
   formatDate: (dateStr: string) => string
@@ -81,13 +81,13 @@ function CustomTooltip(props: any) {
 }
 
 export function BalanceChart({
-  simulationData,
+  backtestData,
   selectedRebalanceIndex,
   onRebalanceSelect,
   formatDate,
 }: BalanceChartProps) {
   const chartData = useMemo(() => {
-    return simulationData.rebalance_history.map((rebalance, index) => {
+    return backtestData.rebalance_history.map((rebalance, index) => {
       return {
         date: formatDate(rebalance.date),
         dateRaw: rebalance.date,
@@ -97,7 +97,7 @@ export function BalanceChart({
         rebalanceIndex: index,
       }
     })
-  }, [simulationData, formatDate])
+  }, [backtestData, formatDate])
 
   // Check if we have any valid baseline balance data
   const hasBaselineData = useMemo(() => {
@@ -215,7 +215,7 @@ export function BalanceChart({
               strokeWidth={2}
               strokeDasharray="5 5"
               dot={false}
-              name={simulationData.baseline_index || "Baseline"}
+              name={backtestData.baseline_index || "Baseline"}
             />
           )}
         </LineChart>

@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useState } from "react"
 import { ArrowUp, ArrowDown } from "lucide-react"
-import type { Investment } from "@/types/simulation"
+import type { Investment } from "@/types/backtest"
 import {
   Table,
   TableBody,

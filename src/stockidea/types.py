@@ -84,7 +84,7 @@ class StockIndicators(BaseModel):
 
 
 # =============================================================================
-# Simulation Models
+# Backtest Models
 # =============================================================================
 
 
@@ -111,8 +111,8 @@ class RebalanceHistory(BaseModel):
     baseline_balance: float
 
 
-class SimulationScores(BaseModel):
-    """Objective scores computed from simulation results."""
+class BacktestScores(BaseModel):
+    """Objective scores computed from backtest results."""
 
     sharpe_ratio: float
     sortino_ratio: float
@@ -125,7 +125,7 @@ class SimulationScores(BaseModel):
     total_rebalances: int
 
 
-class SimulationConfig(BaseModel):
+class BacktestConfig(BaseModel):
     max_stocks: int
     rebalance_interval_weeks: int
     date_start: datetime
@@ -135,7 +135,7 @@ class SimulationConfig(BaseModel):
     involved_keys: list[str] = []
 
 
-class SimulationResult(BaseModel):
+class BacktestResult(BaseModel):
     initial_balance: float
     final_balance: float
     date_start: datetime
@@ -147,8 +147,8 @@ class SimulationResult(BaseModel):
     baseline_profit_pct: float
     baseline_profit: float
     baseline_balance: float
-    simulation_config: SimulationConfig
-    scores: SimulationScores | None = None
+    backtest_config: BacktestConfig
+    scores: BacktestScores | None = None
 
 
 # =============================================================================
@@ -156,10 +156,10 @@ class SimulationResult(BaseModel):
 # =============================================================================
 
 
-class SimulationJob(BaseModel):
+class BacktestJob(BaseModel):
     id: _uuid.UUID
     status: str  # pending | running | completed | failed
-    simulation_id: _uuid.UUID | None = None
+    backtest_id: _uuid.UUID | None = None
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None

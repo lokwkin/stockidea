@@ -11,11 +11,11 @@ from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import (
-    save_simulation_result as save_simulation_to_db,
+    save_backtest_result as save_backtest_to_db,
 )
 from stockidea.rule_engine import compile_rule
 
-from stockidea.simulation.simulator import Simulator
+from stockidea.backtest.backtester import Backtester
 from stockidea.types import StockIndex, StockIndicators
 
 logger = logging.getLogger(__name__)
@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 
 @click.group()
 def cli():
-    """Stock analysis and simulation tool."""
+    """Stock analysis and backtest tool."""
     pass
 
 
-async def _analyze(date: datetime, index: StockIndex) -> list[StockIndicators]:
+async def _compute(date: datetime, index: StockIndex) -> list[StockIndicators]:
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
         symbols = await datasource_service.get_constituent_at(
@@ -46,14 +46,14 @@ async def _analyze(date: datetime, index: StockIndex) -> list[StockIndicators]:
         return stock_indicators_batch
 
 
-@cli.command("analyze", help="Analyze stock prices for a given date")
+@cli.command("compute", help="Compute stock indicators for a given date")
 @click.option(
     "--date",
     "-d",
     type=str,
     required=False,
     default=datetime.now().strftime("%Y-%m-%d"),
-    help="Analysis date in YYYY-MM-DD format",
+    help="Indicator date in YYYY-MM-DD format",
 )
 @click.option(
     "--index",
@@ -61,16 +61,16 @@ async def _analyze(date: datetime, index: StockIndex) -> list[StockIndicators]:
     type=click.Choice([member.value for member in StockIndex]),
     required=False,
     default=StockIndex.SP500.value,
-    help="Stock index to analyze",
+    help="Stock index to compute indicators for",
 )
-def analyze(date: str, index: str):
+def compute(date: str, index: str):
     stock_index = StockIndex(index)
     try:
         date_parsed = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise click.BadParameter(f"Invalid date format: {date}. Use YYYY-MM-DD format.")
 
-    asyncio.run(_analyze(date=date_parsed, index=stock_index))
+    asyncio.run(_compute(date=date_parsed, index=stock_index))
 
 
 @cli.command(
@@ -119,7 +119,7 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     except Exception as e:
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
-    stock_indicators_batch = asyncio.run(_analyze(date=date_parsed, index=stock_index))
+    stock_indicators_batch = asyncio.run(_compute(date=date_parsed, index=stock_index))
 
     filtered_stocks = indicators_service.apply_rule(
         indicators_batch=stock_indicators_batch, rule_func=rule_func
@@ -131,7 +131,7 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     )
 
 
-@cli.command("simulate", help="Simulate investment strategy for a given date range.")
+@cli.command("backtest", help="Backtest investment strategy for a given date range.")
 @click.option(
     "--max-stocks",
     type=int,
@@ -148,13 +148,13 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     "--date-start",
     type=str,
     required=True,
-    help="Simulation start date in YYYY-MM-DD format",
+    help="Backtest start date in YYYY-MM-DD format",
 )
 @click.option(
     "--date-end",
     type=str,
     required=True,
-    help="Simulation end date in YYYY-MM-DD format",
+    help="Backtest end date in YYYY-MM-DD format",
 )
 @click.option(
     "--index",
@@ -170,7 +170,7 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     type=str,
     help="Rule expression string (e.g., 'change_13w_pct > 10 AND max_drop_2w_pct > 15')",
 )
-def simulate(
+def backtest(
     max_stocks: int,
     rebalance_interval_weeks: int,
     date_start: str,
@@ -195,7 +195,7 @@ def simulate(
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
     click.echo(
-        f"Running simulation from {date_start_parsed.date()} to {date_end_parsed.date()}"
+        f"Running backtest from {date_start_parsed.date()} to {date_end_parsed.date()}"
     )
     click.echo(
         f"Max stocks: {max_stocks}, Rebalance interval: {rebalance_interval_weeks} weeks"
@@ -203,9 +203,9 @@ def simulate(
     click.echo(f"Rule: {rule}")
     click.echo(f"Stock index: {stock_index}")
 
-    async def _simulate_and_save():
+    async def _backtest_and_save():
         async with conn.get_db_session() as db_session:
-            simulator = Simulator(
+            backtester = Backtester(
                 db_session=db_session,
                 max_stocks=max_stocks,
                 rebalance_interval_weeks=rebalance_interval_weeks,
@@ -216,15 +216,15 @@ def simulate(
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
             )
-            simulation_result = await simulator.simulate()
-            simulation_id = await save_simulation_to_db(db_session, simulation_result)
-            return simulation_result, simulation_id
+            backtest_result = await backtester.backtest()
+            backtest_id = await save_backtest_to_db(db_session, backtest_result)
+            return backtest_result, backtest_id
 
-    simulation_result, simulation_id = asyncio.run(_simulate_and_save())
+    backtest_result, backtest_id = asyncio.run(_backtest_and_save())
     click.echo(
-        f"Simulation result: {simulation_result.profit_pct * 100:2.2f}%, {simulation_result.profit:2.2f}"
+        f"Backtest result: {backtest_result.profit_pct * 100:2.2f}%, {backtest_result.profit:2.2f}"
     )
-    click.echo(f"Simulation saved to database with ID: {simulation_id}")
+    click.echo(f"Backtest saved to database with ID: {backtest_id}")
 
 
 # =============================================================================

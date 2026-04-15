@@ -24,10 +24,10 @@ uv run python -m stockidea.cli fetch-constituents --index SP500
 uv run python -m stockidea.cli fetch-index --index SP500
 uv run python -m stockidea.cli fetch-prices --index SP500
 
-# Backend — Analysis & Simulation
-uv run python -m stockidea.cli analyze -d 2026-01-20
+# Backend — Analysis & Backtest
+uv run python -m stockidea.cli compute -d 2026-01-20
 uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
-uv run python -m stockidea.cli simulate --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_13w_pct > 10'
+uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_13w_pct > 10'
 
 # Backend — AI Agent
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
@@ -50,11 +50,11 @@ There are no automated tests.
 The ultimate goal is an **AI-driven strategy design and optimization platform**:
 
 1. User provides a high-level direction (e.g. "I want a strong momentum strategy")
-2. An LLM agent translates that into a concrete rule + simulation config
+2. An LLM agent translates that into a concrete rule + backtest config
 3. The agent runs backtests iteratively, reads results, adjusts rule/params, and repeats
 4. The system surfaces the best-performing strategy with guardrails against overfitting
 
-The existing backtester + rule engine is the foundation — the AI agent layer sits on top of it, using `POST /simulate` as its core tool.
+The existing backtester + rule engine is the foundation — the AI agent layer sits on top of it, using `POST /backtest` as its core tool.
 
 ### Current gaps toward this vision
 - **No out-of-sample split** — train/test separation needed to prevent overfitting
@@ -65,12 +65,12 @@ The existing backtester + rule engine is the foundation — the AI agent layer s
 
 ### Backend (`src/stockidea/`)
 
-FastAPI app with an **in-process async worker loop** for long-running simulations:
+FastAPI app with an **in-process async worker loop** for long-running backtests:
 
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `api.py` — All HTTP routes + `lifespan` context that starts the background worker and auto-refreshes data on startup
-- `types.py` — All Pydantic v2 models shared across the app (including `SimulationScores`); `StockIndex` enum covers SP500 and NASDAQ only
+- `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`) into callables using `simpleeval`
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
   - `datasource/service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
@@ -79,18 +79,18 @@ FastAPI app with an **in-process async worker loop** for long-running simulation
 - `indicators/` — Pre-computed stock indicators for strategy evaluation
   - `indicators/service.py` — Fetches/computes indicator batches, applies rules
   - `indicators/calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields, ranks by stability score
-- `simulation/` — Core backtest engine
-  - `simulation/simulator.py` — Iterates rebalance dates, calls `pick_stocks()`, simulates trades
-  - `simulation/scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from simulation results
+- `backtest/` — Core backtest engine
+  - `backtest/backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
+  - `backtest/scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
   - `agent/agent.py` — Agentic loop with auto-detection of provider from model name; streams SSE events
-  - `agent/tools.py` — Tool definitions and executors (run_simulation, list_indicator_fields); dual format for Anthropic/OpenAI
+  - `agent/tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields); dual format for Anthropic/OpenAI
 
-**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, simulations. No file-based caching. Freshness is checked via metadata tables with 1-day TTL.
+**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests. No file-based caching. Freshness is checked via metadata tables with 1-day TTL.
 
-**Job queue flow**: `POST /simulate` saves a "pending" `simulation_job` row and returns a `job_id`. The worker loop (`_worker_loop` in `api.py`) polls the DB, claims pending jobs, runs `Simulator.simulate()`, and writes the result back. No external queue.
+**Job queue flow**: `POST /backtest` saves a "pending" `backtest_job` row and returns a `job_id`. The worker loop (`_worker_loop` in `api.py`) polls the DB, claims pending jobs, runs `Backtester.backtest()`, and writes the result back. No external queue.
 
-**Database models** use a `DB{Entity}` naming prefix (`DBSimulation`, `DBSimulationJob`, etc.). Tables are created on startup — there are no migration files.
+**Database models** use a `DB{Entity}` naming prefix (`DBBacktest`, `DBBacktestJob`, etc.). Tables are created on startup — there are no migration files.
 
 ### Frontend (`frontend/src/`)
 

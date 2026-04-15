@@ -2,26 +2,26 @@
 
 ## Overview
 
-**Stockidea** is a systematic stock strategy backtesting platform. It allows users to design rule-based stock selection strategies, run historical simulations, and analyze performance against market benchmarks. The platform emphasizes realistic, point-in-time backtesting and transparent strategy evaluation.
+**Stockidea** is a systematic stock strategy backtesting platform. It allows users to design rule-based stock selection strategies, run historical backtests, and analyze performance against market benchmarks. The platform emphasizes realistic, point-in-time backtesting and transparent strategy evaluation.
 
 
 
-## 1. Strategy Backtesting (Simulation)
+## 1. Strategy Backtesting (Backtest)
 
-Stockidea enables users to configure and execute historical simulations to evaluate stock selection strategies over a defined period.
+Stockidea enables users to configure and execute historical backtests to evaluate stock selection strategies over a defined period.
 
 ### Configuration Options
 
 - **Stock Index**: Universe of stocks (S&P 500, Dow Jones, NASDAQ)
 - **Maximum Stocks**: Maximum number of stocks held concurrently (default: 3)
 - **Rebalance Interval**: Portfolio rebalance frequency in weeks (default: 2)
-- **Date Range**: Simulation start and end dates
+- **Date Range**: Backtest start and end dates
 - **Selection Rule**: Boolean rule expression defining eligible stocks
 
-### Simulation Flow
+### Backtest Flow
 
 1. **Initial Setup**
-   - Simulation begins with a virtual balance of **$10,000**
+   - Backtest begins with a virtual balance of **$10,000**
 
 2. **Periodic Rebalancing**
    - On each rebalance date:
@@ -106,7 +106,7 @@ Each stock is analyzed using its trailing 52-week price history to compute all m
 - Linear and logarithmic regression analysis
 - Data quality checks (minimum 5 weeks required)
 
-Analysis results are cached to improve performance for repeated simulations.
+Analysis results are cached to improve performance for repeated backtests.
 
 
 
@@ -122,7 +122,7 @@ Stockidea uses point-in-time data to ensure realistic backtesting.
 
 ## 6. Dashboard Features
 
-### Simulation Results View
+### Backtest Results View
 
 - **Performance Summary**
   - Final portfolio value

@@ -17,11 +17,11 @@ from stockidea.datasource.database.models import (
     DBStockPriceMetadata,
     DBConstituentChange,
     DBConstituentMetadata,
-    DBSimulation,
+    DBBacktest,
     DBRebalanceHistory,
     DBInvestment,
     DBStockIndicators,
-    DBSimulationJob,
+    DBBacktestJob,
 )
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
@@ -30,12 +30,12 @@ from stockidea.types import (
     FMPLightPrice,
     StockIndex,
     StockPrice,
-    SimulationResult,
+    BacktestResult,
     Investment,
     RebalanceHistory,
-    SimulationConfig,
+    BacktestConfig,
     StockIndicators,
-    SimulationJob,
+    BacktestJob,
 )
 
 logger = logging.getLogger(__name__)
@@ -269,17 +269,17 @@ async def get_price_by_date(
     )
 
 
-async def save_simulation_result(
-    db_session: AsyncSession, result: SimulationResult
+async def save_backtest_result(
+    db_session: AsyncSession, result: BacktestResult
 ) -> UUID:
     """
-    Save a simulation result to the database.
-    Returns the simulation ID.
+    Save a backtest result to the database.
+    Returns the backtest ID.
     """
-    logger.info("Saving simulation result to database")
+    logger.info("Saving backtest result to database")
 
-    # Create simulation record
-    simulation = DBSimulation(
+    # Create backtest record
+    backtest = DBBacktest(
         initial_balance=result.initial_balance,
         final_balance=result.final_balance,
         date_start=result.date_start,
@@ -290,19 +290,19 @@ async def save_simulation_result(
         baseline_profit_pct=result.baseline_profit_pct,
         baseline_profit=result.baseline_profit,
         baseline_balance=result.baseline_balance,
-        max_stocks=result.simulation_config.max_stocks,
-        rebalance_interval_weeks=result.simulation_config.rebalance_interval_weeks,
-        rule=result.simulation_config.rule,
-        index=result.simulation_config.index.value,
+        max_stocks=result.backtest_config.max_stocks,
+        rebalance_interval_weeks=result.backtest_config.rebalance_interval_weeks,
+        rule=result.backtest_config.rule,
+        index=result.backtest_config.index.value,
     )
-    db_session.add(simulation)
-    await db_session.flush()  # Flush to get the simulation ID
-    simulation_id = simulation.id  # Store ID before commit to avoid greenlet issues
+    db_session.add(backtest)
+    await db_session.flush()  # Flush to get the backtest ID
+    backtest_id = backtest.id  # Store ID before commit to avoid greenlet issues
 
     # Create rebalance history records
     for rebalance in result.rebalance_history:
         rebalance_history = DBRebalanceHistory(
-            simulation_id=simulation_id,
+            backtest_id=backtest_id,
             date=rebalance.date,
             balance=rebalance.balance,
             profit_pct=rebalance.profit_pct,
@@ -330,49 +330,49 @@ async def save_simulation_result(
             db_session.add(investment_record)
 
     await db_session.commit()
-    logger.info(f"✓ Simulation result saved to database with ID: {simulation_id}")
-    return simulation_id
+    logger.info(f"✓ Backtest result saved to database with ID: {backtest_id}")
+    return backtest_id
 
 
-async def get_simulation_by_id(
-    db_session: AsyncSession, simulation_id: UUID
-) -> SimulationResult | None:
+async def get_backtest_by_id(
+    db_session: AsyncSession, backtest_id: UUID
+) -> BacktestResult | None:
     """
-    Get a simulation result by ID from the database.
+    Get a backtest result by ID from the database.
     """
     stmt = (
-        select(DBSimulation)
-        .where(DBSimulation.id == simulation_id)
+        select(DBBacktest)
+        .where(DBBacktest.id == backtest_id)
         .options(
-            selectinload(DBSimulation.rebalance_histories).selectinload(
+            selectinload(DBBacktest.rebalance_histories).selectinload(
                 DBRebalanceHistory.investments
             )
         )
     )
     result = await db_session.execute(stmt)
-    simulation = result.scalar_one_or_none()
+    backtest = result.scalar_one_or_none()
 
-    if simulation is None:
+    if backtest is None:
         return None
 
-    return _db_simulation_to_result(simulation)
+    return _db_backtest_to_result(backtest)
 
 
-async def list_simulations(
+async def list_backtests(
     db_session: AsyncSession, limit: int = 100, offset: int = 0
 ) -> list[dict]:
     """
-    List simulations from the database.
-    Returns a list of simulation summaries (id, date_start, date_end, profit_pct, created_at).
+    List backtests from the database.
+    Returns a list of backtest summaries (id, date_start, date_end, profit_pct, created_at).
     """
     stmt = (
-        select(DBSimulation)
-        .order_by(DBSimulation.created_at.desc())
+        select(DBBacktest)
+        .order_by(DBBacktest.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     result = await db_session.execute(stmt)
-    simulations = result.scalars().all()
+    backtests = result.scalars().all()
 
     return [
         {
@@ -384,14 +384,14 @@ async def list_simulations(
             "baseline_profit_pct": sim.baseline_profit_pct,
             "created_at": sim.created_at.isoformat(),
         }
-        for sim in simulations
+        for sim in backtests
     ]
 
 
-def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
-    """Convert a DBSimulation database object to a SimulationResult Pydantic model."""
+def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
+    """Convert a DBBacktest database object to a BacktestResult Pydantic model."""
     rebalance_histories = []
-    for db_rebalance in db_simulation.rebalance_histories:
+    for db_rebalance in db_backtest.rebalance_histories:
         investments = [
             Investment(
                 symbol=inv.symbol,
@@ -418,26 +418,26 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
             )
         )
 
-    return SimulationResult(
-        initial_balance=db_simulation.initial_balance,
-        final_balance=db_simulation.final_balance,
-        date_start=db_simulation.date_start,
-        date_end=db_simulation.date_end,
+    return BacktestResult(
+        initial_balance=db_backtest.initial_balance,
+        final_balance=db_backtest.final_balance,
+        date_start=db_backtest.date_start,
+        date_end=db_backtest.date_end,
         rebalance_history=rebalance_histories,
-        profit_pct=db_simulation.profit_pct,
-        profit=db_simulation.profit,
-        baseline_index=StockIndex(db_simulation.baseline_index),
-        baseline_profit_pct=db_simulation.baseline_profit_pct,
-        baseline_profit=db_simulation.baseline_profit,
-        baseline_balance=db_simulation.baseline_balance,
-        simulation_config=SimulationConfig(
-            max_stocks=db_simulation.max_stocks,
-            rebalance_interval_weeks=db_simulation.rebalance_interval_weeks,
-            date_start=db_simulation.date_start,
-            date_end=db_simulation.date_end,
-            rule=db_simulation.rule,
-            index=StockIndex(db_simulation.index),
-            involved_keys=extract_involved_keys(db_simulation.rule),
+        profit_pct=db_backtest.profit_pct,
+        profit=db_backtest.profit,
+        baseline_index=StockIndex(db_backtest.baseline_index),
+        baseline_profit_pct=db_backtest.baseline_profit_pct,
+        baseline_profit=db_backtest.baseline_profit,
+        baseline_balance=db_backtest.baseline_balance,
+        backtest_config=BacktestConfig(
+            max_stocks=db_backtest.max_stocks,
+            rebalance_interval_weeks=db_backtest.rebalance_interval_weeks,
+            date_start=db_backtest.date_start,
+            date_end=db_backtest.date_end,
+            rule=db_backtest.rule,
+            index=StockIndex(db_backtest.index),
+            involved_keys=extract_involved_keys(db_backtest.rule),
         ),
     )
 
@@ -526,15 +526,15 @@ async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
 
 
 # =============================================================================
-# Simulation Job Queue Queries
+# Backtest Job Queue Queries
 # =============================================================================
 
 
-async def create_simulation_job(
-    db_session: AsyncSession, config: SimulationConfig
+async def create_backtest_job(
+    db_session: AsyncSession, config: BacktestConfig
 ) -> UUID:
-    """Enqueue a new simulation job. Returns the job ID."""
-    job = DBSimulationJob(
+    """Enqueue a new backtest job. Returns the job ID."""
+    job = DBBacktestJob(
         status="pending",
         config_json=config.model_dump_json(),
     )
@@ -542,13 +542,13 @@ async def create_simulation_job(
     await db_session.flush()
     job_id = job.id
     await db_session.commit()
-    logger.info(f"Simulation job enqueued: {job_id}")
+    logger.info(f"Backtest job enqueued: {job_id}")
     return job_id
 
 
-async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> SimulationJob | None:
-    """Return SimulationJob or None if not found."""
-    stmt = select(DBSimulationJob).where(DBSimulationJob.id == job_id)
+async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> BacktestJob | None:
+    """Return BacktestJob or None if not found."""
+    stmt = select(DBBacktestJob).where(DBBacktestJob.id == job_id)
     result = await db_session.execute(stmt)
     job = result.scalar_one_or_none()
     if job is None:
@@ -558,25 +558,25 @@ async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> SimulationJob
 
 async def list_recent_jobs(
     db_session: AsyncSession, limit: int = 50
-) -> list[SimulationJob]:
-    """List recent simulation jobs ordered by creation time descending."""
+) -> list[BacktestJob]:
+    """List recent backtest jobs ordered by creation time descending."""
     stmt = (
-        select(DBSimulationJob).order_by(DBSimulationJob.created_at.desc()).limit(limit)
+        select(DBBacktestJob).order_by(DBBacktestJob.created_at.desc()).limit(limit)
     )
     result = await db_session.execute(stmt)
     return [_job_to_model(job) for job in result.scalars().all()]
 
 
-async def claim_next_pending_job(db_session: AsyncSession) -> DBSimulationJob | None:
+async def claim_next_pending_job(db_session: AsyncSession) -> DBBacktestJob | None:
     """
     Atomically claim the oldest pending job by setting its status to 'running'.
     Uses SKIP LOCKED so concurrent workers don't double-claim.
     Returns the claimed job row, or None if no pending jobs exist.
     """
     stmt = (
-        select(DBSimulationJob)
-        .where(DBSimulationJob.status == "pending")
-        .order_by(DBSimulationJob.created_at)
+        select(DBBacktestJob)
+        .where(DBBacktestJob.status == "pending")
+        .order_by(DBBacktestJob.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
     )
@@ -593,13 +593,13 @@ async def claim_next_pending_job(db_session: AsyncSession) -> DBSimulationJob | 
 
 
 async def mark_job_completed(
-    db_session: AsyncSession, job_id: UUID, simulation_id: UUID
+    db_session: AsyncSession, job_id: UUID, backtest_id: UUID
 ) -> None:
     stmt = (
-        update(DBSimulationJob)
-        .where(DBSimulationJob.id == job_id)
+        update(DBBacktestJob)
+        .where(DBBacktestJob.id == job_id)
         .values(
-            status="completed", simulation_id=simulation_id, completed_at=datetime.now()
+            status="completed", backtest_id=backtest_id, completed_at=datetime.now()
         )
     )
     await db_session.execute(stmt)
@@ -610,8 +610,8 @@ async def mark_job_failed(
     db_session: AsyncSession, job_id: UUID, error_message: str
 ) -> None:
     stmt = (
-        update(DBSimulationJob)
-        .where(DBSimulationJob.id == job_id)
+        update(DBBacktestJob)
+        .where(DBBacktestJob.id == job_id)
         .values(
             status="failed", error_message=error_message, completed_at=datetime.now()
         )
@@ -620,11 +620,11 @@ async def mark_job_failed(
     await db_session.commit()
 
 
-def _job_to_model(job: DBSimulationJob) -> SimulationJob:
-    return SimulationJob(
+def _job_to_model(job: DBBacktestJob) -> BacktestJob:
+    return BacktestJob(
         id=job.id,
         status=job.status,
-        simulation_id=job.simulation_id,
+        backtest_id=job.backtest_id,
         error_message=job.error_message,
         created_at=job.created_at,
         started_at=job.started_at,

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Bot, Send, Loader2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Activity } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, AgentEvent, SimulationScores } from "@/types/agent"
+import type { ChatMessage, AgentEvent, BacktestScores } from "@/types/agent"
 
 function ScoreCard({ scores, rule, profitPct, baselinePct }: {
-  scores: SimulationScores
+  scores: BacktestScores
   rule?: string
   profitPct?: number
   baselinePct?: number
@@ -92,7 +92,7 @@ function ToolCallCard({ name, input }: { name: string; input: Record<string, unk
   )
 }
 
-function MessageBubble({ message, simulationIndex }: { message: ChatMessage; simulationIndex?: number }) {
+function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backtestIndex?: number }) {
   if (message.type === "user") {
     return (
       <div className="flex justify-end">
@@ -126,7 +126,7 @@ function MessageBubble({ message, simulationIndex }: { message: ChatMessage; sim
 
   if (message.type === "tool_result") {
     const { result, name } = message
-    if (name === "run_simulation" && result.scores) {
+    if (name === "run_backtest" && result.scores) {
       return (
         <div className="ml-9">
           <div className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1.5">
@@ -135,7 +135,7 @@ function MessageBubble({ message, simulationIndex }: { message: ChatMessage; sim
             ) : (
               <TrendingDown className="h-3 w-3 text-destructive" />
             )}
-            Simulation {simulationIndex !== undefined ? `#${simulationIndex}` : ""} Result
+            Backtest {backtestIndex !== undefined ? `#${backtestIndex}` : ""} Result
           </div>
           <ScoreCard
             scores={result.scores}
@@ -298,7 +298,7 @@ export function AgentView() {
     [handleRun]
   )
 
-  // Count simulation results for numbering
+  // Count backtest results for numbering
   let simIndex = 0
 
   return (
@@ -365,11 +365,11 @@ export function AgentView() {
 
         {messages.map((msg, i) => {
           let si: number | undefined
-          if (msg.type === "tool_result" && msg.name === "run_simulation" && msg.result.scores) {
+          if (msg.type === "tool_result" && msg.name === "run_backtest" && msg.result.scores) {
             simIndex++
             si = simIndex
           }
-          return <MessageBubble key={i} message={msg} simulationIndex={si} />
+          return <MessageBubble key={i} message={msg} backtestIndex={si} />
         })}
 
         {isRunning && messages.length > 0 && (

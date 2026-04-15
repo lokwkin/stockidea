@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Copy, Check, TrendingDown, TrendingUp, ExternalLink } from "lucide-react"
-import type { Simulation } from "@/types/simulation"
+import type { Backtest } from "@/types/backtest"
 import { BalanceChart } from "@/components/BalanceChart"
 import { RebalanceDetailView } from "@/components/RebalanceDetailView"
 import { InvestmentTable } from "@/components/InvestmentTable"
@@ -26,11 +26,11 @@ function formatPercent(value: number): string {
 }
 
 
-export function SimulationView() {
-  const { id: simulationId } = useParams<{ id?: string }>()
+export function BacktestView() {
+  const { id: backtestId } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [simulationData, setSimulationData] = useState<Simulation | null>(null)
+  const [backtestData, setBacktestData] = useState<Backtest | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [ruleCopied, setRuleCopied] = useState(false)
@@ -40,21 +40,21 @@ export function SimulationView() {
   const [analysisPanelSymbol, setAnalysisPanelSymbol] = useState<string | undefined>(undefined)
   const [analysisPanelDate, setAnalysisPanelDate] = useState<string | null>(null)
 
-  // Load simulation data when simulation ID changes
+  // Load backtest data when backtest ID changes
   useEffect(() => {
-    if (!simulationId) {
-      // If no ID in URL, redirect to first available simulation or show error
-      fetch("/api/simulations")
+    if (!backtestId) {
+      // If no ID in URL, redirect to first available backtest or show error
+      fetch("/api/backtests")
         .then((res) => {
-          if (!res.ok) throw new Error("Failed to load simulations list")
+          if (!res.ok) throw new Error("Failed to load backtests list")
           return res.json()
         })
         .then((sims: Array<{ id: number }>) => {
           if (sims.length === 0) {
-            setError("No simulations available")
+            setError("No backtests available")
             setLoading(false)
           } else {
-            navigate(`/simulation/${sims[0].id}`, { replace: true })
+            navigate(`/backtest/${sims[0].id}`, { replace: true })
           }
         })
         .catch((err) => {
@@ -74,14 +74,14 @@ export function SimulationView() {
       }
     })
 
-    fetch(`/api/simulations/${simulationId}`)
+    fetch(`/api/backtests/${backtestId}`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load simulation data")
+        if (!res.ok) throw new Error("Failed to load backtest data")
         return res.json()
       })
-      .then((json: Simulation) => {
+      .then((json: Backtest) => {
         if (!cancelled) {
-          setSimulationData(json)
+          setBacktestData(json)
           setLoading(false)
           setLoadingData(false)
         }
@@ -97,17 +97,17 @@ export function SimulationView() {
     return () => {
       cancelled = true
     }
-  }, [simulationId, navigate])
+  }, [backtestId, navigate])
 
-  // Sync URL query param with selectedRebalanceIndex when simulationData loads or URL changes
+  // Sync URL query param with selectedRebalanceIndex when backtestData loads or URL changes
   useEffect(() => {
-    if (!simulationData) return
+    if (!backtestData) return
 
     const rebalanceDate = searchParams.get("rebalance")
 
     if (rebalanceDate) {
       // Find the index of the rebalance with matching date
-      const index = simulationData.rebalance_history.findIndex((r) => r.date === rebalanceDate)
+      const index = backtestData.rebalance_history.findIndex((r) => r.date === rebalanceDate)
       if (index !== -1) {
         // Only update if different to avoid loops
         setSelectedRebalanceIndex((prev) => (prev !== index ? index : prev))
@@ -122,7 +122,7 @@ export function SimulationView() {
       // URL has no rebalance param, clear selection if set
       setSelectedRebalanceIndex((prev) => (prev !== null ? null : prev))
     }
-  }, [simulationData, searchParams, setSearchParams])
+  }, [backtestData, searchParams, setSearchParams])
 
   const handleRebalanceSelect = useCallback(
     (index: number | null) => {
@@ -130,8 +130,8 @@ export function SimulationView() {
 
       // Update URL query param
       const newSearchParams = new URLSearchParams(searchParams)
-      if (index !== null && simulationData) {
-        const rebalance = simulationData.rebalance_history[index]
+      if (index !== null && backtestData) {
+        const rebalance = backtestData.rebalance_history[index]
         if (rebalance) {
           newSearchParams.set("rebalance", rebalance.date)
         }
@@ -140,7 +140,7 @@ export function SimulationView() {
       }
       setSearchParams(newSearchParams)
     },
-    [simulationData, searchParams, setSearchParams]
+    [backtestData, searchParams, setSearchParams]
   )
 
   const handleCloseRebalance = useCallback(() => {
@@ -152,22 +152,22 @@ export function SimulationView() {
   }, [searchParams, setSearchParams])
 
   const handleCopyRule = useCallback(async () => {
-    if (!simulationData?.rule_ref) return
+    if (!backtestData?.rule_ref) return
     
     try {
-      await navigator.clipboard.writeText(simulationData.rule_ref)
+      await navigator.clipboard.writeText(backtestData.rule_ref)
       setRuleCopied(true)
       setTimeout(() => setRuleCopied(false), 2000)
     } catch (err) {
       console.error("Failed to copy rule:", err)
     }
-  }, [simulationData?.rule_ref])
+  }, [backtestData?.rule_ref])
 
   // Flatten all investments from all rebalances
   const allInvestments = useMemo(() => {
-    if (!simulationData) return []
-    return simulationData.rebalance_history.flatMap((rebalance) => rebalance.investments)
-  }, [simulationData])
+    if (!backtestData) return []
+    return backtestData.rebalance_history.flatMap((rebalance) => rebalance.investments)
+  }, [backtestData])
 
   // Calculate top 3 biggest losses and profits (sorted by percentage)
   const topLosses = useMemo(() => {
@@ -185,38 +185,38 @@ export function SimulationView() {
   }, [allInvestments])
 
   const selectedRebalance = useMemo(() => {
-    return selectedRebalanceIndex !== null && simulationData
-      ? simulationData.rebalance_history[selectedRebalanceIndex]
+    return selectedRebalanceIndex !== null && backtestData
+      ? backtestData.rebalance_history[selectedRebalanceIndex]
       : null
-  }, [selectedRebalanceIndex, simulationData])
+  }, [selectedRebalanceIndex, backtestData])
 
-  const totalProfit = useMemo(() => simulationData?.profit || 0, [simulationData])
+  const totalProfit = useMemo(() => backtestData?.profit || 0, [backtestData])
   const totalProfitPct = useMemo(() => {
-    return simulationData?.profit_pct ? simulationData.profit_pct * 100 : 0
-  }, [simulationData])
+    return backtestData?.profit_pct ? backtestData.profit_pct * 100 : 0
+  }, [backtestData])
 
-  // Get simulation rule
-  const simulationRule = useMemo(() => {
-    if (!simulationData) return ""
-    if (simulationData.simulation_config?.rule) {
-      return simulationData.simulation_config.rule
+  // Get backtest rule
+  const backtestRule = useMemo(() => {
+    if (!backtestData) return ""
+    if (backtestData.backtest_config?.rule) {
+      return backtestData.backtest_config.rule
     }
-    if (simulationData.rule_ref) {
-      return simulationData.rule_ref
+    if (backtestData.rule_ref) {
+      return backtestData.rule_ref
     }
     return ""
-  }, [simulationData])
+  }, [backtestData])
 
-  // Get involved keys from simulation config
+  // Get involved keys from backtest config
   const involvedKeys = useMemo(() => {
-    return simulationData?.simulation_config?.involved_keys || []
-  }, [simulationData])
+    return backtestData?.backtest_config?.involved_keys || []
+  }, [backtestData])
 
   const handleOpenAnalysis = useCallback((symbol: string, buyDate: string) => {
     // Find the rebalance that contains this investment by matching buy_date
-    if (!simulationData) return
+    if (!backtestData) return
     
-    const rebalance = simulationData.rebalance_history.find((r) =>
+    const rebalance = backtestData.rebalance_history.find((r) =>
       r.investments.some((inv) => inv.symbol === symbol && inv.buy_date === buyDate)
     )
     
@@ -226,7 +226,7 @@ export function SimulationView() {
       setAnalysisPanelSymbol(symbol)
       setAnalysisPanelDate(indicatorsDate)
     }
-  }, [simulationData])
+  }, [backtestData])
 
   const handleOpenAnalysisFromDate = useCallback((analysisDate: string) => {
     setAnalysisPanelSymbol(undefined)
@@ -243,20 +243,20 @@ export function SimulationView() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Loading simulations...</p>
+          <p className="text-muted-foreground">Loading backtests...</p>
         </div>
       </div>
     )
   }
 
-  if (error && !simulationData) {
+  if (error && !backtestData) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
           <p className="text-muted-foreground">{error ?? "No data available"}</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Make sure the API server is running and simulation data is available
+            Make sure the API server is running and backtest data is available
           </p>
         </div>
       </div>
@@ -273,24 +273,24 @@ export function SimulationView() {
         <header className="mb-8">
           <div className="mb-6 text-center">
             <h1 className="mb-4 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
-              Simulation Results
+              Backtest Results
             </h1>
-            {simulationId && (
-              <p className="text-muted-foreground font-mono text-sm">ID: {simulationId}</p>
+            {backtestId && (
+              <p className="text-muted-foreground font-mono text-sm">ID: {backtestId}</p>
             )}
           </div>
 
-          {/* Simulation Summary */}
-          {simulationData && (
+          {/* Backtest Summary */}
+          {backtestData && (
             <div className="mx-auto max-w-6xl">
               <div className="rounded-lg border bg-card p-6 shadow-sm">
                 <div className="mb-6 flex items-center justify-between">
-                  <h2 className="text-2xl font-semibold">Simulation Summary</h2>
+                  <h2 className="text-2xl font-semibold">Backtest Summary</h2>
                   <Button
                     variant="outline"
                     onClick={() => {
-                      if (!simulationData?.simulation_config) return
-                      const config = simulationData.simulation_config
+                      if (!backtestData?.backtest_config) return
+                      const config = backtestData.backtest_config
                       // Convert dates from ISO to yyyy/mm/dd format for URL
                       const dateStart = dateFormat(config.date_start).replace(/-/g, "/")
                       const dateEnd = dateFormat(config.date_end).replace(/-/g, "/")
@@ -304,12 +304,12 @@ export function SimulationView() {
                         index: config.index,
                       })
                       
-                      navigate(`/simulation/create?${params.toString()}`)
+                      navigate(`/backtest/create?${params.toString()}`)
                     }}
                     className="flex items-center gap-2"
                   >
                     <Copy className="h-4 w-4" />
-                    Clone Simulation
+                    Clone Backtest
                   </Button>
                 </div>
                 
@@ -318,17 +318,17 @@ export function SimulationView() {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Period</p>
                     <p className="text-base font-medium">
-                      {dateFormat(simulationData.date_start)} - {dateFormat(simulationData.date_end)}
+                      {dateFormat(backtestData.date_start)} - {dateFormat(backtestData.date_end)}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Initial Balance</p>
-                    <p className="text-base font-medium">{formatCurrency(simulationData.initial_balance)}</p>
+                    <p className="text-base font-medium">{formatCurrency(backtestData.initial_balance)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Final Balance</p>
                     <p className="text-base font-medium">
-                      {formatCurrency(simulationData.final_balance)}
+                      {formatCurrency(backtestData.final_balance)}
                     </p>
                   </div>
                   <div>
@@ -345,20 +345,20 @@ export function SimulationView() {
                 {/* Configuration */}
                 <div>
                   <h3 className="mb-4 text-lg font-semibold">Configuration</h3>
-                  {simulationData.simulation_config ? (
+                  {backtestData.backtest_config ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div>
                           <p className="text-sm text-muted-foreground mb-1">Stock Index</p>
-                          <p className="text-base font-medium">{simulationData.simulation_config.index}</p>
+                          <p className="text-base font-medium">{backtestData.backtest_config.index}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground mb-1">Max Stocks</p>
-                          <p className="text-base font-medium">{simulationData.simulation_config.max_stocks}</p>
+                          <p className="text-base font-medium">{backtestData.backtest_config.max_stocks}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground mb-1">Rebalance Interval</p>
-                          <p className="text-base font-medium">{simulationData.simulation_config.rebalance_interval_weeks} weeks</p>
+                          <p className="text-base font-medium">{backtestData.backtest_config.rebalance_interval_weeks} weeks</p>
                         </div>
                       </div>
                       <div>
@@ -366,9 +366,9 @@ export function SimulationView() {
                         <div className="flex gap-2 items-start">
                           <textarea
                             readOnly
-                            value={simulationData.simulation_config.rule}
+                            value={backtestData.backtest_config.rule}
                             className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                            rows={Math.min(Math.max(simulationData.simulation_config.rule.split('\n').length, 2), 6)}
+                            rows={Math.min(Math.max(backtestData.backtest_config.rule.split('\n').length, 2), 6)}
                           />
                           <Button
                             type="button"
@@ -376,7 +376,7 @@ export function SimulationView() {
                             size="icon"
                             onClick={async () => {
                               try {
-                                await navigator.clipboard.writeText(simulationData.simulation_config!.rule)
+                                await navigator.clipboard.writeText(backtestData.backtest_config!.rule)
                                 setRuleCopied(true)
                                 setTimeout(() => setRuleCopied(false), 2000)
                               } catch (err) {
@@ -395,15 +395,15 @@ export function SimulationView() {
                         </div>
                       </div>
                     </div>
-                  ) : simulationData.rule_ref ? (
+                  ) : backtestData.rule_ref ? (
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Selection Rule</p>
                       <div className="flex gap-2 items-start">
                         <textarea
                           readOnly
-                          value={simulationData.rule_ref}
+                          value={backtestData.rule_ref}
                           className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                          rows={Math.min(Math.max(simulationData.rule_ref.split('\n').length, 2), 6)}
+                          rows={Math.min(Math.max(backtestData.rule_ref.split('\n').length, 2), 6)}
                         />
                         <Button
                           type="button"
@@ -434,7 +434,7 @@ export function SimulationView() {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                <p className="text-muted-foreground">Loading simulation data...</p>
+                <p className="text-muted-foreground">Loading backtest data...</p>
               </div>
             </div>
           ) : error ? (
@@ -442,11 +442,11 @@ export function SimulationView() {
               <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
               <p className="text-muted-foreground">{error}</p>
             </div>
-          ) : simulationData ? (
+          ) : backtestData ? (
             <>
               {/* Balance History Chart */}
               <BalanceChart
-                simulationData={simulationData}
+                backtestData={backtestData}
                 selectedRebalanceIndex={selectedRebalanceIndex}
                 onRebalanceSelect={handleRebalanceSelect}
                 formatDate={dateFormat}
@@ -593,7 +593,7 @@ export function SimulationView() {
 
                   <TabsContent value="rebalance">
                     <RebalanceHistoryTable
-                      rebalanceHistory={simulationData.rebalance_history}
+                      rebalanceHistory={backtestData.rebalance_history}
                       formatDate={dateFormat}
                       formatCurrency={formatCurrency}
                       formatPercent={formatPercent}
@@ -612,7 +612,7 @@ export function SimulationView() {
         <AnalysisPanel
           symbol={analysisPanelSymbol || undefined}
           analysisDate={analysisPanelDate}
-          simulationRule={simulationRule}
+          backtestRule={backtestRule}
           involvedKeys={involvedKeys}
           onClose={handleCloseAnalysis}
         />

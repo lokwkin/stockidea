@@ -21,8 +21,8 @@ class Base(DeclarativeBase):
     """Base class for SQLAlchemy models."""
 
 
-class DBSimulationJob(Base):
-    __tablename__ = "simulation_jobs"
+class DBBacktestJob(Base):
+    __tablename__ = "backtest_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
@@ -30,10 +30,10 @@ class DBSimulationJob(Base):
     status: Mapped[str] = mapped_column(
         String, nullable=False, default="pending", index=True
     )
-    # SimulationConfig stored as JSON text
+    # BacktestConfig stored as JSON text
     config_json: Mapped[str] = mapped_column(Text, nullable=False)
-    simulation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID, ForeignKey("simulations.id", ondelete="SET NULL"), nullable=True
+    backtest_id: Mapped[uuid.UUID] = mapped_column(
+        UUID, ForeignKey("backtests.id", ondelete="SET NULL"), nullable=True
     )
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -43,7 +43,7 @@ class DBSimulationJob(Base):
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
-        return f"<SimulationJob(id={self.id}, status={self.status})>"
+        return f"<BacktestJob(id={self.id}, status={self.status})>"
 
 
 class DBStockPrice(Base):
@@ -106,8 +106,8 @@ class DBConstituentMetadata(Base):
         )
 
 
-class DBSimulation(Base):
-    __tablename__ = "simulations"
+class DBBacktest(Base):
+    __tablename__ = "backtests"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
@@ -122,7 +122,7 @@ class DBSimulation(Base):
     baseline_profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
     baseline_profit: Mapped[float] = mapped_column(Float, nullable=False)
     baseline_balance: Mapped[float] = mapped_column(Float, nullable=False)
-    # Simulation config stored as JSON
+    # Backtest config stored as JSON
     max_stocks: Mapped[int] = mapped_column(Integer, nullable=False)
     rebalance_interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     rule: Mapped[str] = mapped_column(Text, nullable=False)
@@ -132,11 +132,11 @@ class DBSimulation(Base):
     )
 
     rebalance_histories: Mapped[list["DBRebalanceHistory"]] = relationship(
-        "DBRebalanceHistory", back_populates="simulation", cascade="all, delete-orphan"
+        "DBRebalanceHistory", back_populates="backtest", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
-        return f"<Simulation(id={self.id}, date_start={self.date_start}, profit_pct={self.profit_pct})>"
+        return f"<Backtest(id={self.id}, date_start={self.date_start}, profit_pct={self.profit_pct})>"
 
 
 class DBRebalanceHistory(Base):
@@ -145,9 +145,9 @@ class DBRebalanceHistory(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
     )
-    simulation_id: Mapped[uuid.UUID] = mapped_column(
+    backtest_id: Mapped[uuid.UUID] = mapped_column(
         UUID,
-        ForeignKey("simulations.id", ondelete="CASCADE"),
+        ForeignKey("backtests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -159,8 +159,8 @@ class DBRebalanceHistory(Base):
     baseline_profit: Mapped[float] = mapped_column(Float, nullable=False)
     baseline_balance: Mapped[float] = mapped_column(Float, nullable=False)
 
-    simulation: Mapped["DBSimulation"] = relationship(
-        "DBSimulation", back_populates="rebalance_histories"
+    backtest: Mapped["DBBacktest"] = relationship(
+        "DBBacktest", back_populates="rebalance_histories"
     )
     investments: Mapped[list["DBInvestment"]] = relationship(
         "DBInvestment", back_populates="rebalance_history", cascade="all, delete-orphan"

@@ -7,8 +7,8 @@ from datetime import datetime
 
 from stockidea.datasource.database import conn
 from stockidea.rule_engine import compile_rule
-from stockidea.simulation.simulator import Simulator
-from stockidea.types import StockIndex, StockIndicators, SimulationResult
+from stockidea.backtest.backtester import Backtester
+from stockidea.types import StockIndex, StockIndicators, BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Tool schemas — shared parameters, provider-specific wrappers
 # =============================================================================
 
-_SIMULATION_PARAMS = {
+_BACKTEST_PARAMS = {
     "type": "object",
     "properties": {
         "rule": {
@@ -30,11 +30,11 @@ _SIMULATION_PARAMS = {
         },
         "date_start": {
             "type": "string",
-            "description": "Simulation start date in YYYY-MM-DD format",
+            "description": "Backtest start date in YYYY-MM-DD format",
         },
         "date_end": {
             "type": "string",
-            "description": "Simulation end date in YYYY-MM-DD format",
+            "description": "Backtest end date in YYYY-MM-DD format",
         },
         "max_stocks": {
             "type": "integer",
@@ -56,9 +56,9 @@ _SIMULATION_PARAMS = {
     "required": ["rule", "date_start", "date_end"],
 }
 
-_SIMULATION_DESC = (
-    "Run a backtest simulation with the given rule and parameters. "
-    "Returns simulation scores (Sharpe, Sortino, Calmar, win rate, etc.) and summary. "
+_BACKTEST_DESC = (
+    "Run a backtest backtest with the given rule and parameters. "
+    "Returns backtest scores (Sharpe, Sortino, Calmar, win rate, etc.) and summary. "
     "Use this to test a strategy rule and evaluate its performance."
 )
 
@@ -77,9 +77,9 @@ _LIST_INDICATORS_PARAMS = {
 # Anthropic format
 ANTHROPIC_TOOLS = [
     {
-        "name": "run_simulation",
-        "description": _SIMULATION_DESC,
-        "input_schema": _SIMULATION_PARAMS,
+        "name": "run_backtest",
+        "description": _BACKTEST_DESC,
+        "input_schema": _BACKTEST_PARAMS,
     },
     {
         "name": "list_indicator_fields",
@@ -93,9 +93,9 @@ OPENAI_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "run_simulation",
-            "description": _SIMULATION_DESC,
-            "parameters": _SIMULATION_PARAMS,
+            "name": "run_backtest",
+            "description": _BACKTEST_DESC,
+            "parameters": _BACKTEST_PARAMS,
         },
     },
     {
@@ -160,16 +160,16 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
 
 async def execute_tool(tool_name: str, tool_input: dict) -> str:
     """Execute a tool call and return the result as a JSON string."""
-    if tool_name == "run_simulation":
-        return await _run_simulation(tool_input)
+    if tool_name == "run_backtest":
+        return await _run_backtest(tool_input)
     elif tool_name == "list_indicator_fields":
         return _list_indicator_fields()
     else:
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
-async def _run_simulation(params: dict) -> str:
-    """Execute a simulation and return scores as JSON."""
+async def _run_backtest(params: dict) -> str:
+    """Execute a backtest and return scores as JSON."""
     rule_str = params["rule"]
     date_start_str = params["date_start"]
     date_end_str = params["date_end"]
@@ -192,7 +192,7 @@ async def _run_simulation(params: dict) -> str:
 
     try:
         async with conn.get_db_session() as db_session:
-            simulator = Simulator(
+            backtester = Backtester(
                 db_session=db_session,
                 max_stocks=max_stocks,
                 rebalance_interval_weeks=rebalance_interval_weeks,
@@ -203,10 +203,10 @@ async def _run_simulation(params: dict) -> str:
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
             )
-            result: SimulationResult = await simulator.simulate()
+            result: BacktestResult = await backtester.backtest()
     except Exception as e:
-        logger.exception(f"Simulation failed: {e}")
-        return json.dumps({"error": f"Simulation failed: {e}"})
+        logger.exception(f"Backtest failed: {e}")
+        return json.dumps({"error": f"Backtest failed: {e}"})
 
     # Return a concise summary with scores
     summary = {

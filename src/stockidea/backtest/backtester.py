@@ -9,12 +9,12 @@ from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
 from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
-from stockidea.simulation.scoring import compute_scores
+from stockidea.backtest.scoring import compute_scores
 from stockidea.types import (
     Investment,
     RebalanceHistory,
-    SimulationConfig,
-    SimulationResult,
+    BacktestConfig,
+    BacktestResult,
     StockIndex,
     StockIndicators,
 )
@@ -22,7 +22,7 @@ from stockidea.types import (
 logger = logging.getLogger(__name__)
 
 
-class Simulator:
+class Backtester:
     db_session: AsyncSession
     initial_balance: float
     date_start: datetime
@@ -142,7 +142,7 @@ class Simulator:
         )
         return investment
 
-    async def simulate(self) -> SimulationResult:
+    async def backtest(self) -> BacktestResult:
 
         # Initial Setup
         balance = self.initial_balance
@@ -207,7 +207,7 @@ class Simulator:
             date_end_ts=self.date_end.timestamp(),
         )
 
-        return SimulationResult(
+        return BacktestResult(
             initial_balance=self.initial_balance,
             final_balance=balance,
             date_start=self.date_start,
@@ -220,7 +220,7 @@ class Simulator:
             / self.initial_balance,
             baseline_profit=baseline_balance - self.initial_balance,
             baseline_balance=baseline_balance,
-            simulation_config=SimulationConfig(
+            backtest_config=BacktestConfig(
                 max_stocks=self.max_stocks,
                 rebalance_interval_weeks=self.rebalance_interval_weeks,
                 date_start=self.date_start,

@@ -2,21 +2,21 @@ import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, Loader2, Bot } from "lucide-react"
 import { AnalysisView } from "@/components/AnalysisView"
-import { SimulationView } from "@/components/SimulationView"
-import { CreateSimulationView } from "@/components/CreateSimulationView"
-import { SimulationJobView } from "@/components/SimulationJobView"
+import { BacktestView } from "@/components/BacktestView"
+import { CreateBacktestView } from "@/components/CreateBacktestView"
+import { BacktestJobView } from "@/components/BacktestJobView"
 import { AgentView } from "@/components/AgentView"
-import { SimulationJob, SimulationSummary } from "@/types/simulation"
+import { BacktestJob, BacktestSummary } from "@/types/backtest"
 import { cn, dateFormat } from "@/lib/utils"
 
-const JOB_STATUS_COLORS: Record<SimulationJob["status"], string> = {
+const JOB_STATUS_COLORS: Record<BacktestJob["status"], string> = {
   pending: "bg-yellow-400",
   running: "bg-blue-400",
   completed: "bg-green-400",
   failed: "bg-red-400",
 }
 
-function JobStatusDot({ status, animate }: { status: SimulationJob["status"]; animate?: boolean }) {
+function JobStatusDot({ status, animate }: { status: BacktestJob["status"]; animate?: boolean }) {
   return (
     <span className="relative inline-flex h-2 w-2 flex-shrink-0">
       {animate && (
@@ -29,52 +29,52 @@ function JobStatusDot({ status, animate }: { status: SimulationJob["status"]; an
 
 function Sidebar() {
   const location = useLocation()
-  const [simulations, setSimulations] = useState<SimulationSummary[]>([])
-  const [jobs, setJobs] = useState<SimulationJob[]>([])
+  const [backtests, setBacktests] = useState<BacktestSummary[]>([])
+  const [jobs, setJobs] = useState<BacktestJob[]>([])
   const [manuallyExpanded, setManuallyExpanded] = useState(false)
   const [jobsExpanded, setJobsExpanded] = useState(true)
-  const [loadingSimulations, setLoadingSimulations] = useState(true)
+  const [loadingBacktests, setLoadingBacktests] = useState(true)
   const [isHovered, setIsHovered] = useState(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isSimulationPath = location.pathname.startsWith("/simulation") && location.pathname !== "/simulation/create"
-  const isCreatePath = location.pathname === "/simulation/create"
+  const isBacktestPath = location.pathname.startsWith("/backtest") && location.pathname !== "/backtest/create"
+  const isCreatePath = location.pathname === "/backtest/create"
 
-  const currentSimulationId = isSimulationPath
-    ? location.pathname.replace("/simulation/", "").split("/")[0] || null
+  const currentBacktestId = isBacktestPath
+    ? location.pathname.replace("/backtest/", "").split("/")[0] || null
     : null
 
-  const isSimulationExpanded = isSimulationPath || manuallyExpanded
+  const isBacktestExpanded = isBacktestPath || manuallyExpanded
 
-  const fetchSimulations = useCallback(() => {
-    fetch("/api/simulations")
+  const fetchBacktests = useCallback(() => {
+    fetch("/api/backtests")
       .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((sims: SimulationSummary[]) => {
-        setSimulations(sims)
-        setLoadingSimulations(false)
+      .then((sims: BacktestSummary[]) => {
+        setBacktests(sims)
+        setLoadingBacktests(false)
       })
-      .catch(() => setLoadingSimulations(false))
+      .catch(() => setLoadingBacktests(false))
   }, [])
 
-  const jobsRef = useRef<SimulationJob[]>(jobs)
+  const jobsRef = useRef<BacktestJob[]>(jobs)
   useEffect(() => { jobsRef.current = jobs }, [jobs])
 
   const fetchJobs = useCallback(() => {
     fetch("/api/jobs")
       .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((data: SimulationJob[]) => {
+      .then((data: BacktestJob[]) => {
         const hadActive = jobsRef.current.some((j) => j.status === "pending" || j.status === "running")
         const nowActive = data.some((j) => j.status === "pending" || j.status === "running")
         setJobs(data)
-        // Refresh simulations list when a job just completed
-        if (hadActive && !nowActive) fetchSimulations()
+        // Refresh backtests list when a job just completed
+        if (hadActive && !nowActive) fetchBacktests()
       })
       .catch(() => {})
-  }, [fetchSimulations])
+  }, [fetchBacktests])
 
   // Initial load
   useEffect(() => {
-    fetchSimulations()
+    fetchBacktests()
   }, [])
 
   // Adaptive polling: fast when jobs are active, slow otherwise
@@ -112,9 +112,9 @@ function Sidebar() {
         </h1>
       </div>
       <nav className="flex-1 p-2 overflow-y-auto">
-        {/* Create Simulation */}
+        {/* Create Backtest */}
         <Link
-          to="/simulation/create"
+          to="/backtest/create"
           className={cn(
             "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
             isHovered ? "text-base" : "text-sm justify-center",
@@ -122,9 +122,9 @@ function Sidebar() {
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
-          title={!isHovered ? "Create Simulations" : undefined}
+          title={!isHovered ? "Create Backtests" : undefined}
         >
-          {isHovered ? "Create Simulations" : <Plus className="h-5 w-5" />}
+          {isHovered ? "Create Backtests" : <Plus className="h-5 w-5" />}
         </Link>
 
         {/* AI Agent */}
@@ -186,10 +186,10 @@ function Sidebar() {
               ) : (
                 recentJobs.map((job) => {
                   const isActive = job.status === "pending" || job.status === "running"
-                  const href = job.status === "completed" && job.simulation_id
-                    ? `/simulation/${job.simulation_id}`
-                    : `/simulation/job/${job.id}`
-                  const label = job.status === "completed" && job.simulation_id
+                  const href = job.status === "completed" && job.backtest_id
+                    ? `/backtest/${job.backtest_id}`
+                    : `/backtest/job/${job.id}`
+                  const label = job.status === "completed" && job.backtest_id
                     ? "View result"
                     : job.status === "failed"
                     ? "Failed"
@@ -219,23 +219,23 @@ function Sidebar() {
           )}
         </div>
 
-        {/* Simulation Results Section */}
+        {/* Backtest Results Section */}
         <div className="mt-1">
           <button
             onClick={() => setManuallyExpanded(!manuallyExpanded)}
             className={cn(
               "flex w-full items-center justify-between px-3 py-2 rounded-md font-medium transition-all",
               isHovered ? "text-base" : "text-sm justify-center",
-              isSimulationPath
+              isBacktestPath
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
-            title={!isHovered ? "Simulation" : undefined}
+            title={!isHovered ? "Backtest" : undefined}
           >
             {isHovered ? (
               <>
-                <span>Simulations</span>
-                {isSimulationExpanded ? (
+                <span>Backtests</span>
+                {isBacktestExpanded ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
                   <ChevronRight className="h-4 w-4" />
@@ -245,24 +245,24 @@ function Sidebar() {
               <FolderTree className="h-5 w-5" />
             )}
           </button>
-          {isSimulationExpanded && isHovered && (
+          {isBacktestExpanded && isHovered && (
             <div className="ml-4 mt-1 space-y-1">
-              {loadingSimulations ? (
+              {loadingBacktests ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-              ) : simulations.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-muted-foreground">No simulations</div>
+              ) : backtests.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-muted-foreground">No backtests</div>
               ) : (
-                simulations.map((sim) => {
+                backtests.map((sim) => {
                   const dateStart = dateFormat(sim.date_start)
                   const dateEnd = dateFormat(sim.date_end)
                   const displayName = `${dateStart} - ${dateEnd} (${(sim.profit_pct * 100).toFixed(1)}%)`
                   return (
                     <Link
                       key={sim.id}
-                      to={`/simulation/${sim.id}`}
+                      to={`/backtest/${sim.id}`}
                       className={cn(
                         "block w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-all truncate",
-                        currentSimulationId === String(sim.id)
+                        currentBacktestId === String(sim.id)
                           ? "bg-muted text-foreground"
                           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                       )}
@@ -310,11 +310,11 @@ function App() {
             <Route path="/" element={<Navigate to="/analysis" replace />} />
             <Route path="/analysis" element={<AnalysisView />} />
             <Route path="/analysis/:date" element={<AnalysisView />} />
-            <Route path="/simulation" element={<SimulationView />} />
-            <Route path="/simulation/create" element={<CreateSimulationView />} />
+            <Route path="/backtest" element={<BacktestView />} />
+            <Route path="/backtest/create" element={<CreateBacktestView />} />
             <Route path="/agent" element={<AgentView />} />
-            <Route path="/simulation/job/:jobId" element={<SimulationJobView />} />
-            <Route path="/simulation/:id" element={<SimulationView />} />
+            <Route path="/backtest/job/:jobId" element={<BacktestJobView />} />
+            <Route path="/backtest/:id" element={<BacktestView />} />
           </Routes>
         </main>
       </div>
