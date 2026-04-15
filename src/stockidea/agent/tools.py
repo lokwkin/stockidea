@@ -17,7 +17,9 @@ from stockidea.types import StockIndex, StockIndicators, BacktestResult
 
 logger = logging.getLogger(__name__)
 
-STRATEGIES_DIR = Path(os.path.dirname(__file__)).parent.parent.parent / "data" / "strategies"
+STRATEGIES_DIR = (
+    Path(os.path.dirname(__file__)).parent.parent.parent / "data" / "strategies"
+)
 
 
 # =============================================================================
@@ -185,7 +187,9 @@ def _tool_openai(name: str, description: str, params: dict) -> dict:
 ANTHROPIC_TOOLS = [
     _tool_anthropic("run_backtest", _BACKTEST_DESC, _BACKTEST_PARAMS),
     _tool_anthropic("preview_filter", _PREVIEW_FILTER_DESC, _PREVIEW_FILTER_PARAMS),
-    _tool_anthropic("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
+    _tool_anthropic(
+        "list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS
+    ),
     _tool_anthropic("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
     _tool_anthropic("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
     _tool_anthropic("lookup_stock", _LOOKUP_STOCK_DESC, _LOOKUP_STOCK_PARAMS),
@@ -195,7 +199,9 @@ ANTHROPIC_TOOLS = [
 OPENAI_TOOLS = [
     _tool_openai("run_backtest", _BACKTEST_DESC, _BACKTEST_PARAMS),
     _tool_openai("preview_filter", _PREVIEW_FILTER_DESC, _PREVIEW_FILTER_PARAMS),
-    _tool_openai("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
+    _tool_openai(
+        "list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS
+    ),
     _tool_openai("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
     _tool_openai("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
     _tool_openai("lookup_stock", _LOOKUP_STOCK_DESC, _LOOKUP_STOCK_PARAMS),
@@ -246,7 +252,12 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
 }
 
 # Fields always included in preview_filter sample output
-_ALWAYS_INCLUDE_FIELDS = {"symbol", "change_13w_pct", "linear_r_squared", "max_drawdown_pct"}
+_ALWAYS_INCLUDE_FIELDS = {
+    "symbol",
+    "change_13w_pct",
+    "linear_r_squared",
+    "max_drawdown_pct",
+}
 
 
 # =============================================================================
@@ -254,16 +265,16 @@ _ALWAYS_INCLUDE_FIELDS = {"symbol", "change_13w_pct", "linear_r_squared", "max_d
 # =============================================================================
 
 
-async def execute_tool(tool_name: str, tool_input: dict) -> str:
+async def execute_tool(tool_name: str, tool_input: dict, strategy_id: str) -> str:
     """Execute a tool call and return the result as a JSON string."""
     if tool_name == "run_backtest":
-        return await _run_backtest(tool_input)
+        return await _run_backtest(tool_input, strategy_id=strategy_id)
     elif tool_name == "preview_filter":
         return await _preview_filter(tool_input)
     elif tool_name == "list_indicator_fields":
         return _list_indicator_fields()
     elif tool_name == "write_strategy_notes":
-        return _write_strategy_notes(tool_input)
+        return await _write_strategy_notes(tool_input, strategy_id=strategy_id)
     elif tool_name == "read_strategy_notes":
         return _read_strategy_notes(tool_input)
     elif tool_name == "lookup_stock":
@@ -303,8 +314,7 @@ def _build_diagnostics(result: BacktestResult) -> dict:
             symbol_counter[inv.symbol] += 1
 
     top_held = [
-        {"symbol": sym, "count": count}
-        for sym, count in symbol_counter.most_common(5)
+        {"symbol": sym, "count": count} for sym, count in symbol_counter.most_common(5)
     ]
 
     return {
@@ -317,7 +327,7 @@ def _build_diagnostics(result: BacktestResult) -> dict:
     }
 
 
-async def _run_backtest(params: dict) -> str:
+async def _run_backtest(params: dict, strategy_id: str) -> str:
     """Execute a backtest and return scores + diagnostics as JSON."""
     rule_str = params["rule"]
     date_start_str = params["date_start"]
@@ -340,6 +350,12 @@ async def _run_backtest(params: dict) -> str:
     stock_index = StockIndex(index_str)
 
     try:
+        from uuid import UUID as _UUID
+
+        from stockidea.datasource.database.queries import (
+            save_backtest_result as _save_backtest,
+        )
+
         async with conn.get_db_session() as db_session:
             backtester = Backtester(
                 db_session=db_session,
@@ -353,6 +369,12 @@ async def _run_backtest(params: dict) -> str:
                 baseline_index=StockIndex.SP500,
             )
             result: BacktestResult = await backtester.backtest()
+
+        # Save backtest to DB (linked to strategy if available)
+        async with conn.get_db_session() as db_session:
+            sid = _UUID(strategy_id) if strategy_id else None
+            backtest_id = await _save_backtest(db_session, result, strategy_id=sid)
+            logger.info(f"Backtest saved: {backtest_id} (strategy={strategy_id})")
     except Exception as e:
         logger.exception(f"Backtest failed: {e}")
         return json.dumps({"error": f"Backtest failed: {e}"})
@@ -413,7 +435,9 @@ async def _preview_filter(params: dict) -> str:
                 compute_if_not_exists=True,
             )
 
-            filtered = indicators_service.apply_rule(indicators_batch, rule_func=rule_func)
+            filtered = indicators_service.apply_rule(
+                indicators_batch, rule_func=rule_func
+            )
     except Exception as e:
         logger.exception(f"Preview filter failed: {e}")
         return json.dumps({"error": f"Preview filter failed: {e}"})
@@ -429,12 +453,14 @@ async def _preview_filter(params: dict) -> str:
                 entry[field] = round(val, 3) if isinstance(val, float) else val
         sample.append(entry)
 
-    return json.dumps({
-        "date": date_str,
-        "total_constituents": total_constituents,
-        "matched": len(filtered),
-        "sample": sample,
-    })
+    return json.dumps(
+        {
+            "date": date_str,
+            "total_constituents": total_constituents,
+            "matched": len(filtered),
+            "sample": sample,
+        }
+    )
 
 
 def _slugify(name: str) -> str:
@@ -445,15 +471,20 @@ def _slugify(name: str) -> str:
     return slug or "unnamed"
 
 
-def _write_strategy_notes(params: dict) -> str:
-    """Save strategy notes as a markdown file."""
-    strategy_name = params["strategy_name"]
+async def _write_strategy_notes(params: dict, strategy_id: str) -> str:
+    """Save strategy notes as a markdown file and to the strategy DB record."""
     content = params["content"]
 
-    slug = _slugify(strategy_name)
     STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = STRATEGIES_DIR / f"{slug}.md"
+    filepath = STRATEGIES_DIR / f"{strategy_id}.md"
     filepath.write_text(content, encoding="utf-8")
+
+    from uuid import UUID as _UUID
+
+    from stockidea.datasource.database.queries import update_strategy_notes
+
+    async with conn.get_db_session() as db_session:
+        await update_strategy_notes(db_session, _UUID(strategy_id), content)
 
     return json.dumps({"path": str(filepath), "status": "saved"})
 
@@ -466,9 +497,7 @@ def _read_strategy_notes(params: dict) -> str:
         # List all available strategy notes
         if not STRATEGIES_DIR.exists():
             return json.dumps({"strategies": []})
-        strategies = [
-            f.stem for f in sorted(STRATEGIES_DIR.glob("*.md"))
-        ]
+        strategies = [f.stem for f in sorted(STRATEGIES_DIR.glob("*.md"))]
         return json.dumps({"strategies": strategies})
 
     slug = _slugify(strategy_name)
@@ -515,11 +544,13 @@ async def _lookup_stock(params: dict) -> str:
     found_symbols = {ind.symbol for ind in indicators}
     missing = [s for s in symbols if s not in found_symbols]
 
-    return json.dumps({
-        "date": date_str,
-        "stocks": results,
-        "missing": missing,
-    })
+    return json.dumps(
+        {
+            "date": date_str,
+            "stocks": results,
+            "missing": missing,
+        }
+    )
 
 
 def _list_indicator_fields() -> str:

@@ -23,6 +23,8 @@ from stockidea.datasource.database.models import (
     DBBacktestInvestment,
     DBStockIndicators,
     DBBacktestJob,
+    DBStrategy,
+    DBStrategyMessage,
 )
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
@@ -35,8 +37,14 @@ from stockidea.types import (
     BacktestInvestment,
     BacktestRebalance,
     BacktestConfig,
+    BacktestScores,
     StockIndicators,
     BacktestJob,
+    StrategyCreate,
+    StrategySummary,
+    StrategyDetail,
+    StrategyMessage,
+    StrategyBacktestSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,9 +135,7 @@ async def save_stock_prices(
     await db_session.commit()
 
 
-async def get_last_fetched_at(
-    db_session: AsyncSession, symbol: str
-) -> datetime | None:
+async def get_last_fetched_at(db_session: AsyncSession, symbol: str) -> datetime | None:
     """Get the last fetched_at timestamp for a symbol, or None if never fetched."""
     stmt = select(DBStockPriceMetadata.fetched_at).where(
         DBStockPriceMetadata.symbol == symbol.upper()
@@ -291,7 +297,9 @@ async def get_price_by_date(
 
 
 async def save_backtest_result(
-    db_session: AsyncSession, result: BacktestResult
+    db_session: AsyncSession,
+    result: BacktestResult,
+    strategy_id: UUID | None = None,
 ) -> UUID:
     """
     Save a backtest result to the database.
@@ -301,6 +309,7 @@ async def save_backtest_result(
 
     # Create backtest record
     backtest = DBBacktest(
+        strategy_id=strategy_id,
         initial_balance=result.initial_balance,
         final_balance=result.final_balance,
         date_start=result.date_start,
@@ -315,6 +324,7 @@ async def save_backtest_result(
         rebalance_interval_weeks=result.backtest_config.rebalance_interval_weeks,
         rule=result.backtest_config.rule,
         index=result.backtest_config.index.value,
+        scores_json=result.scores.model_dump_json() if result.scores else None,
     )
     db_session.add(backtest)
     await db_session.flush()  # Flush to get the backtest ID
@@ -551,9 +561,7 @@ async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
 # =============================================================================
 
 
-async def create_backtest_job(
-    db_session: AsyncSession, config: BacktestConfig
-) -> UUID:
+async def create_backtest_job(db_session: AsyncSession, config: BacktestConfig) -> UUID:
     """Enqueue a new backtest job. Returns the job ID."""
     job = DBBacktestJob(
         status="pending",
@@ -581,9 +589,7 @@ async def list_recent_jobs(
     db_session: AsyncSession, limit: int = 50
 ) -> list[BacktestJob]:
     """List recent backtest jobs ordered by creation time descending."""
-    stmt = (
-        select(DBBacktestJob).order_by(DBBacktestJob.created_at.desc()).limit(limit)
-    )
+    stmt = select(DBBacktestJob).order_by(DBBacktestJob.created_at.desc()).limit(limit)
     result = await db_session.execute(stmt)
     return [_job_to_model(job) for job in result.scalars().all()]
 
@@ -651,3 +657,222 @@ def _job_to_model(job: DBBacktestJob) -> BacktestJob:
         started_at=job.started_at,
         completed_at=job.completed_at,
     )
+
+
+# =============================================================================
+# Strategy Queries
+# =============================================================================
+
+
+async def create_strategy(
+    db_session: AsyncSession,
+    strategy_create: StrategyCreate,
+    name: str,
+    date_start: date,
+    date_end: date,
+) -> UUID:
+    """Create a new strategy and return its ID."""
+    strategy = DBStrategy(
+        name=name,
+        instruction=strategy_create.instruction,
+        model=strategy_create.model,
+        date_start=date_start,
+        date_end=date_end,
+        status="idle",
+    )
+    db_session.add(strategy)
+    await db_session.flush()
+    strategy_id = strategy.id
+    await db_session.commit()
+    logger.info(f"Strategy created: {strategy_id}")
+    return strategy_id
+
+
+async def get_strategy_by_id(
+    db_session: AsyncSession, strategy_id: UUID
+) -> StrategyDetail | None:
+    """Get a strategy with its messages and linked backtests."""
+    stmt = (
+        select(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .options(
+            selectinload(DBStrategy.messages),
+            selectinload(DBStrategy.backtests),
+        )
+    )
+    result = await db_session.execute(stmt)
+    strategy = result.scalar_one_or_none()
+    if strategy is None:
+        return None
+
+    messages = [
+        StrategyMessage(
+            id=msg.id,
+            role=msg.role,
+            content_json=msg.content_json,
+            created_at=msg.created_at,
+            sequence=msg.sequence,
+        )
+        for msg in strategy.messages
+    ]
+
+    backtests = [
+        StrategyBacktestSummary(
+            id=bt.id,
+            rule=bt.rule,
+            profit_pct=bt.profit_pct,
+            baseline_profit_pct=bt.baseline_profit_pct,
+            scores=BacktestScores.model_validate_json(bt.scores_json)
+            if bt.scores_json
+            else None,
+            created_at=bt.created_at,
+        )
+        for bt in sorted(strategy.backtests, key=lambda b: b.created_at)
+    ]
+
+    return StrategyDetail(
+        id=strategy.id,
+        name=strategy.name,
+        instruction=strategy.instruction,
+        model=strategy.model,
+        date_start=strategy.date_start,
+        date_end=strategy.date_end,
+        status=strategy.status,
+        final_rule=strategy.final_rule,
+        notes=strategy.notes,
+        created_at=strategy.created_at,
+        updated_at=strategy.updated_at,
+        messages=messages,
+        backtests=backtests,
+        llm_history_json=strategy.llm_history_json,
+    )
+
+
+async def list_strategies(
+    db_session: AsyncSession, limit: int = 50
+) -> list[StrategySummary]:
+    """List strategies ordered by updated_at descending."""
+    stmt = select(DBStrategy).order_by(DBStrategy.updated_at.desc()).limit(limit)
+    result = await db_session.execute(stmt)
+    strategies = result.scalars().all()
+    return [
+        StrategySummary(
+            id=s.id,
+            name=s.name,
+            instruction=s.instruction,
+            model=s.model,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in strategies
+    ]
+
+
+async def update_strategy_status(
+    db_session: AsyncSession, strategy_id: UUID, status: str
+) -> None:
+    """Update the status of a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(status=status, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def update_strategy_llm_history(
+    db_session: AsyncSession, strategy_id: UUID, llm_history_json: str
+) -> None:
+    """Update the LLM conversation history for a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(llm_history_json=llm_history_json, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def update_strategy_notes(
+    db_session: AsyncSession, strategy_id: UUID, notes: str
+) -> None:
+    """Update the notes for a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(notes=notes, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def update_strategy_final_rule(
+    db_session: AsyncSession, strategy_id: UUID, final_rule: str
+) -> None:
+    """Update the final rule for a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(final_rule=final_rule, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def add_strategy_message(
+    db_session: AsyncSession,
+    strategy_id: UUID,
+    role: str,
+    content_json: str,
+) -> UUID:
+    """Add a message to a strategy conversation and return its ID."""
+    # Get next sequence number
+    stmt = (
+        select(DBStrategyMessage.sequence)
+        .where(DBStrategyMessage.strategy_id == strategy_id)
+        .order_by(DBStrategyMessage.sequence.desc())
+        .limit(1)
+    )
+    result = await db_session.execute(stmt)
+    last_seq = result.scalar_one_or_none()
+    next_seq = (last_seq or 0) + 1
+
+    msg = DBStrategyMessage(
+        strategy_id=strategy_id,
+        role=role,
+        content_json=content_json,
+        sequence=next_seq,
+    )
+    db_session.add(msg)
+    await db_session.flush()
+    msg_id = msg.id
+    await db_session.commit()
+    return msg_id
+
+
+async def delete_strategy(db_session: AsyncSession, strategy_id: UUID) -> bool:
+    """Delete a strategy and all its messages. Returns True if found and deleted."""
+    stmt = select(DBStrategy).where(DBStrategy.id == strategy_id)
+    result = await db_session.execute(stmt)
+    strategy = result.scalar_one_or_none()
+    if strategy is None:
+        return False
+    await db_session.delete(strategy)
+    await db_session.commit()
+    return True
+
+
+async def get_strategy_llm_history(
+    db_session: AsyncSession, strategy_id: UUID
+) -> tuple[str | None, str | None]:
+    """Get the LLM history and model for a strategy. Returns (llm_history_json, model)."""
+    stmt = select(DBStrategy.llm_history_json, DBStrategy.model).where(
+        DBStrategy.id == strategy_id
+    )
+    result = await db_session.execute(stmt)
+    row = result.first()
+    if row is None:
+        return None, None
+    return row.llm_history_json, row.model

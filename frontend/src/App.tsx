@@ -5,8 +5,10 @@ import { AnalysisView } from "@/components/AnalysisView"
 import { BacktestView } from "@/components/BacktestView"
 import { CreateBacktestView } from "@/components/CreateBacktestView"
 import { BacktestJobView } from "@/components/BacktestJobView"
-import { AgentView } from "@/components/AgentView"
+import { CreateStrategyView } from "@/components/CreateStrategyView"
+import { StrategyView } from "@/components/StrategyView"
 import { BacktestJob, BacktestSummary } from "@/types/backtest"
+import { StrategySummary } from "@/types/strategy"
 import { cn, dateFormat } from "@/lib/utils"
 
 const JOB_STATUS_COLORS: Record<BacktestJob["status"], string> = {
@@ -16,35 +18,54 @@ const JOB_STATUS_COLORS: Record<BacktestJob["status"], string> = {
   failed: "bg-red-400",
 }
 
-function JobStatusDot({ status, animate }: { status: BacktestJob["status"]; animate?: boolean }) {
+const STRATEGY_STATUS_COLORS: Record<string, string> = {
+  idle: "bg-green-400",
+  running: "bg-blue-400",
+  failed: "bg-red-400",
+}
+
+function StatusDot({ color, animate }: { color: string; animate?: boolean }) {
   return (
     <span className="relative inline-flex h-2 w-2 flex-shrink-0">
       {animate && (
-        <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", JOB_STATUS_COLORS[status])} />
+        <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", color)} />
       )}
-      <span className={cn("relative inline-flex h-2 w-2 rounded-full", JOB_STATUS_COLORS[status])} />
+      <span className={cn("relative inline-flex h-2 w-2 rounded-full", color)} />
     </span>
   )
 }
 
 function Sidebar() {
   const location = useLocation()
+  const [strategies, setStrategies] = useState<StrategySummary[]>([])
   const [backtests, setBacktests] = useState<BacktestSummary[]>([])
   const [jobs, setJobs] = useState<BacktestJob[]>([])
-  const [manuallyExpanded, setManuallyExpanded] = useState(false)
-  const [jobsExpanded, setJobsExpanded] = useState(true)
+  const [strategiesExpanded, setStrategiesExpanded] = useState(true)
+  const [backtestsExpanded, setBacktestsExpanded] = useState(false)
+  const [jobsExpanded, setJobsExpanded] = useState(false)
   const [loadingBacktests, setLoadingBacktests] = useState(true)
   const [isHovered, setIsHovered] = useState(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isBacktestPath = location.pathname.startsWith("/backtest") && location.pathname !== "/backtest/create"
   const isCreatePath = location.pathname === "/backtest/create"
+  const isStrategyPath = location.pathname.startsWith("/strategy")
+  const isCreateStrategyPath = location.pathname === "/strategy/create"
 
   const currentBacktestId = isBacktestPath
     ? location.pathname.replace("/backtest/", "").split("/")[0] || null
     : null
 
-  const isBacktestExpanded = isBacktestPath || manuallyExpanded
+  const currentStrategyId = isStrategyPath && !isCreateStrategyPath
+    ? location.pathname.replace("/strategy/", "").split("/")[0] || null
+    : null
+
+  const fetchStrategies = useCallback(() => {
+    fetch("/api/strategies")
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data: StrategySummary[]) => setStrategies(data))
+      .catch(() => {})
+  }, [])
 
   const fetchBacktests = useCallback(() => {
     fetch("/api/backtests")
@@ -66,7 +87,6 @@ function Sidebar() {
         const hadActive = jobsRef.current.some((j) => j.status === "pending" || j.status === "running")
         const nowActive = data.some((j) => j.status === "pending" || j.status === "running")
         setJobs(data)
-        // Refresh backtests list when a job just completed
         if (hadActive && !nowActive) fetchBacktests()
       })
       .catch(() => {})
@@ -74,21 +94,22 @@ function Sidebar() {
 
   // Initial load
   useEffect(() => {
+    fetchStrategies()
     fetchBacktests()
-  }, [])
-
-  // Adaptive polling: fast when jobs are active, slow otherwise
-  useEffect(() => {
-    const hasActive = jobs.some((j) => j.status === "pending" || j.status === "running")
-    const interval = hasActive ? 3000 : 15000
-    pollRef.current = setTimeout(fetchJobs, interval)
-    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
-  }, [jobs])
-
-  // Kick off first jobs fetch immediately
-  useEffect(() => {
     fetchJobs()
   }, [])
+
+  // Adaptive polling
+  useEffect(() => {
+    const hasActive = jobs.some((j) => j.status === "pending" || j.status === "running")
+    const hasRunningStrategy = strategies.some((s) => s.status === "running")
+    const interval = (hasActive || hasRunningStrategy) ? 3000 : 15000
+    pollRef.current = setTimeout(() => {
+      fetchJobs()
+      fetchStrategies()
+    }, interval)
+    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
+  }, [jobs, strategies])
 
   const activeJobs = jobs.filter((j) => j.status === "pending" || j.status === "running")
   const recentJobs = jobs.slice(0, 8)
@@ -112,35 +133,82 @@ function Sidebar() {
         </h1>
       </div>
       <nav className="flex-1 p-2 overflow-y-auto">
-        {/* Create Backtest */}
+        {/* New Strategy */}
         <Link
-          to="/backtest/create"
+          to="/strategy/create"
           className={cn(
             "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
             isHovered ? "text-base" : "text-sm justify-center",
-            isCreatePath
+            isCreateStrategyPath
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
-          title={!isHovered ? "Create Backtests" : undefined}
+          title={!isHovered ? "New Strategy" : undefined}
         >
-          {isHovered ? "Create Backtests" : <Plus className="h-5 w-5" />}
+          {isHovered ? (
+            <>
+              <Plus className="h-4 w-4 mr-2" />
+              New Strategy
+            </>
+          ) : (
+            <Plus className="h-5 w-5" />
+          )}
         </Link>
 
-        {/* AI Agent */}
-        <Link
-          to="/agent"
-          className={cn(
-            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
-            isHovered ? "text-base" : "text-sm justify-center",
-            location.pathname === "/agent"
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+        {/* Strategies Section */}
+        <div className="mt-1">
+          <button
+            onClick={() => setStrategiesExpanded(!strategiesExpanded)}
+            className={cn(
+              "flex w-full items-center px-3 py-2 rounded-md font-medium transition-all",
+              isHovered ? "text-base justify-between" : "text-sm justify-center",
+              isStrategyPath && !isCreateStrategyPath
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+            title={!isHovered ? "Strategies" : undefined}
+          >
+            {isHovered ? (
+              <>
+                <span className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  Strategies
+                </span>
+                {strategiesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </>
+            ) : (
+              <Bot className="h-5 w-5" />
+            )}
+          </button>
+
+          {strategiesExpanded && isHovered && (
+            <div className="ml-4 mt-1 space-y-1">
+              {strategies.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">No strategies yet</div>
+              ) : (
+                strategies.map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/strategy/${s.id}`}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium transition-all",
+                      currentStrategyId === s.id
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                    title={s.instruction}
+                  >
+                    <StatusDot
+                      color={STRATEGY_STATUS_COLORS[s.status] || "bg-gray-400"}
+                      animate={s.status === "running"}
+                    />
+                    <span className="truncate flex-1">{s.name}</span>
+                  </Link>
+                ))
+              )}
+            </div>
           )}
-          title={!isHovered ? "AI Agent" : undefined}
-        >
-          {isHovered ? "AI Agent" : <Bot className="h-5 w-5" />}
-        </Link>
+        </div>
 
         {/* Jobs Section */}
         <div className="mt-1">
@@ -194,7 +262,7 @@ function Sidebar() {
                     : job.status === "failed"
                     ? "Failed"
                     : job.status === "running"
-                    ? "Running…"
+                    ? "Running..."
                     : "Queued"
                   return (
                     <Link
@@ -206,7 +274,7 @@ function Sidebar() {
                       )}
                       title={`Job ${job.id}`}
                     >
-                      <JobStatusDot status={job.status} animate={isActive} />
+                      <StatusDot color={JOB_STATUS_COLORS[job.status]} animate={isActive} />
                       <span className="truncate flex-1">{label}</span>
                       <span className="text-xs text-muted-foreground/60 flex-shrink-0">
                         {new Date(job.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -219,10 +287,25 @@ function Sidebar() {
           )}
         </div>
 
+        {/* Create Backtest */}
+        <Link
+          to="/backtest/create"
+          className={cn(
+            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
+            isHovered ? "text-base" : "text-sm justify-center",
+            isCreatePath
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          )}
+          title={!isHovered ? "Create Backtest" : undefined}
+        >
+          {isHovered ? "Create Backtest" : <Plus className="h-5 w-5" />}
+        </Link>
+
         {/* Backtest Results Section */}
         <div className="mt-1">
           <button
-            onClick={() => setManuallyExpanded(!manuallyExpanded)}
+            onClick={() => setBacktestsExpanded(!backtestsExpanded)}
             className={cn(
               "flex w-full items-center justify-between px-3 py-2 rounded-md font-medium transition-all",
               isHovered ? "text-base" : "text-sm justify-center",
@@ -230,12 +313,12 @@ function Sidebar() {
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
-            title={!isHovered ? "Backtest" : undefined}
+            title={!isHovered ? "Backtests" : undefined}
           >
             {isHovered ? (
               <>
                 <span>Backtests</span>
-                {isBacktestExpanded ? (
+                {backtestsExpanded ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
                   <ChevronRight className="h-4 w-4" />
@@ -245,7 +328,7 @@ function Sidebar() {
               <FolderTree className="h-5 w-5" />
             )}
           </button>
-          {isBacktestExpanded && isHovered && (
+          {backtestsExpanded && isHovered && (
             <div className="ml-4 mt-1 space-y-1">
               {loadingBacktests ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
@@ -307,12 +390,13 @@ function App() {
         {/* Main Content Area */}
         <main className="flex-1 overflow-auto ml-16">
           <Routes>
-            <Route path="/" element={<Navigate to="/analysis" replace />} />
+            <Route path="/" element={<Navigate to="/strategy/create" replace />} />
+            <Route path="/strategy/create" element={<CreateStrategyView />} />
+            <Route path="/strategy/:id" element={<StrategyView />} />
             <Route path="/analysis" element={<AnalysisView />} />
             <Route path="/analysis/:date" element={<AnalysisView />} />
             <Route path="/backtest" element={<BacktestView />} />
             <Route path="/backtest/create" element={<CreateBacktestView />} />
-            <Route path="/agent" element={<AgentView />} />
             <Route path="/backtest/job/:jobId" element={<BacktestJobView />} />
             <Route path="/backtest/:id" element={<BacktestView />} />
           </Routes>

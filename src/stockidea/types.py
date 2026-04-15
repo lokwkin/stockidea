@@ -169,3 +169,59 @@ class BacktestJob(BaseModel):
 class EnqueuedJob(BaseModel):
     job_id: _uuid.UUID
     status: str
+
+
+# =============================================================================
+# Strategy Models
+# =============================================================================
+
+
+class StrategyCreate(BaseModel):
+    instruction: str
+    model: str = "claude-sonnet-4-20250514"
+    date_start: date | None = None
+    date_end: date | None = None
+
+
+class StrategyMessage(BaseModel):
+    id: _uuid.UUID
+    role: str  # "user" | "assistant"
+    content_json: str  # JSON string
+    created_at: datetime
+    sequence: int
+
+
+class StrategySummary(BaseModel):
+    id: _uuid.UUID
+    name: str
+    instruction: str
+    model: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class StrategyBacktestSummary(BaseModel):
+    id: _uuid.UUID
+    rule: str
+    profit_pct: float
+    baseline_profit_pct: float
+    scores: BacktestScores | None = None
+    created_at: datetime
+
+
+class StrategyDetail(BaseModel):
+    id: _uuid.UUID
+    name: str
+    instruction: str
+    model: str
+    date_start: date
+    date_end: date
+    status: str
+    final_rule: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    messages: list[StrategyMessage] = []
+    backtests: list[StrategyBacktestSummary] = []
+    llm_history_json: str | None = None

@@ -3,12 +3,53 @@
 import json
 import logging
 from datetime import date, timedelta
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from stockidea.agent.tools import ANTHROPIC_TOOLS, OPENAI_TOOLS, execute_tool
 from stockidea.constants import ANTHROPIC_API_KEY, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_anthropic_messages(messages: list[dict]) -> str:
+    """Serialize Anthropic message history to JSON for persistence.
+
+    Anthropic messages may contain content block objects that need special handling.
+    """
+
+    def _serialize_content(content: Any) -> Any:
+        if isinstance(content, list):
+            result = []
+            for item in content:
+                if hasattr(item, "model_dump"):
+                    result.append(item.model_dump())
+                elif hasattr(item, "to_dict"):
+                    result.append(item.to_dict())
+                elif isinstance(item, dict):
+                    result.append(item)
+                else:
+                    # Try converting to dict via __dict__, fallback to str
+                    try:
+                        result.append(
+                            {
+                                k: v
+                                for k, v in item.__dict__.items()
+                                if not k.startswith("_")
+                            }
+                        )
+                    except AttributeError:
+                        result.append(str(item))
+            return result
+        return content
+
+    serializable = []
+    for msg in messages:
+        entry = dict(msg)
+        if "content" in entry:
+            entry["content"] = _serialize_content(entry["content"])
+        serializable.append(entry)
+    return json.dumps(serializable)
+
 
 SYSTEM_PROMPT = """\
 You are a quantitative strategy designer. Your job is to help the user design \
@@ -59,7 +100,7 @@ to inspect why a particular stock was or wasn't selected, or to understand its c
    - Aim for Sharpe > 1.0, reasonable drawdown, win rate > 50%.
 7. Iterate: adjust thresholds, add/remove conditions, try different parameters.
 8. Save your notes with `write_strategy_notes` to track your reasoning and iterations.
-9. Run 2-5 iterations to find a good balance.
+9. Run 5-10 backtest iterations to thoroughly explore the design space.
 10. Present your final recommendation with the rule and key performance metrics.
 
 ## Guidelines
@@ -95,7 +136,10 @@ def _detect_provider(model: str) -> str:
 
 
 async def _run_anthropic_stream(
-    instruction: str, model: str
+    instruction: str,
+    model: str,
+    strategy_id: str,
+    history: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Run agent loop using Anthropic API."""
     import anthropic
@@ -108,7 +152,11 @@ async def _run_anthropic_stream(
         return
 
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    messages: list[dict] = [{"role": "user", "content": instruction}]
+
+    if history:
+        messages: list[dict] = history + [{"role": "user", "content": instruction}]
+    else:
+        messages = [{"role": "user", "content": instruction}]
 
     for iteration in range(20):
         logger.info(f"Agent iteration {iteration + 1} (anthropic/{model})")
@@ -135,7 +183,12 @@ async def _run_anthropic_stream(
         tool_use_blocks = [b for b in assistant_content if b.type == "tool_use"]
 
         if not tool_use_blocks:
-            yield {"event": "done", "data": {}}
+            yield {
+                "event": "done",
+                "data": {
+                    "llm_history": _serialize_anthropic_messages(messages),
+                },
+            }
             return
 
         tool_results = []
@@ -144,7 +197,9 @@ async def _run_anthropic_stream(
                 "event": "tool_call",
                 "data": {"name": tool_block.name, "input": tool_block.input},
             }
-            result_str = await execute_tool(tool_block.name, tool_block.input)
+            result_str = await execute_tool(
+                tool_block.name, tool_block.input, strategy_id=strategy_id
+            )
             yield {
                 "event": "tool_result",
                 "data": {"name": tool_block.name, "result": json.loads(result_str)},
@@ -160,10 +215,18 @@ async def _run_anthropic_stream(
         messages.append({"role": "user", "content": tool_results})
 
         if response.stop_reason == "end_turn":
-            yield {"event": "done", "data": {}}
+            yield {
+                "event": "done",
+                "data": {
+                    "llm_history": _serialize_anthropic_messages(messages),
+                },
+            }
             return
 
-    yield {"event": "done", "data": {}}
+    yield {
+        "event": "done",
+        "data": {"llm_history": _serialize_anthropic_messages(messages)},
+    }
 
 
 # =============================================================================
@@ -172,7 +235,10 @@ async def _run_anthropic_stream(
 
 
 async def _run_openai_stream(
-    instruction: str, model: str
+    instruction: str,
+    model: str,
+    strategy_id: str,
+    history: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Run agent loop using OpenAI API."""
     from openai import AsyncOpenAI
@@ -185,10 +251,14 @@ async def _run_openai_stream(
         return
 
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": instruction},
-    ]
+
+    if history:
+        messages: list[dict] = history + [{"role": "user", "content": instruction}]
+    else:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": instruction},
+        ]
 
     for iteration in range(20):
         logger.info(f"Agent iteration {iteration + 1} (openai/{model})")
@@ -213,7 +283,10 @@ async def _run_openai_stream(
 
         # Check for tool calls
         if not message.tool_calls:
-            yield {"event": "done", "data": {}}
+            yield {
+                "event": "done",
+                "data": {"llm_history": json.dumps(messages)},
+            }
             return
 
         # Append assistant message (with tool_calls) to history
@@ -228,7 +301,9 @@ async def _run_openai_stream(
                 "event": "tool_call",
                 "data": {"name": func.name, "input": tool_input},
             }
-            result_str = await execute_tool(func.name, tool_input)
+            result_str = await execute_tool(
+                func.name, tool_input, strategy_id=strategy_id
+            )
             yield {
                 "event": "tool_result",
                 "data": {"name": func.name, "result": json.loads(result_str)},
@@ -243,10 +318,13 @@ async def _run_openai_stream(
             )
 
         if choice.finish_reason == "stop":
-            yield {"event": "done", "data": {}}
+            yield {
+                "event": "done",
+                "data": {"llm_history": json.dumps(messages)},
+            }
             return
 
-    yield {"event": "done", "data": {}}
+    yield {"event": "done", "data": {"llm_history": json.dumps(messages)}}
 
 
 # =============================================================================
@@ -261,7 +339,7 @@ def _build_instruction(
 ) -> str:
     """Prepend backtest date range context to the user instruction."""
     end = date_end or date.today()
-    start = date_start or (end - timedelta(days=365))
+    start = date_start or (end - timedelta(days=365 * 3))
     return f"Backtest period: {start.isoformat()} to {end.isoformat()}\n\n{instruction}"
 
 
@@ -270,6 +348,9 @@ async def run_agent_stream(
     model: str = DEFAULT_MODEL,
     date_start: date | None = None,
     date_end: date | None = None,
+    history: list[dict] | None = None,
+    *,
+    strategy_id: str,
 ) -> AsyncGenerator[dict, None]:
     """Run the strategy agent, yielding SSE-compatible event dicts.
 
@@ -277,8 +358,14 @@ async def run_agent_stream(
     - "claude-*" → Anthropic
     - "gpt-*", "o1*", "o3*", "o4*" → OpenAI
 
+    Args:
+        history: Prior LLM messages for multi-turn continuation.
+        strategy_id: Strategy UUID string for linking backtests.
+
     Yields dicts with keys: {"event": str, "data": dict}
     Event types: text, tool_call, tool_result, done, error
+    The "done" event includes "llm_history" — the serialized LLM messages
+    for persistence and future continuation.
     """
     provider = _detect_provider(model)
     logger.info(f"Using provider: {provider}, model: {model}")
@@ -286,29 +373,12 @@ async def run_agent_stream(
     full_instruction = _build_instruction(instruction, date_start, date_end)
 
     if provider == "openai":
-        async for event in _run_openai_stream(full_instruction, model):
+        async for event in _run_openai_stream(
+            full_instruction, model, history=history, strategy_id=strategy_id
+        ):
             yield event
     else:
-        async for event in _run_anthropic_stream(full_instruction, model):
+        async for event in _run_anthropic_stream(
+            full_instruction, model, history=history, strategy_id=strategy_id
+        ):
             yield event
-
-
-async def run_agent(
-    instruction: str,
-    model: str = DEFAULT_MODEL,
-    date_start: date | None = None,
-    date_end: date | None = None,
-) -> str:
-    """Run the strategy agent (non-streaming, for CLI use).
-
-    Returns the agent's final text response.
-    """
-    texts: list[str] = []
-    async for event in run_agent_stream(instruction, model, date_start, date_end):
-        if event["event"] == "text":
-            content = event["data"]["content"]
-            texts.append(content)
-            print(content)
-        elif event["event"] == "error":
-            raise ValueError(event["data"]["message"])
-    return "\n".join(texts)

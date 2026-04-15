@@ -106,11 +106,82 @@ class DBConstituentMetadata(Base):
         )
 
 
+class DBStrategy(Base):
+    __tablename__ = "strategies"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    date_start: Mapped[date] = mapped_column(Date, nullable=False)
+    date_end: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="idle", index=True
+    )
+    final_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now, onupdate=datetime.now
+    )
+
+    messages: Mapped[list["DBStrategyMessage"]] = relationship(
+        "DBStrategyMessage",
+        back_populates="strategy",
+        cascade="all, delete-orphan",
+        order_by="DBStrategyMessage.sequence",
+    )
+    backtests: Mapped[list["DBBacktest"]] = relationship(
+        "DBBacktest", back_populates="strategy"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Strategy(id={self.id}, name={self.name}, status={self.status})>"
+
+
+class DBStrategyMessage(Base):
+    __tablename__ = "strategy_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    strategy_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("strategies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    strategy: Mapped["DBStrategy"] = relationship(
+        "DBStrategy", back_populates="messages"
+    )
+
+    def __repr__(self) -> str:
+        return f"<StrategyMessage(id={self.id}, role={self.role}, seq={self.sequence})>"
+
+
 class DBBacktest(Base):
     __tablename__ = "backtests"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    strategy_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID,
+        ForeignKey("strategies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     initial_balance: Mapped[float] = mapped_column(Float, nullable=False)
     final_balance: Mapped[float] = mapped_column(Float, nullable=False)
@@ -127,10 +198,15 @@ class DBBacktest(Base):
     rebalance_interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     rule: Mapped[str] = mapped_column(Text, nullable=False)
     index: Mapped[str] = mapped_column(String, nullable=False)
+    # Scores stored inline
+    scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now, index=True
     )
 
+    strategy: Mapped["DBStrategy | None"] = relationship(
+        "DBStrategy", back_populates="backtests"
+    )
     backtest_rebalances: Mapped[list["DBBacktestRebalance"]] = relationship(
         "DBBacktestRebalance", back_populates="backtest", cascade="all, delete-orphan"
     )
@@ -163,7 +239,9 @@ class DBBacktestRebalance(Base):
         "DBBacktest", back_populates="backtest_rebalances"
     )
     backtest_investments: Mapped[list["DBBacktestInvestment"]] = relationship(
-        "DBBacktestInvestment", back_populates="backtest_rebalance", cascade="all, delete-orphan"
+        "DBBacktestInvestment",
+        back_populates="backtest_rebalance",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
