@@ -1,6 +1,6 @@
 # Stockidea
 
-Stockidea is a platform for designing and backtesting systematic stock strategies using transparent, composable signals. Users can build rule-based portfolios with momentum, trend, volatility, and stability indicators while evaluating performance under realistic rebalancing and risk constraints. An AI agent can also translate natural language strategy ideas into concrete rules and iteratively optimize them through backtesting.
+Stockidea is a platform for designing and backtesting systematic stock strategies using transparent, composable signals. Users describe strategy ideas in natural language, and an AI agent translates them into concrete rules, iteratively backtests and refines them, and presents the best results. Users can then send follow-up instructions to further tune the strategy in a multi-turn conversation. The platform also supports manual rule-based portfolio construction with momentum, trend, volatility, and stability indicators.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 
 ## Dashboard
 
-The frontend dashboard allows users to define custom strategy configurations, run backtests, and inspect detailed analytics for each rebalance action at every point in time. An AI agent chat interface lets users describe strategies in plain English and have them automatically translated, backtested, and refined.
+The frontend dashboard is organized around **Strategy Ideas**. Users create a strategy with a natural language instruction, and the AI agent designs, backtests, and iterates on it autonomously. Users can send follow-up instructions to refine the strategy further. All backtests from a strategy are linked and displayed in a comparison table for easy iteration tracking.
 
 <img src="docs/dashboard.gif" alt="Dashboard" width="60%">
 
@@ -84,20 +84,22 @@ uv run python -m stockidea.cli backtest \
 
 ### Agent
 
-An AI-powered strategy designer that sits on top of the other three components. Given a natural-language instruction (e.g. "I want a momentum strategy that avoids big drops"), the agent:
+An AI-powered strategy designer that sits on top of the other three components. The workflow is **strategy-centric and conversational**:
 
-1. Discovers available indicator fields
-2. Translates the idea into a concrete rule expression
-3. Runs a backtest
-4. Analyzes the performance scores
-5. Iterates 2-5 times, adjusting thresholds and conditions to improve the strategy
-6. Presents the final recommendation with its performance summary
+1. The user creates a **Strategy Idea** with a natural language instruction (e.g. "I want a momentum strategy that avoids big drops")
+2. The agent discovers available indicator fields and translates the idea into a concrete rule expression
+3. The agent runs **5-10 backtest iterations** autonomously, adjusting thresholds and conditions based on performance scores and diagnostics
+4. The agent presents the final recommendation with its performance summary
+5. The user can send **follow-up instructions** (e.g. "try tighter drawdown", "focus on tech stocks") to trigger another round of agent fine-tuning with full conversation context
 
-Supports both Anthropic Claude and OpenAI GPT models (auto-detected from model name). On the web dashboard, the agent streams its reasoning, tool calls, and results in real time via SSE.
+All backtests from a strategy are linked and displayed in a comparison table. The agent saves strategy notes to track reasoning and iteration history. Both the CLI and web dashboard create persistent strategies in the database.
+
+Supports both Anthropic Claude and OpenAI GPT models (auto-detected from model name). On the web dashboard, the agent streams its reasoning, tool calls, and results in real time via SSE. Default backtest period is 3 years.
 
 ```bash
+# Create a strategy and run the agent (saves to DB)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
-uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-4o   # use OpenAI
+uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI
 ```
 
 ## Setup
@@ -119,7 +121,13 @@ Required variables:
 docker-compose up -d
 ```
 
-3. Start the frontend dev server:
+3. Run database migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+4. Start the frontend dev server:
 
 ```bash
 cd frontend && npm run dev

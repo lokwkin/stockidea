@@ -93,25 +93,41 @@ to inspect why a particular stock was or wasn't selected, or to understand its c
 3. Based on the user's idea, design an initial rule.
 4. Use `preview_filter` on a recent date to check the rule produces a reasonable number of matches.
 5. Run a backtest with `run_backtest` using the provided date range.
-6. Analyze the scores AND diagnostics:
-   - Check `worst_periods` — if losses cluster in specific dates, consider adding volatility guards.
-   - Check `cash_periods` — if too many, the rule is too restrictive.
-   - Check `top_held_symbols` — if one stock dominates, the strategy may lack diversification.
-   - Aim for Sharpe > 1.0, reasonable drawdown, win rate > 50%.
-7. Iterate: adjust thresholds, add/remove conditions, try different parameters.
-8. Save your notes with `write_strategy_notes` to track your reasoning and iterations.
-9. Run 5-10 backtest iterations to thoroughly explore the design space.
-10. Present your final recommendation with the rule and key performance metrics.
+6. **After each backtest, do three things before moving on:**
+   a. **Analyze** the scores AND diagnostics carefully:
+      - Check `worst_periods` — if losses cluster in specific dates, consider adding volatility guards.
+      - Check `cash_periods` — if too many, the rule is too restrictive.
+      - Check `top_held_symbols` — if one stock dominates, the strategy may lack diversification.
+      - Aim for Sharpe > 1.0, reasonable drawdown, win rate > 50%.
+      - Compare against prior iterations: what improved, what got worse, and why?
+   b. **Save notes** by calling `write_strategy_notes` — append your observations for this \
+iteration: the rule tested, key metrics, what was good, what was bad, and your hypothesis \
+for the next change. Build up a running log across iterations so you have a complete record.
+   c. **Form a hypothesis** for what to change next and explain your reasoning \
+before running the next backtest (e.g. "Sharpe dropped when I added max_drawdown — \
+the filter is too restrictive, causing cash periods. I'll loosen it from 20 to 25.").
+7. Run 5-10 backtest iterations per round. Each iteration should be driven by your \
+observations from the previous result — do not batch changes blindly.
+8. After completing your iterations for this round, present your recommendation: \
+the best-performing rule, key performance metrics, and any insights or trade-offs worth noting \
+(e.g. "loosening drawdown improved returns but increased volatility"). \
+Then stop and wait for the user's follow-up instruction — they may ask you to explore a \
+different direction, tighten specific constraints, or run another round of iterations based \
+on what they see in the results.
 
 ## Guidelines
 
-- Be systematic: change one thing at a time so you can understand what helps.
+- **Think before each iteration**: after every backtest result, explain what you observed, \
+what you think caused it, and what specific change you will try next. Never run back-to-back \
+backtests without analyzing the previous result first.
+- Be systematic: change one thing at a time so you can isolate what helps and what hurts.
 - Consider risk: a high-return strategy with huge drawdowns is not good.
 - Use `preview_filter` to calibrate before committing to expensive backtests.
 - Use diagnostics to understand WHY a strategy fails, not just that it does.
 - Use the scoring metrics to make objective decisions, not just total return.
-- Explain your reasoning to the user after each iteration.
 - If a rule produces no results (empty portfolio), loosen the constraints.
+- Call `write_strategy_notes` after every single backtest, not just at the end. \
+Build a running log so the full iteration history is always saved.
 """
 
 # Known provider prefixes for auto-detection

@@ -15,6 +15,11 @@ Backend only (without Docker):
 uv run uvicorn stockidea.api:app --reload
 ```
 
+Database migrations (after model changes):
+```bash
+uv run alembic upgrade head
+```
+
 ## Common Commands
 
 ```bash
@@ -29,9 +34,9 @@ uv run python -m stockidea.cli compute -d 2026-01-20
 uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
 uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_13w_pct > 10'
 
-# Backend — AI Agent
+# Backend — AI Agent (creates a strategy in DB, runs 5-10 backtest iterations)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
-uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-4o   # use OpenAI instead of Claude
+uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI instead of Claude
 
 # Type checking (run after every code change)
 uv run mypy src/stockidea
@@ -49,16 +54,14 @@ There are no automated tests.
 
 The ultimate goal is an **AI-driven strategy design and optimization platform**:
 
-1. User provides a high-level direction (e.g. "I want a strong momentum strategy")
-2. An LLM agent translates that into a concrete rule + backtest config
-3. The agent runs backtests iteratively, reads results, adjusts rule/params, and repeats
-4. The system surfaces the best-performing strategy with guardrails against overfitting
-
-The existing backtester + rule engine is the foundation — the AI agent layer sits on top of it, using `POST /backtest` as its core tool.
+1. User creates a **Strategy Idea** with a natural language instruction
+2. An LLM agent translates that into concrete rules and runs 5-10 backtest iterations autonomously
+3. The user can send **follow-up instructions** (multi-turn conversation) to refine the strategy
+4. The agent resumes with full conversation context for each follow-up round
+5. All backtests are linked to the strategy for comparison and iteration tracking
 
 ### Current gaps toward this vision
 - **No out-of-sample split** — train/test separation needed to prevent overfitting
-- **No strategy versioning** — no concept of a named strategy with iteration history and cross-run comparison
 - **Limited signal coverage** — current indicators cover momentum/trend only; broader strategy types (volatility, fundamentals) need more indicator fields
 
 ## Architecture
@@ -70,7 +73,7 @@ FastAPI app with an **in-process async worker loop** for long-running backtests:
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `api.py` — All HTTP routes + `lifespan` context that starts the background worker and auto-refreshes data on startup
-- `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`); `StockIndex` enum covers SP500 and NASDAQ only
+- `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`) into callables using `simpleeval`
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
   - `datasource/service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
@@ -83,22 +86,25 @@ FastAPI app with an **in-process async worker loop** for long-running backtests:
   - `backtest/backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
   - `backtest/scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
-  - `agent/agent.py` — Agentic loop with auto-detection of provider from model name; streams SSE events
-  - `agent/tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields); dual format for Anthropic/OpenAI
+  - `agent/agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
+  - `agent/tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
 
-**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests. No file-based caching. Freshness is checked via metadata tables with 1-day TTL.
+**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
 
 **Job queue flow**: `POST /backtest` saves a "pending" `backtest_job` row and returns a `job_id`. The worker loop (`_worker_loop` in `api.py`) polls the DB, claims pending jobs, runs `Backtester.backtest()`, and writes the result back. No external queue.
 
-**Database models** use a `DB{Entity}` naming prefix (`DBBacktest`, `DBBacktestJob`, etc.). Tables are created on startup — there are no migration files.
+**Strategy flow**: `POST /strategies` creates a `DBStrategy`, saves the user message as `DBStrategyMessage`, runs the agent (SSE stream), and persists agent events + LLM history on completion. `POST /strategies/{id}/messages` loads prior LLM history and resumes the agent for multi-turn conversation.
+
+**Database models** use a `DB{Entity}` naming prefix (`DBBacktest`, `DBBacktestJob`, `DBStrategy`, `DBStrategyMessage`, etc.).
 
 ### Frontend (`frontend/src/`)
 
 React 19 + TypeScript SPA with React Router v7:
 
 - Views (`*View.tsx`) are full-page route components; reusable pieces live in `components/`
-- `App.tsx` owns routing and the `Sidebar`, which polls `GET /api/jobs` adaptively (3 s when a job is active, 15 s otherwise)
-- `AgentView.tsx` — Chat-like UI with SSE streaming for the AI agent
+- `App.tsx` owns routing and the `Sidebar` with strategy list (status indicators), jobs, backtests, and trend data sections
+- `CreateStrategyView.tsx` — Strategy creation form (instruction, model selector, date range)
+- `StrategyView.tsx` — Multi-turn chat UI with SSE streaming, backtest comparison table, follow-up input
 - API calls always use relative `/api/...` paths — Vite proxies them to the backend in dev
 - No external state management; all state is local React hooks
 
@@ -107,6 +113,8 @@ React 19 + TypeScript SPA with React Router v7:
 **Async-first Python**: all I/O uses `async def` + `asyncpg`/`httpx`; DB sessions via `async with conn.get_db_session() as db_session:`.
 
 **Constituent lookups require db_session**: `datasource_service.get_constituent_at(db_session, index, target_date)` — always called within a `get_db_session()` context.
+
+**Multi-turn agent conversation**: LLM message history is serialized and persisted on `DBStrategy.llm_history_json`. On follow-up messages, the history is deserialized and passed to `run_agent_stream(history=...)` so the agent continues with full context. Anthropic messages require special serialization (`_serialize_anthropic_messages`) due to content block objects.
 
 **React fetch with cancellation**:
 ```ts
