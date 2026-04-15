@@ -82,7 +82,8 @@ class Backtester:
 
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
-    ) -> BacktestInvestment:
+    ) -> tuple[BacktestInvestment, float]:
+        """Invest in a stock. Returns (investment, uninvested_cash)."""
         buy_stock_price = (
             await datasource_service.get_stock_price_at_date(
                 self.db_session, symbol, buy_date.date(), nearest=True
@@ -94,6 +95,7 @@ class Backtester:
             )
         ).adj_close
         position = floor(amount / buy_stock_price)
+        uninvested = amount - position * buy_stock_price
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
 
@@ -107,11 +109,12 @@ class Backtester:
             profit_pct=profit_pct,
             profit=profit,
         )
-        return investment
+        return investment, uninvested
 
     async def invest_baseline(
         self, buy_date: datetime, sell_date: datetime, amount: float
     ) -> BacktestInvestment:
+        """Invest in the baseline index using fractional shares (benchmark, not real trade)."""
         baseline_index_price_buy = (
             await datasource_service.get_index_price_at_date(
                 self.db_session, self.baseline_index, buy_date.date(), nearest=True
@@ -122,7 +125,8 @@ class Backtester:
                 self.db_session, self.baseline_index, sell_date.date(), nearest=True
             )
         ).adj_close
-        position = floor(amount / baseline_index_price_buy)
+        # Use fractional shares for baseline — it's a benchmark, not a real trade
+        position = amount / baseline_index_price_buy
         profit = (baseline_index_price_sell - baseline_index_price_buy) * position
         profit_pct = (
             (baseline_index_price_sell - baseline_index_price_buy)
@@ -152,8 +156,9 @@ class Backtester:
 
         while date_iter < self.date_end:
             end_date = date_iter + timedelta(weeks=self.rebalance_interval_weeks)
+            # Allow partial final period — clamp to date_end
             if end_date > self.date_end:
-                break
+                end_date = self.date_end
 
             logger.info(
                 f"=========== Rebalance on {date_iter.date()} (Balance: {balance}), hold til: {end_date.date()} ==========="
@@ -161,16 +166,17 @@ class Backtester:
             selected_stocks = await self.pick_stocks(date_iter)
 
             investments: list[BacktestInvestment] = []
-            for stock in selected_stocks:
-                # split in average
-                investment = await self.invest(
-                    stock.symbol, date_iter, end_date, balance / len(selected_stocks)
-                )
-                investments.append(investment)
+            if selected_stocks:
+                allocation = balance / len(selected_stocks)
+                for stock in selected_stocks:
+                    investment, _uninvested = await self.invest(
+                        stock.symbol, date_iter, end_date, allocation
+                    )
+                    investments.append(investment)
 
             # Calculate the profit of this rebalance
-            profit = sum(investment.profit for investment in investments)
-            profit_pct = profit / balance * 100
+            profit = sum(inv.profit for inv in investments)
+            profit_pct = (profit / balance * 100) if balance > 0 else 0.0
 
             # Invest in the baseline index
             baseline_investment = await self.invest_baseline(
