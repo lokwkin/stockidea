@@ -3,7 +3,8 @@
     "allow": [
       "Bash(uv sync:*)",
       "Bash(uv run:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(find *)"
     ]
   }
 }

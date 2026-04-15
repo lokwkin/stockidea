@@ -8,7 +8,7 @@ from datetime import datetime
 # Import config to initialize logging
 import stockidea.config  # noqa: F401
 from stockidea.metrics import service as metrics_service
-from stockidea.datasource import constituent
+from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import (
     save_simulation_result as save_simulation_to_db,
@@ -30,7 +30,7 @@ def cli():
 async def _analyze(date: datetime, index: StockIndex) -> list[StockMetrics]:
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
-        symbols = await constituent.get_constituent_at(db_session, index, date.date())
+        symbols = await datasource_service.get_constituent_at(db_session, index, date.date())
 
         # Analyze the stock prices and save to database
         stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
@@ -235,8 +235,6 @@ def simulate(
     help="Refresh all market data: constituents, index prices, and stock prices for SP500 and NASDAQ.",
 )
 def fetch_data():
-    from stockidea.datasource import service as datasource_service
-
     click.echo("Refreshing all market data (SP500 + NASDAQ)...")
     asyncio.run(datasource_service.refresh_all())
     click.echo("Done")
@@ -254,8 +252,6 @@ def fetch_data():
     help="Stock index",
 )
 def fetch_prices(index: str):
-    from stockidea.datasource import service as datasource_service
-
     stock_index = StockIndex(index)
     click.echo(f"Fetching stock prices for {stock_index.value} constituents")
 
@@ -278,8 +274,6 @@ def fetch_prices(index: str):
     help="Stock index",
 )
 def fetch_index(index: str):
-    from stockidea.datasource import service as datasource_service
-
     stock_index = StockIndex(index)
     click.echo(f"Fetching index prices for {stock_index.value}")
 
@@ -303,8 +297,6 @@ def fetch_index(index: str):
     help="Stock index",
 )
 def fetch_constituents(index: str):
-    from stockidea.datasource import service as datasource_service
-
     stock_index = StockIndex(index)
     click.echo(f"Fetching constituent changes for {stock_index.value}")
 

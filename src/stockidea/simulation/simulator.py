@@ -6,7 +6,7 @@ from typing import Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockidea.metrics import service as metrics_service
-from stockidea.datasource import constituent, market_data
+from stockidea.datasource import service as datasource_service
 from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.simulation.scoring import compute_scores
@@ -57,7 +57,7 @@ class Simulator:
 
     async def pick_stocks(self, today: datetime) -> list[StockMetrics]:
         # Get the symbols of the constituent
-        symbols = await constituent.get_constituent_at(
+        symbols = await datasource_service.get_constituent_at(
             self.db_session, self.from_index, today.date()
         )
 
@@ -84,12 +84,12 @@ class Simulator:
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
         buy_stock_price = (
-            await market_data.get_stock_price_at_date(
+            await datasource_service.get_stock_price_at_date(
                 self.db_session, symbol, buy_date.date(), nearest=True
             )
         ).adj_close
         sell_stock_price = (
-            await market_data.get_stock_price_at_date(
+            await datasource_service.get_stock_price_at_date(
                 self.db_session, symbol, sell_date.date(), nearest=True
             )
         ).adj_close
@@ -113,12 +113,12 @@ class Simulator:
         self, buy_date: datetime, sell_date: datetime, amount: float
     ) -> Investment:
         baseline_index_price_buy = (
-            await market_data.get_index_price_at_date(
+            await datasource_service.get_index_price_at_date(
                 self.db_session, self.baseline_index, buy_date.date(), nearest=True
             )
         ).adj_close
         baseline_index_price_sell = (
-            await market_data.get_index_price_at_date(
+            await datasource_service.get_index_price_at_date(
                 self.db_session, self.baseline_index, sell_date.date(), nearest=True
             )
         ).adj_close

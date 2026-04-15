@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from stockidea.metrics import calculator
-from stockidea.datasource import market_data
+from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import queries
 from stockidea.types import StockMetrics
 
@@ -49,7 +49,7 @@ async def get_stock_metrics_batch(
                 db_session, symbol, metrics_date.date()
             )
             if not stock_metrics and compute_if_not_exists:
-                prices = await market_data.get_stock_price_history(
+                prices = await datasource_service.get_stock_price_history(
                     db_session, symbol, from_date, to_date
                 )
 

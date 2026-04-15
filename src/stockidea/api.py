@@ -18,7 +18,7 @@ from stockidea.metrics import (
 from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
 from stockidea.types import EnqueuedJob, SimulationConfig, SimulationJob, StockIndex
-from stockidea.datasource import constituent, market_data
+from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn, queries
 from typing import Optional
 
@@ -80,8 +80,6 @@ async def _worker_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Auto-refresh market data on startup (runs in background, non-blocking)
-    from stockidea.datasource import service as datasource_service
-
     refresh_task = asyncio.create_task(datasource_service.refresh_all())
     refresh_task.add_done_callback(
         lambda t: (
@@ -151,7 +149,7 @@ async def get_analysis(
 
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
-        symbols = await constituent.get_constituent_at(
+        symbols = await datasource_service.get_constituent_at(
             db_session, index, metrics_date.date()
         )
         stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
@@ -228,7 +226,7 @@ async def get_snp500_prices() -> list[dict]:
     """
     async with conn.get_db_session() as db_session:
         try:
-            prices = await market_data.get_index_prices(
+            prices = await datasource_service.get_index_prices(
                 db_session,
                 StockIndex.SP500,
                 datetime.now() - timedelta(weeks=700),
