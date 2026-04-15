@@ -16,14 +16,14 @@ stock trading strategies by writing filter rules and backtesting them.
 ## How it works
 
 1. The user gives you a high-level idea (e.g. "I want a momentum strategy that avoids volatile stocks").
-2. You translate that into a concrete rule expression using available StockMetrics fields.
+2. You translate that into a concrete rule expression using available StockIndicators fields.
 3. You run a backtest simulation to evaluate the rule.
 4. You analyze the results (Sharpe ratio, drawdown, win rate, etc.) and iterate to improve the strategy.
 5. When satisfied, you present the final strategy with its performance summary.
 
 ## Rule syntax
 
-Rules are boolean expressions using StockMetrics field names with comparison operators and AND/OR logic.
+Rules are boolean expressions using StockIndicators field names with comparison operators and AND/OR logic.
 
 Examples:
 - `change_13w_pct > 10 AND max_drop_2w_pct < 15`
@@ -32,7 +32,7 @@ Examples:
 
 ## Workflow
 
-1. Start by calling `list_metric_fields` to see what metrics are available.
+1. Start by calling `list_indicator_fields` to see what indicators are available.
 2. Based on the user's idea, design an initial rule.
 3. Run a simulation with `run_simulation` to test it.
 4. Analyze the scores: aim for Sharpe > 1.0, reasonable drawdown, win rate > 50%.

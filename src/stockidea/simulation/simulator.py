@@ -5,7 +5,7 @@ from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stockidea.metrics import service as metrics_service
+from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
 from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
@@ -16,7 +16,7 @@ from stockidea.types import (
     SimulationConfig,
     SimulationResult,
     StockIndex,
-    StockMetrics,
+    StockIndicators,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class Simulator:
     date_end: datetime
     rebalance_interval_weeks: int
     max_stocks: int
-    rule_func: Callable[[StockMetrics], bool]
+    rule_func: Callable[[StockIndicators], bool]
     rule_raw: str
 
     def __init__(
@@ -39,7 +39,7 @@ class Simulator:
         rebalance_interval_weeks: int,
         date_start: datetime,
         date_end: datetime,
-        rule_func: Callable[[StockMetrics], bool],
+        rule_func: Callable[[StockIndicators], bool],
         rule_raw: str,
         from_index: StockIndex,
         baseline_index: StockIndex,
@@ -55,22 +55,22 @@ class Simulator:
         self.from_index = from_index
         self.baseline_index = baseline_index
 
-    async def pick_stocks(self, today: datetime) -> list[StockMetrics]:
+    async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
         # Get the symbols of the constituent
         symbols = await datasource_service.get_constituent_at(
             self.db_session, self.from_index, today.date()
         )
 
-        stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
+        stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
             self.db_session,
             symbols=symbols,
-            metrics_date=today,
+            indicators_date=today,
             back_period_weeks=52,
             compute_if_not_exists=True,
         )
 
-        filtered_stocks = metrics_service.apply_rule(
-            stock_metrics_batch, rule_func=self.rule_func
+        filtered_stocks = indicators_service.apply_rule(
+            stock_indicators_batch, rule_func=self.rule_func
         )
 
         selected_stocks = filtered_stocks[: self.max_stocks]

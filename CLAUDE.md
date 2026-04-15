@@ -59,7 +59,7 @@ The existing backtester + rule engine is the foundation — the AI agent layer s
 ### Current gaps toward this vision
 - **No out-of-sample split** — train/test separation needed to prevent overfitting
 - **No strategy versioning** — no concept of a named strategy with iteration history and cross-run comparison
-- **Limited signal coverage** — current metrics cover momentum/trend only; broader strategy types (volatility, fundamentals) need more metric fields
+- **Limited signal coverage** — current indicators cover momentum/trend only; broader strategy types (volatility, fundamentals) need more indicator fields
 
 ## Architecture
 
@@ -74,21 +74,19 @@ FastAPI app with an **in-process async worker loop** for long-running simulation
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`) into callables using `simpleeval`
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
   - `datasource/service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
-  - `datasource/constituent.py` — Reconstructs index membership at a given date from constituent change history stored in PostgreSQL
   - `datasource/fmp.py` — FMP API client; API key checked at call time (not import time)
-  - `datasource/market_data.py` — Price lookup helpers with lazy freshness checks
   - `datasource/database/` — SQLAlchemy models (`models.py`), queries (`queries.py`), connection pool (`conn.py`)
-- `metrics/` — Pre-computed stock metrics for strategy evaluation
-  - `metrics/service.py` — Fetches/computes metrics batches, applies rules
-  - `metrics/calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all metric fields, ranks by stability score
+- `indicators/` — Pre-computed stock indicators for strategy evaluation
+  - `indicators/service.py` — Fetches/computes indicator batches, applies rules
+  - `indicators/calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields, ranks by stability score
 - `simulation/` — Core backtest engine
   - `simulation/simulator.py` — Iterates rebalance dates, calls `pick_stocks()`, simulates trades
   - `simulation/scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from simulation results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
   - `agent/agent.py` — Agentic loop with auto-detection of provider from model name; streams SSE events
-  - `agent/tools.py` — Tool definitions and executors (run_simulation, list_metric_fields); dual format for Anthropic/OpenAI
+  - `agent/tools.py` — Tool definitions and executors (run_simulation, list_indicator_fields); dual format for Anthropic/OpenAI
 
-**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, metrics, simulations. No file-based caching. Freshness is checked via metadata tables with 1-day TTL.
+**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, simulations. No file-based caching. Freshness is checked via metadata tables with 1-day TTL.
 
 **Job queue flow**: `POST /simulate` saves a "pending" `simulation_job` row and returns a `job_id`. The worker loop (`_worker_loop` in `api.py`) polls the DB, claims pending jobs, runs `Simulator.simulate()`, and writes the result back. No external queue.
 
@@ -108,7 +106,7 @@ React 19 + TypeScript SPA with React Router v7:
 
 **Async-first Python**: all I/O uses `async def` + `asyncpg`/`httpx`; DB sessions via `async with conn.get_db_session() as db_session:`.
 
-**Constituent lookups require db_session**: `constituent.get_constituent_at(db_session, index, target_date)` — always called within a `get_db_session()` context.
+**Constituent lookups require db_session**: `datasource_service.get_constituent_at(db_session, index, target_date)` — always called within a `get_db_session()` context.
 
 **React fetch with cancellation**:
 ```ts

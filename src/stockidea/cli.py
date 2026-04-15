@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Import config to initialize logging
 import stockidea.config  # noqa: F401
-from stockidea.metrics import service as metrics_service
+from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import (
@@ -16,7 +16,7 @@ from stockidea.datasource.database.queries import (
 from stockidea.rule_engine import compile_rule
 
 from stockidea.simulation.simulator import Simulator
-from stockidea.types import StockIndex, StockMetrics
+from stockidea.types import StockIndex, StockIndicators
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +27,21 @@ def cli():
     pass
 
 
-async def _analyze(date: datetime, index: StockIndex) -> list[StockMetrics]:
+async def _analyze(date: datetime, index: StockIndex) -> list[StockIndicators]:
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
         symbols = await datasource_service.get_constituent_at(db_session, index, date.date())
 
-        # Analyze the stock prices and save to database
-        stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
+        # Compute stock indicators and save to database
+        stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
             db_session,
             symbols=symbols,
-            metrics_date=date,
+            indicators_date=date,
             back_period_weeks=52,
             compute_if_not_exists=True,
         )
 
-        return stock_metrics_batch
+        return stock_indicators_batch
 
 
 @cli.command("analyze", help="Analyze stock prices for a given date")
@@ -117,10 +117,10 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     except Exception as e:
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
-    stock_metrics_batch = asyncio.run(_analyze(date=date_parsed, index=stock_index))
+    stock_indicators_batch = asyncio.run(_analyze(date=date_parsed, index=stock_index))
 
-    filtered_stocks = metrics_service.apply_rule(
-        stock_metrics_batch=stock_metrics_batch, rule_func=rule_func
+    filtered_stocks = indicators_service.apply_rule(
+        indicators_batch=stock_indicators_batch, rule_func=rule_func
     )
 
     selected_stocks = filtered_stocks[:max_stocks]

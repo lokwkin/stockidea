@@ -146,7 +146,7 @@ function MessageBubble({ message, simulationIndex }: { message: ChatMessage; sim
         </div>
       )
     }
-    // Generic tool result (e.g. list_metric_fields)
+    // Generic tool result (e.g. list_indicator_fields)
     return (
       <div className="ml-9">
         <div className="rounded-lg border bg-card/50 p-3 text-xs text-muted-foreground">

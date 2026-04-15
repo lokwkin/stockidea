@@ -44,7 +44,7 @@ class ConstituentChange(BaseModel):
 # =============================================================================
 # Stock Metrics Model
 # =============================================================================
-class StockMetrics(BaseModel):
+class StockIndicators(BaseModel):
     symbol: str
     date: date
     total_weeks: int

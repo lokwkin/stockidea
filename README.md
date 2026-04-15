@@ -7,11 +7,11 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 - [Dashboard](#dashboard)
 - [Architecture](#architecture)
   - [Datasource](#datasource)
-  - [Metrics](#metrics)
+  - [Indicators](#indicators)
   - [Simulation](#simulation)
   - [Agent](#agent)
 - [Setup](#setup)
-- [Stock Metrics and Rule Syntax](#stock-metrics-and-rule-syntax)
+- [Stock Indicators and Rule Syntax](#stock-indicators-and-rule-syntax)
 - [Simulation Scores](#simulation-scores)
 - [License](#license)
 
@@ -25,7 +25,7 @@ The frontend dashboard allows users to define custom strategy configurations, ru
 
 <img src="docs/architecture.svg" alt="Architecture" width="100%">
 
-The project is organized around four core components: **Datasource**, **Metrics**, **Simulation**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
+The project is organized around four core components: **Datasource**, **Indicators**, **Simulation**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
 
 ### Datasource
 
@@ -43,9 +43,9 @@ uv run python -m stockidea.cli fetch-index --index SP500
 uv run python -m stockidea.cli fetch-prices --index SP500
 ```
 
-### Metrics
+### Indicators
 
-Computes per-stock performance metrics from raw price data. Daily prices are aggregated into Friday-close weekly series, then metrics are calculated across four categories:
+Computes per-stock performance indicators from raw price data. Daily prices are aggregated into Friday-close weekly series, then indicators are calculated across four categories:
 
 - **Returns** -- Point-to-point percentage changes at various horizons (1w, 2w, 4w, 13w, 26w, 1y)
 - **Trend** -- Linear and log regression slopes with R² values, both full-period and windowed (13w, 26w)
@@ -55,10 +55,10 @@ Computes per-stock performance metrics from raw price data. Daily prices are agg
 Stocks are ranked by a composite rising-stability score that balances trend strength with consistency. Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`). Rules support comparison operators and `AND`/`OR` logic.
 
 ```bash
-# Compute metrics for all SP500 constituents at a given date
+# Compute indicators for all SP500 constituents at a given date
 uv run python -m stockidea.cli analyze -d 2026-01-20
 
-# Compute metrics and filter by a rule
+# Compute indicators and filter by a rule
 uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
 ```
 
@@ -66,7 +66,7 @@ uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct 
 
 The backtest engine that evaluates a strategy over a historical date range. At each rebalance point, it:
 
-1. Computes metrics for all index constituents at that date
+1. Computes indicators for all index constituents at that date
 2. Filters stocks using the user's rule expression
 3. Ranks and selects the top N stocks
 4. Simulates buying equal-weight positions and selling at the next rebalance
@@ -86,7 +86,7 @@ uv run python -m stockidea.cli simulate \
 
 An AI-powered strategy designer that sits on top of the other three components. Given a natural-language instruction (e.g. "I want a momentum strategy that avoids big drops"), the agent:
 
-1. Discovers available metric fields
+1. Discovers available indicator fields
 2. Translates the idea into a concrete rule expression
 3. Runs a backtest simulation
 4. Analyzes the performance scores
@@ -125,9 +125,9 @@ docker-compose up -d
 cd frontend && npm run dev
 ```
 
-## Stock Metrics and Rule Syntax
+## Stock Indicators and Rule Syntax
 
-### Available Metric Fields
+### Available Indicator Fields
 
 | Field | Description |
 |-------|-------------|

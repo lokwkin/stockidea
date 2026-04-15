@@ -20,7 +20,7 @@ from stockidea.datasource.database.models import (
     DBSimulation,
     DBRebalanceHistory,
     DBInvestment,
-    DBStockMetrics,
+    DBStockIndicators,
     DBSimulationJob,
 )
 from stockidea.rule_engine import extract_involved_keys
@@ -34,7 +34,7 @@ from stockidea.types import (
     Investment,
     RebalanceHistory,
     SimulationConfig,
-    StockMetrics,
+    StockIndicators,
     SimulationJob,
 )
 
@@ -443,40 +443,37 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
 
 
 # =============================================================================
-# Stock Metrics Queries
+# Stock Indicator Queries
 # =============================================================================
 
 
-async def save_stock_metrics(
+async def save_stock_indicators(
     db_session: AsyncSession,
-    stock_metrics: StockMetrics,
-    metrics_date: date,
+    stock_indicators: StockIndicators,
+    indicators_date: date,
 ) -> None:
-    """
-    Save stock metrics to the database for a specific date.
-    """
-    logger.info(f"Saving metrics for {stock_metrics.symbol} on {metrics_date}")
+    """Save stock indicators to the database for a specific date."""
+    logger.info(f"Saving indicators for {stock_indicators.symbol} on {indicators_date}")
 
-    # Upsert stock metrics (single flat record)
-    record = DBStockMetrics(**stock_metrics.model_dump())
+    record = DBStockIndicators(**stock_indicators.model_dump())
     await db_session.merge(record)
 
     await db_session.commit()
 
 
-async def load_stock_metrics(
+async def load_stock_indicators(
     db_session: AsyncSession,
     symbol: str,
-    metrics_date: date,
-) -> StockMetrics | None:
-    """
-    Load stock metrics for a specific date from the database.
-    Returns a StockMetrics object, or None if no data found.
+    indicators_date: date,
+) -> StockIndicators | None:
+    """Load stock indicators for a specific date from the database.
+
+    Returns a StockIndicators object, or None if no data found.
     """
     stmt = (
-        select(DBStockMetrics)
-        .where(DBStockMetrics.symbol == symbol.upper())
-        .where(DBStockMetrics.date == metrics_date)
+        select(DBStockIndicators)
+        .where(DBStockIndicators.symbol == symbol.upper())
+        .where(DBStockIndicators.date == indicators_date)
     )
     result = await db_session.execute(stmt)
     record = result.scalar_one_or_none()
@@ -484,7 +481,7 @@ async def load_stock_metrics(
     if record is None:
         return None
 
-    return StockMetrics(
+    return StockIndicators(
         symbol=record.symbol,
         date=record.date,
         total_weeks=record.total_weeks,
@@ -513,8 +510,8 @@ async def load_stock_metrics(
     )
 
 
-async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
-    stmt = select(DBStockMetrics.date).distinct().order_by(DBStockMetrics.date.desc())
+async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
+    stmt = select(DBStockIndicators.date).distinct().order_by(DBStockIndicators.date.desc())
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]
 

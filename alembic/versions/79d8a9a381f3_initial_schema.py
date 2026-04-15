@@ -68,7 +68,7 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "stock_metrics",
+        "stock_indicators",
         sa.Column("symbol", sa.String(), nullable=False),
         sa.Column("date", sa.Date(), nullable=False),
         sa.Column("total_weeks", sa.Integer(), nullable=False),
@@ -101,8 +101,8 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("symbol", "date"),
     )
-    op.create_index("ix_stock_metrics_symbol", "stock_metrics", ["symbol"])
-    op.create_index("ix_stock_metrics_date", "stock_metrics", ["date"])
+    op.create_index("ix_stock_indicators_symbol", "stock_indicators", ["symbol"])
+    op.create_index("ix_stock_indicators_date", "stock_indicators", ["date"])
 
     op.create_table(
         "simulations",
@@ -210,7 +210,7 @@ def downgrade() -> None:
     op.drop_table("simulation_jobs")
     op.drop_table("rebalance_histories")
     op.drop_table("simulations")
-    op.drop_table("stock_metrics")
+    op.drop_table("stock_indicators")
     op.drop_table("stock_price_metadata")
     op.drop_table("stock_prices")
     op.drop_table("constituent_metadata")

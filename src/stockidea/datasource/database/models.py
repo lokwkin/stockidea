@@ -202,8 +202,8 @@ class DBInvestment(Base):
 # =============================================================================
 # Stock Metrics Model
 # =============================================================================
-class DBStockMetrics(Base):
-    __tablename__ = "stock_metrics"
+class DBStockIndicators(Base):
+    __tablename__ = "stock_indicators"
 
     symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
@@ -239,4 +239,4 @@ class DBStockMetrics(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<StockMetrics(symbol={self.symbol}, date={self.date}, slope={self.linear_slope_pct:.2f}%)>"
+        return f"<StockIndicators(symbol={self.symbol}, date={self.date}, slope={self.linear_slope_pct:.2f}%)>"

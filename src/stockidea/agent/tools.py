@@ -8,7 +8,7 @@ from datetime import datetime
 from stockidea.datasource.database import conn
 from stockidea.rule_engine import compile_rule
 from stockidea.simulation.simulator import Simulator
-from stockidea.types import StockIndex, StockMetrics, SimulationResult
+from stockidea.types import StockIndex, StockIndicators, SimulationResult
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _SIMULATION_PARAMS = {
         "rule": {
             "type": "string",
             "description": (
-                "Filter rule expression using StockMetrics fields. "
+                "Filter rule expression using StockIndicators fields. "
                 "Supports AND/OR operators and comparisons. "
                 "Example: 'change_13w_pct > 10 AND max_drop_2w_pct < 15 AND linear_r_squared > 0.7'"
             ),
@@ -62,13 +62,13 @@ _SIMULATION_DESC = (
     "Use this to test a strategy rule and evaluate its performance."
 )
 
-_LIST_METRICS_DESC = (
-    "List all available StockMetrics fields that can be used in rule expressions. "
+_LIST_INDICATORS_DESC = (
+    "List all available StockIndicators fields that can be used in rule expressions. "
     "Returns field names with their descriptions and typical value ranges. "
-    "Call this first to understand what metrics are available for building rules."
+    "Call this first to understand what indicators are available for building rules."
 )
 
-_LIST_METRICS_PARAMS = {
+_LIST_INDICATORS_PARAMS = {
     "type": "object",
     "properties": {},
     "required": [],
@@ -82,9 +82,9 @@ ANTHROPIC_TOOLS = [
         "input_schema": _SIMULATION_PARAMS,
     },
     {
-        "name": "list_metric_fields",
-        "description": _LIST_METRICS_DESC,
-        "input_schema": _LIST_METRICS_PARAMS,
+        "name": "list_indicator_fields",
+        "description": _LIST_INDICATORS_DESC,
+        "input_schema": _LIST_INDICATORS_PARAMS,
     },
 ]
 
@@ -101,9 +101,9 @@ OPENAI_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "list_metric_fields",
-            "description": _LIST_METRICS_DESC,
-            "parameters": _LIST_METRICS_PARAMS,
+            "name": "list_indicator_fields",
+            "description": _LIST_INDICATORS_DESC,
+            "parameters": _LIST_INDICATORS_PARAMS,
         },
     },
 ]
@@ -113,7 +113,7 @@ OPENAI_TOOLS = [
 # Tool field metadata
 # =============================================================================
 
-METRIC_FIELD_DESCRIPTIONS: dict[str, str] = {
+INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "symbol": "Stock ticker symbol (string, not usable in rules)",
     "date": "Metrics computation date (not usable in rules)",
     "total_weeks": "Number of weeks of data available (integer)",
@@ -155,8 +155,8 @@ async def execute_tool(tool_name: str, tool_input: dict) -> str:
     """Execute a tool call and return the result as a JSON string."""
     if tool_name == "run_simulation":
         return await _run_simulation(tool_input)
-    elif tool_name == "list_metric_fields":
-        return _list_metric_fields()
+    elif tool_name == "list_indicator_fields":
+        return _list_indicator_fields()
     else:
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -221,11 +221,11 @@ async def _run_simulation(params: dict) -> str:
     return json.dumps(summary)
 
 
-def _list_metric_fields() -> str:
-    """Return available StockMetrics fields with descriptions."""
+def _list_indicator_fields() -> str:
+    """Return available StockIndicators fields with descriptions."""
     fields = []
-    for field_name, field_info in StockMetrics.model_fields.items():
-        desc = METRIC_FIELD_DESCRIPTIONS.get(field_name, "")
+    for field_name, field_info in StockIndicators.model_fields.items():
+        desc = INDICATOR_FIELD_DESCRIPTIONS.get(field_name, "")
         fields.append(
             {
                 "name": field_name,

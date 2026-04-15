@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from scipy import stats  # type: ignore
 
-from stockidea.types import StockMetrics, StockPrice
+from stockidea.types import StockIndicators, StockPrice
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +77,9 @@ def _calculate_pct_change(old: float, new: float) -> float:
     return ((new - old) / old) * 100
 
 
-def compute_stock_metrics(
+def compute_stock_indicators(
     symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
-) -> StockMetrics:
+) -> StockIndicators:
     """
     Analyze stock price data and return weekly metrics.
 
@@ -87,7 +87,7 @@ def compute_stock_metrics(
         prices: List of StockPrice objects (as returned by fetch_stock_prices)
 
     Returns:
-        StockMetrics with all computed metrics, or None if insufficient data
+        StockIndicators with all computed metrics, or None if insufficient data
     """
     if not prices:
         raise ValueError(
@@ -264,7 +264,7 @@ def compute_stock_metrics(
     else:
         slope_26w_pct, r_squared_26w = 0.0, 0.0
 
-    return StockMetrics(
+    return StockIndicators(
         symbol=symbol,
         date=to_date.date(),
         total_weeks=total_weeks,
@@ -297,7 +297,7 @@ def compute_stock_metrics(
     )
 
 
-def rank_by_rising_stability_score(items: list[StockMetrics]) -> list[StockMetrics]:
+def rank_by_rising_stability_score(items: list[StockIndicators]) -> list[StockIndicators]:
     """Rank items by rising stability score (slope * r² weighted)."""
     if len(items) <= 1:
         return items  # no ranking needed
@@ -319,16 +319,16 @@ def rank_by_rising_stability_score(items: list[StockMetrics]) -> list[StockMetri
     return ranked_items
 
 
-def slope_outlier_mask(items: list[StockMetrics], k: float = 3.0) -> list[StockMetrics]:
+def slope_outlier_mask(items: list[StockIndicators], k: float = 3.0) -> list[StockIndicators]:
     """
-    Remove outliers from the list of StockMetrics objects based on the linear slope percentage.
+    Remove outliers from the list of StockIndicators objects based on the linear slope percentage.
 
     Args:
-        items: List of StockMetrics objects
+        items: List of StockIndicators objects
         k: Multiplier for the median absolute deviation (MAD) to define outliers
 
     Returns:
-        List of StockMetrics objects without outliers
+        List of StockIndicators objects without outliers
     """
     if not items or len(items) <= 2:
         return items  # no outliers found or not enough data to determine outliers

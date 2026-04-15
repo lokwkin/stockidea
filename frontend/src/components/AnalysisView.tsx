@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { StockTable } from "@/components/StockTable"
-import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
+import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import {
   Select,
   SelectContent,
@@ -16,7 +16,7 @@ export function AnalysisView() {
   const { date: urlDate } = useParams<{ date?: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [data, setData] = useState<{ date: string; data: StockMetrics[] } | null>(null)
+  const [data, setData] = useState<{ date: string; data: StockIndicators[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingDates, setLoadingDates] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,14 +30,14 @@ export function AnalysisView() {
 
   // Load available dates on mount
   useEffect(() => {
-    fetch("/api/metrics")
+    fetch("/api/indicators")
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load metrics list")
+        if (!res.ok) throw new Error("Failed to load indicator dates")
         return res.json()
       })
       .then((dates: string[]) => {
         if (dates.length === 0) {
-          throw new Error("No metrics data available")
+          throw new Error("No indicator data available")
         }
         setAvailableDates(dates)
         // Use URL date if provided and valid, otherwise use the most recent date
@@ -72,7 +72,7 @@ export function AnalysisView() {
     }
   }, [urlRule])
 
-  // Load metrics data when selected date or rule changes
+  // Load indicator data when selected date or rule changes
   useEffect(() => {
     if (!selectedDate) return
 
@@ -87,15 +87,15 @@ export function AnalysisView() {
     })
 
     const url = rule.trim()
-      ? `/api/metrics/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
-      : `/api/metrics/${selectedDate}/`
+      ? `/api/indicators/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/indicators/${selectedDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load metrics data")
+        if (!res.ok) throw new Error("Failed to load indicator data")
         return res.json()
       })
-      .then((json: MetricsDataAPI) => {
+      .then((json: IndicatorsDataAPI) => {
         if (!cancelled) {
           setData({ date: json.date, data: json.data })
           setLoading(false)
@@ -142,15 +142,15 @@ export function AnalysisView() {
     setError(null)
 
     const url = rule.trim()
-      ? `/api/metrics/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
-      : `/api/metrics/${selectedDate}/`
+      ? `/api/indicators/${selectedDate}/?rule=${encodeURIComponent(rule.trim())}`
+      : `/api/indicators/${selectedDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load metrics data")
+        if (!res.ok) throw new Error("Failed to load indicator data")
         return res.json()
       })
-      .then((json: MetricsDataAPI) => {
+      .then((json: IndicatorsDataAPI) => {
         setData({ date: json.date, data: json.data })
         setLoading(false)
       })
@@ -165,7 +165,7 @@ export function AnalysisView() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Loading metrics dates...</p>
+          <p className="text-muted-foreground">Loading indicator dates...</p>
         </div>
       </div>
     )
@@ -178,7 +178,7 @@ export function AnalysisView() {
           <h2 className="mb-2 text-lg font-semibold text-destructive">Error Loading Data</h2>
           <p className="text-muted-foreground">{error ?? "No data available"}</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Make sure the API server is running and metrics data is available
+            Make sure the API server is running and indicator data is available
           </p>
         </div>
       </div>
@@ -215,7 +215,7 @@ export function AnalysisView() {
           </div>
           {data && (
             <p className="text-sm text-muted-foreground">
-              {dateFormat(data.date)} • {data.data.length} stocks analyzed • 52-week metrics
+              {dateFormat(data.date)} • {data.data.length} stocks analyzed • 52-week indicators
             </p>
           )}
         </header>

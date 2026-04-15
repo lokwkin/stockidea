@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import type { RebalanceHistory } from "@/types/simulation"
-import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
+import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import { StockTable } from "@/components/StockTable"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,10 +32,10 @@ export function RebalanceDetailView({
   onOpenAnalysis,
 }: RebalanceDetailViewProps) {
   const navigate = useNavigate()
-  const [analysisData, setAnalysisData] = useState<{ date: string; data: StockMetrics[] } | null>(null)
+  const [analysisData, setAnalysisData] = useState<{ date: string; data: StockIndicators[] } | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
 
-  // Load metrics data when rebalance changes
+  // Load indicator data when rebalance changes
   useEffect(() => {
     if (!rebalance.date) {
       setAnalysisData(null)
@@ -47,15 +47,15 @@ export function RebalanceDetailView({
     setLoadingAnalysis(true)
     setAnalysisData(null)
 
-    // Use the rebalance date to query metrics
-    const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
+    // Use the rebalance date to query indicators
+    const indicatorsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
 
-    fetch(`/api/metrics/${metricsDate}/`)
+    fetch(`/api/indicators/${indicatorsDate}/`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load metrics data")
+        if (!res.ok) throw new Error("Failed to load indicator data")
         return res.json()
       })
-      .then((json: MetricsDataAPI) => {
+      .then((json: IndicatorsDataAPI) => {
         if (!cancelled) {
           setAnalysisData({ date: json.date, data: json.data })
           setLoadingAnalysis(false)
@@ -63,7 +63,7 @@ export function RebalanceDetailView({
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error("Failed to load metrics data:", err)
+          console.error("Failed to load indicator data:", err)
           setAnalysisData(null)
           setLoadingAnalysis(false)
         }
@@ -96,11 +96,11 @@ export function RebalanceDetailView({
             variant="outline"
             size="sm"
             onClick={() => {
-              const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
+              const indicatorsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
               if (onOpenAnalysis) {
-                onOpenAnalysis(metricsDate)
+                onOpenAnalysis(indicatorsDate)
               } else {
-                navigate(`/analysis/${metricsDate}`)
+                navigate(`/analysis/${indicatorsDate}`)
               }
             }}
           >

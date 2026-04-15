@@ -10,11 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { StockMetrics, MetricsDataAPI } from "@/types/stock"
+import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import { cn, dateFormat } from "@/lib/utils"
 import { COLUMNS } from "@/config/columns"
 
-type SortColumn = keyof StockMetrics | null
+type SortColumn = keyof StockIndicators | null
 type SortDirection = "asc" | "desc" | null
 
 interface SortConfig {
@@ -25,7 +25,7 @@ interface SortConfig {
 interface AnalysisData {
   date: string
   analysis_date?: string
-  data: StockMetrics[]
+  data: StockIndicators[]
 }
 
 interface AnalysisPanelProps {
@@ -102,7 +102,7 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     setAppliedRule(simulationRule)
   }, [simulationRule])
 
-  // Load metrics data when analysisDate or appliedRule changes
+  // Load indicator data when analysisDate or appliedRule changes
   useEffect(() => {
     if (!analysisDate) return
 
@@ -116,15 +116,15 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     })
 
     const url = appliedRule.trim()
-      ? `/api/metrics/${analysisDate}/?rule=${encodeURIComponent(appliedRule.trim())}`
-      : `/api/metrics/${analysisDate}/`
+      ? `/api/indicators/${analysisDate}/?rule=${encodeURIComponent(appliedRule.trim())}`
+      : `/api/indicators/${analysisDate}/`
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load metrics data")
+        if (!res.ok) throw new Error("Failed to load indicator data")
         return res.json()
       })
-      .then((json: MetricsDataAPI) => {
+      .then((json: IndicatorsDataAPI) => {
         if (!cancelled) {
           setData({ date: json.date, analysis_date: json.date, data: json.data })
           setLoading(false)
@@ -155,7 +155,7 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
 
   const handleSort = useCallback((columnKey: string) => {
     setSortConfig((prev): SortConfig => {
-      const column = columnKey as keyof StockMetrics
+      const column = columnKey as keyof StockIndicators
       if (prev.column === column) {
         if (prev.direction === "asc") return { column, direction: "desc" }
         if (prev.direction === "desc") return { column: null, direction: null }
@@ -171,8 +171,8 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
       const column = COLUMNS.find((c) => c.key === sortConfig.column)
       if (column) {
         result.sort((a, b) => {
-          const aVal = a[column.key as keyof StockMetrics] as number | string
-          const bVal = b[column.key as keyof StockMetrics] as number | string
+          const aVal = a[column.key as keyof StockIndicators] as number | string
+          const bVal = b[column.key as keyof StockIndicators] as number | string
 
           if (typeof aVal === "string" && typeof bVal === "string") {
             return sortConfig.direction === "asc"
@@ -220,8 +220,8 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
     return String(value)
   }
 
-  const getCellValue = (stock: StockMetrics, columnKey: string): number | string => {
-    return stock[columnKey as keyof StockMetrics] as number | string
+  const getCellValue = (stock: StockIndicators, columnKey: string): number | string => {
+    return stock[columnKey as keyof StockIndicators] as number | string
   }
 
   return (
@@ -300,7 +300,7 @@ export function AnalysisPanel({ symbol, analysisDate, simulationRule, involvedKe
           <div className="flex items-center justify-center py-12">
             <div className="flex flex-col items-center gap-4">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              <p className="text-muted-foreground">Loading metrics data...</p>
+              <p className="text-muted-foreground">Loading indicator data...</p>
             </div>
           </div>
         ) : error ? (

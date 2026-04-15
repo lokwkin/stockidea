@@ -1,21 +1,21 @@
-// Stock metrics - flat structure matching backend API
-export interface StockMetrics {
+// Stock indicators - flat structure matching backend API
+export interface StockIndicators {
   symbol: string;
   date: string;
   total_weeks: number;
-  // Trend metrics (regression-based)
+  // Trend indicators (regression-based)
   linear_slope_pct: number;
   linear_r_squared: number;
   log_slope: number;
   log_r_squared: number;
-  // Return metrics (point-to-point changes)
+  // Return indicators (point-to-point changes)
   change_1w_pct: number;
   change_2w_pct: number;
   change_1m_pct: number;
   change_3m_pct: number;
   change_6m_pct: number;
   change_1y_pct: number;
-  // Volatility metrics (max swings)
+  // Volatility indicators (max swings)
   max_jump_1w_pct: number;
   max_drop_1w_pct: number;
   max_jump_2w_pct: number;
@@ -25,21 +25,21 @@ export interface StockMetrics {
 }
 
 // API response type
-export interface MetricsDataAPI {
+export interface IndicatorsDataAPI {
   date: string;
-  data: StockMetrics[];
+  data: StockIndicators[];
 }
 
 export type SortDirection = "asc" | "desc" | null;
 
 export interface SortConfig {
-  column: keyof StockMetrics | null;
+  column: keyof StockIndicators | null;
   direction: SortDirection;
 }
 
 export interface Filter {
   id: number;
-  column: keyof StockMetrics;
+  column: keyof StockIndicators;
   operator: ">" | "<" | ">=" | "<=" | "=" | "contains";
   value: string | number;
   displayName: string;
@@ -53,7 +53,7 @@ export type ColumnType =
   | "pct_bar";
 
 export interface ColumnConfig {
-  key: keyof StockMetrics;
+  key: keyof StockIndicators;
   displayName: string;
   filterName: string;
   type: ColumnType;

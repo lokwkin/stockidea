@@ -18,7 +18,7 @@ export interface AgentToolResultEvent {
       baseline_profit_pct?: number
       scores?: SimulationScores
       error?: string
-      fields?: MetricField[]
+      fields?: IndicatorField[]
       [key: string]: unknown
     }
   }
@@ -53,7 +53,7 @@ export interface SimulationScores {
   total_rebalances: number
 }
 
-export interface MetricField {
+export interface IndicatorField {
   name: string
   type: string
   description: string

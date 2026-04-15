@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 import uvicorn
 
-from stockidea.metrics import (
-    service as metrics_service,
-    calculator as metrics_calculator,
+from stockidea.indicators import (
+    service as indicators_service,
+    calculator as indicators_calculator,
 )
 from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
@@ -133,49 +133,49 @@ async def get_simulation(simulation_id: UUID) -> dict:
         return simulation_result.model_dump()
 
 
-@app.get("/metrics")
+@app.get("/indicators")
 async def list_analysis() -> list[str]:
     async with conn.get_db_session() as db_session:
-        dates = await metrics_service.list_metrics_dates(db_session)
+        dates = await indicators_service.list_indicator_dates(db_session)
     return [date.strftime("%Y-%m-%d") for date in dates]
 
 
-@app.get("/metrics/{date}/")
+@app.get("/indicators/{date}/")
 async def get_analysis(
     date: str, rule: Optional[str] = None, index: StockIndex = StockIndex.SP500
 ) -> dict:
 
-    metrics_date = datetime.strptime(date, "%Y-%m-%d")
+    indicators_date = datetime.strptime(date, "%Y-%m-%d")
 
     async with conn.get_db_session() as db_session:
         # Get the symbols of the constituent
         symbols = await datasource_service.get_constituent_at(
-            db_session, index, metrics_date.date()
+            db_session, index, indicators_date.date()
         )
-        stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
-            db_session, symbols=symbols, metrics_date=metrics_date, back_period_weeks=52
+        stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
+            db_session, symbols=symbols, indicators_date=indicators_date, back_period_weeks=52
         )
 
     # Apply rule if provided
     if rule:
         try:
             rule_func = compile_rule(rule)
-            # Filter analyses using the rule (no max_stocks limit for API)
-            stock_metrics_batch = [
-                stock_metric
-                for stock_metric in stock_metrics_batch
-                if rule_func(stock_metric)
+            # Filter using the rule (no max_stocks limit for API)
+            stock_indicators_batch = [
+                stock_indicator
+                for stock_indicator in stock_indicators_batch
+                if rule_func(stock_indicator)
             ]
             # Sort by rising stability score
-            stock_metrics_batch = metrics_calculator.rank_by_rising_stability_score(
-                stock_metrics_batch
+            stock_indicators_batch = indicators_calculator.rank_by_rising_stability_score(
+                stock_indicators_batch
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     return {
-        "date": metrics_date.strftime("%Y-%m-%d"),
-        "data": [stock_metric.model_dump() for stock_metric in stock_metrics_batch],
+        "date": indicators_date.strftime("%Y-%m-%d"),
+        "data": [stock_indicator.model_dump() for stock_indicator in stock_indicators_batch],
     }
 
 

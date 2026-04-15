@@ -221,10 +221,10 @@ export function SimulationView() {
     )
     
     if (rebalance) {
-      // Use rebalance date to query metrics
-      const metricsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
+      // Use rebalance date to query indicators
+      const indicatorsDate = rebalance.date.split("T")[0] // Ensure we only use the date part
       setAnalysisPanelSymbol(symbol)
-      setAnalysisPanelDate(metricsDate)
+      setAnalysisPanelDate(indicatorsDate)
     }
   }, [simulationData])
 
