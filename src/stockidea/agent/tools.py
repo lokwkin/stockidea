@@ -146,6 +146,29 @@ _READ_NOTES_DESC = (
     "If omitted, lists all available strategy note files."
 )
 
+_LOOKUP_STOCK_PARAMS = {
+    "type": "object",
+    "properties": {
+        "symbols": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of stock ticker symbols to look up (e.g. ['AAPL', 'NVDA'])",
+        },
+        "date": {
+            "type": "string",
+            "description": "Date to retrieve indicators for, in YYYY-MM-DD format.",
+        },
+    },
+    "required": ["symbols", "date"],
+}
+
+_LOOKUP_STOCK_DESC = (
+    "Look up indicator data for specific stock(s) at a given date. "
+    "Returns all computed indicator values for each symbol. "
+    "Use this to inspect individual stocks — e.g. to understand why a stock was or wasn't selected, "
+    "or to see the actual indicator values for stocks of interest."
+)
+
 
 def _tool_anthropic(name: str, description: str, params: dict) -> dict:
     return {"name": name, "description": description, "input_schema": params}
@@ -165,6 +188,7 @@ ANTHROPIC_TOOLS = [
     _tool_anthropic("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
     _tool_anthropic("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
     _tool_anthropic("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
+    _tool_anthropic("lookup_stock", _LOOKUP_STOCK_DESC, _LOOKUP_STOCK_PARAMS),
 ]
 
 # OpenAI format
@@ -174,6 +198,7 @@ OPENAI_TOOLS = [
     _tool_openai("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
     _tool_openai("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
     _tool_openai("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
+    _tool_openai("lookup_stock", _LOOKUP_STOCK_DESC, _LOOKUP_STOCK_PARAMS),
 ]
 
 
@@ -241,6 +266,8 @@ async def execute_tool(tool_name: str, tool_input: dict) -> str:
         return _write_strategy_notes(tool_input)
     elif tool_name == "read_strategy_notes":
         return _read_strategy_notes(tool_input)
+    elif tool_name == "lookup_stock":
+        return await _lookup_stock(tool_input)
     else:
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -451,6 +478,48 @@ def _read_strategy_notes(params: dict) -> str:
 
     content = filepath.read_text(encoding="utf-8")
     return json.dumps({"strategy_name": slug, "content": content})
+
+
+async def _lookup_stock(params: dict) -> str:
+    """Look up indicator data for specific stocks at a given date."""
+    symbols: list[str] = [s.upper() for s in params["symbols"]]
+    date_str: str = params["date"]
+
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return json.dumps({"error": "Invalid date format. Use YYYY-MM-DD."})
+
+    try:
+        async with conn.get_db_session() as db_session:
+            indicators = await indicators_service.get_stock_indicators_batch(
+                db_session,
+                symbols=symbols,
+                indicators_date=target_date,
+                back_period_weeks=52,
+                compute_if_not_exists=True,
+            )
+    except Exception as e:
+        logger.exception(f"Lookup stock failed: {e}")
+        return json.dumps({"error": f"Lookup stock failed: {e}"})
+
+    results = []
+    for ind in indicators:
+        entry: dict[str, object] = {}
+        for field_name in ind.model_fields:
+            val = getattr(ind, field_name)
+            entry[field_name] = round(val, 4) if isinstance(val, float) else val
+        results.append(entry)
+
+    # Report symbols that weren't found
+    found_symbols = {ind.symbol for ind in indicators}
+    missing = [s for s in symbols if s not in found_symbols]
+
+    return json.dumps({
+        "date": date_str,
+        "stocks": results,
+        "missing": missing,
+    })
 
 
 def _list_indicator_fields() -> str:

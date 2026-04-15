@@ -41,6 +41,8 @@ cash periods (where no stocks matched), stock selection stats (unique stocks, to
 - `write_strategy_notes` — Save your reasoning, iteration history, and observations as markdown. \
 Use this to track what you've tried and what worked.
 - `read_strategy_notes` — Read back previous strategy notes or list all saved strategies.
+- `lookup_stock` — Look up indicator values for specific stock(s) at a given date. Use this \
+to inspect why a particular stock was or wasn't selected, or to understand its characteristics.
 
 ## Workflow
 
