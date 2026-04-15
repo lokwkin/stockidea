@@ -87,7 +87,7 @@ export function BalanceChart({
   formatDate,
 }: BalanceChartProps) {
   const chartData = useMemo(() => {
-    return backtestData.rebalance_history.map((rebalance, index) => {
+    return backtestData.backtest_rebalance.map((rebalance, index) => {
       return {
         date: formatDate(rebalance.date),
         dateRaw: rebalance.date,

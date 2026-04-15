@@ -38,7 +38,7 @@ export const COLUMN_NAMES: Record<string, string> = {
   acceleration_13w: "Accel 13W",
   pct_from_4w_high: "From 4W High",
   
-  // Investment columns
+  // BacktestInvestment columns
   position: "Position",
   buy_price: "Buy Price",
   buy_date: "Buy Date",

@@ -4,11 +4,11 @@ import math
 
 import numpy as np
 
-from stockidea.types import RebalanceHistory, BacktestScores
+from stockidea.types import BacktestRebalance, BacktestScores
 
 
 def compute_scores(
-    rebalance_history: list[RebalanceHistory],
+    backtest_rebalance: list[BacktestRebalance],
     rebalance_interval_weeks: int,
     initial_balance: float,
     final_balance: float,
@@ -18,14 +18,14 @@ def compute_scores(
     """Compute objective scores from a backtest's rebalance history.
 
     Args:
-        rebalance_history: List of rebalance periods with returns
+        backtest_rebalance: List of rebalance periods with returns
         rebalance_interval_weeks: Weeks per rebalance period
         initial_balance: Starting portfolio value
         final_balance: Ending portfolio value
         date_start_ts: Backtest start as timestamp
         date_end_ts: Backtest end as timestamp
     """
-    total_rebalances = len(rebalance_history)
+    total_rebalances = len(backtest_rebalance)
 
     if total_rebalances == 0:
         return BacktestScores(
@@ -40,8 +40,8 @@ def compute_scores(
             total_rebalances=0,
         )
 
-    # Per-period returns as fractions (not percentages)
-    period_returns = np.array([r.profit_pct for r in rebalance_history])
+    # Per-period returns as fractions (profit_pct is stored as percentage, convert)
+    period_returns = np.array([r.profit_pct / 100 for r in backtest_rebalance])
 
     # Periods per year for annualization
     periods_per_year = 52.0 / rebalance_interval_weeks
@@ -62,11 +62,9 @@ def compute_scores(
         else 0.0
     )
 
-    # --- Sortino ratio (annualized, downside deviation only) ---
-    downside_returns = period_returns[period_returns < 0]
-    downside_std = (
-        float(np.std(downside_returns, ddof=1)) if len(downside_returns) > 1 else 0.0
-    )
+    # --- Sortino ratio (annualized, downside deviation over all periods) ---
+    downside_diff = np.minimum(period_returns, 0)
+    downside_std = float(np.sqrt(np.mean(downside_diff**2)))
     sortino_ratio = (
         float(mean_return / downside_std * math.sqrt(periods_per_year))
         if downside_std > 0
@@ -75,7 +73,7 @@ def compute_scores(
 
     # --- Portfolio equity curve for drawdown ---
     equity = [initial_balance]
-    for r in rebalance_history:
+    for r in backtest_rebalance:
         equity.append(equity[-1] + r.profit)
     equity_arr = np.array(equity)
 

@@ -222,7 +222,7 @@ def backtest(
 
     backtest_result, backtest_id = asyncio.run(_backtest_and_save())
     click.echo(
-        f"Backtest result: {backtest_result.profit_pct * 100:2.2f}%, {backtest_result.profit:2.2f}"
+        f"Backtest result: {backtest_result.profit_pct:2.2f}%, {backtest_result.profit:2.2f}"
     )
     click.echo(f"Backtest saved to database with ID: {backtest_id}")
 

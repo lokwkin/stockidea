@@ -11,8 +11,8 @@ from stockidea.helper import next_monday
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.backtest.scoring import compute_scores
 from stockidea.types import (
-    Investment,
-    RebalanceHistory,
+    BacktestInvestment,
+    BacktestRebalance,
     BacktestConfig,
     BacktestResult,
     StockIndex,
@@ -82,7 +82,7 @@ class Backtester:
 
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
-    ) -> Investment:
+    ) -> BacktestInvestment:
         buy_stock_price = (
             await datasource_service.get_stock_price_at_date(
                 self.db_session, symbol, buy_date.date(), nearest=True
@@ -97,9 +97,9 @@ class Backtester:
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
 
-        investment = Investment(
+        investment = BacktestInvestment(
             symbol=symbol,
-            position=amount / buy_stock_price,
+            position=position,
             buy_price=buy_stock_price,
             buy_date=buy_date,
             sell_price=sell_stock_price,
@@ -111,7 +111,7 @@ class Backtester:
 
     async def invest_baseline(
         self, buy_date: datetime, sell_date: datetime, amount: float
-    ) -> Investment:
+    ) -> BacktestInvestment:
         baseline_index_price_buy = (
             await datasource_service.get_index_price_at_date(
                 self.db_session, self.baseline_index, buy_date.date(), nearest=True
@@ -130,9 +130,9 @@ class Backtester:
             * 100
         )
 
-        investment = Investment(
+        investment = BacktestInvestment(
             symbol=self.baseline_index.value,
-            position=amount / baseline_index_price_buy,
+            position=position,
             buy_price=baseline_index_price_buy,
             buy_date=buy_date,
             sell_price=baseline_index_price_sell,
@@ -147,7 +147,7 @@ class Backtester:
         # Initial Setup
         balance = self.initial_balance
         baseline_balance = self.initial_balance
-        rebalance_history: list[RebalanceHistory] = []
+        backtest_rebalance: list[BacktestRebalance] = []
         date_iter = next_monday(self.date_start)  # Start from the next Monday
 
         while date_iter < self.date_end:
@@ -160,7 +160,7 @@ class Backtester:
             )
             selected_stocks = await self.pick_stocks(date_iter)
 
-            investments: list[Investment] = []
+            investments: list[BacktestInvestment] = []
             for stock in selected_stocks:
                 # split in average
                 investment = await self.invest(
@@ -170,15 +170,15 @@ class Backtester:
 
             # Calculate the profit of this rebalance
             profit = sum(investment.profit for investment in investments)
-            profit_pct = profit / balance
+            profit_pct = profit / balance * 100
 
             # Invest in the baseline index
             baseline_investment = await self.invest_baseline(
-                date_iter, end_date, balance
+                date_iter, end_date, baseline_balance
             )
 
-            rebalance_history.append(
-                RebalanceHistory(
+            backtest_rebalance.append(
+                BacktestRebalance(
                     date=date_iter,
                     balance=balance,
                     investments=investments,
@@ -199,7 +199,7 @@ class Backtester:
             date_iter = end_date
 
         scores = compute_scores(
-            rebalance_history=rebalance_history,
+            backtest_rebalance=backtest_rebalance,
             rebalance_interval_weeks=self.rebalance_interval_weeks,
             initial_balance=self.initial_balance,
             final_balance=balance,
@@ -212,12 +212,13 @@ class Backtester:
             final_balance=balance,
             date_start=self.date_start,
             date_end=self.date_end,
-            rebalance_history=rebalance_history,
-            profit_pct=(balance - self.initial_balance) / self.initial_balance,
+            backtest_rebalance=backtest_rebalance,
+            profit_pct=(balance - self.initial_balance) / self.initial_balance * 100,
             profit=balance - self.initial_balance,
             baseline_index=self.baseline_index,
             baseline_profit_pct=(baseline_balance - self.initial_balance)
-            / self.initial_balance,
+            / self.initial_balance
+            * 100,
             baseline_profit=baseline_balance - self.initial_balance,
             baseline_balance=baseline_balance,
             backtest_config=BacktestConfig(

@@ -2,15 +2,22 @@
 
 import json
 import logging
+import os
+import re
+from collections import Counter
 from datetime import datetime
-
+from pathlib import Path
 
 from stockidea.datasource.database import conn
-from stockidea.rule_engine import compile_rule
+from stockidea.datasource import service as datasource_service
+from stockidea.indicators import service as indicators_service
+from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.backtest.backtester import Backtester
 from stockidea.types import StockIndex, StockIndicators, BacktestResult
 
 logger = logging.getLogger(__name__)
+
+STRATEGIES_DIR = Path(os.path.dirname(__file__)).parent.parent.parent / "data" / "strategies"
 
 
 # =============================================================================
@@ -57,9 +64,37 @@ _BACKTEST_PARAMS = {
 }
 
 _BACKTEST_DESC = (
-    "Run a backtest backtest with the given rule and parameters. "
-    "Returns backtest scores (Sharpe, Sortino, Calmar, win rate, etc.) and summary. "
+    "Run a backtest with the given rule and parameters. "
+    "Returns scores (Sharpe, Sortino, Calmar, win rate, etc.), summary, "
+    "and diagnostics (worst/best periods, stock selection stats). "
     "Use this to test a strategy rule and evaluate its performance."
+)
+
+_PREVIEW_FILTER_PARAMS = {
+    "type": "object",
+    "properties": {
+        "rule": {
+            "type": "string",
+            "description": "Filter rule expression using StockIndicators fields.",
+        },
+        "date": {
+            "type": "string",
+            "description": "Date to evaluate the filter on, in YYYY-MM-DD format.",
+        },
+        "index": {
+            "type": "string",
+            "enum": ["SP500", "NASDAQ"],
+            "description": "Stock index universe (default: SP500)",
+            "default": "SP500",
+        },
+    },
+    "required": ["rule", "date"],
+}
+
+_PREVIEW_FILTER_DESC = (
+    "Preview how many stocks pass a filter rule at a given date WITHOUT running a full backtest. "
+    "Returns the count of matching stocks and a sample of top 5 with their indicator values. "
+    "Use this to quickly calibrate rule thresholds before committing to a full backtest."
 )
 
 _LIST_INDICATORS_DESC = (
@@ -74,38 +109,71 @@ _LIST_INDICATORS_PARAMS = {
     "required": [],
 }
 
+_WRITE_NOTES_PARAMS = {
+    "type": "object",
+    "properties": {
+        "strategy_name": {
+            "type": "string",
+            "description": "Name for the strategy (used as filename, e.g. 'momentum-low-vol')",
+        },
+        "content": {
+            "type": "string",
+            "description": "Markdown content — your reasoning, iteration history, and observations",
+        },
+    },
+    "required": ["strategy_name", "content"],
+}
+
+_WRITE_NOTES_DESC = (
+    "Save strategy notes as a markdown file. Use this to persist your reasoning, "
+    "iteration history, what worked and what didn't, and your current best approach. "
+    "Overwrites any existing notes for the same strategy name."
+)
+
+_READ_NOTES_PARAMS = {
+    "type": "object",
+    "properties": {
+        "strategy_name": {
+            "type": "string",
+            "description": "Name of the strategy to read notes for. Omit to list all available strategies.",
+        },
+    },
+    "required": [],
+}
+
+_READ_NOTES_DESC = (
+    "Read strategy notes. If strategy_name is provided, returns the markdown content. "
+    "If omitted, lists all available strategy note files."
+)
+
+
+def _tool_anthropic(name: str, description: str, params: dict) -> dict:
+    return {"name": name, "description": description, "input_schema": params}
+
+
+def _tool_openai(name: str, description: str, params: dict) -> dict:
+    return {
+        "type": "function",
+        "function": {"name": name, "description": description, "parameters": params},
+    }
+
+
 # Anthropic format
 ANTHROPIC_TOOLS = [
-    {
-        "name": "run_backtest",
-        "description": _BACKTEST_DESC,
-        "input_schema": _BACKTEST_PARAMS,
-    },
-    {
-        "name": "list_indicator_fields",
-        "description": _LIST_INDICATORS_DESC,
-        "input_schema": _LIST_INDICATORS_PARAMS,
-    },
+    _tool_anthropic("run_backtest", _BACKTEST_DESC, _BACKTEST_PARAMS),
+    _tool_anthropic("preview_filter", _PREVIEW_FILTER_DESC, _PREVIEW_FILTER_PARAMS),
+    _tool_anthropic("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
+    _tool_anthropic("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
+    _tool_anthropic("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
 ]
 
 # OpenAI format
 OPENAI_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "run_backtest",
-            "description": _BACKTEST_DESC,
-            "parameters": _BACKTEST_PARAMS,
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_indicator_fields",
-            "description": _LIST_INDICATORS_DESC,
-            "parameters": _LIST_INDICATORS_PARAMS,
-        },
-    },
+    _tool_openai("run_backtest", _BACKTEST_DESC, _BACKTEST_PARAMS),
+    _tool_openai("preview_filter", _PREVIEW_FILTER_DESC, _PREVIEW_FILTER_PARAMS),
+    _tool_openai("list_indicator_fields", _LIST_INDICATORS_DESC, _LIST_INDICATORS_PARAMS),
+    _tool_openai("write_strategy_notes", _WRITE_NOTES_DESC, _WRITE_NOTES_PARAMS),
+    _tool_openai("read_strategy_notes", _READ_NOTES_DESC, _READ_NOTES_PARAMS),
 ]
 
 
@@ -152,6 +220,9 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "pct_from_4w_high": "Distance from 4-week high in %. Always <= 0. Typical: -10 to 0. Closer to 0 = near recent high",
 }
 
+# Fields always included in preview_filter sample output
+_ALWAYS_INCLUDE_FIELDS = {"symbol", "change_13w_pct", "linear_r_squared", "max_drawdown_pct"}
+
 
 # =============================================================================
 # Tool executors
@@ -162,14 +233,65 @@ async def execute_tool(tool_name: str, tool_input: dict) -> str:
     """Execute a tool call and return the result as a JSON string."""
     if tool_name == "run_backtest":
         return await _run_backtest(tool_input)
+    elif tool_name == "preview_filter":
+        return await _preview_filter(tool_input)
     elif tool_name == "list_indicator_fields":
         return _list_indicator_fields()
+    elif tool_name == "write_strategy_notes":
+        return _write_strategy_notes(tool_input)
+    elif tool_name == "read_strategy_notes":
+        return _read_strategy_notes(tool_input)
     else:
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
 
+def _build_diagnostics(result: BacktestResult) -> dict:
+    """Extract per-rebalance diagnostics and stock selection stats from backtest results."""
+    history = result.backtest_rebalance
+
+    # Per-period diagnostics
+    sorted_history = sorted(history, key=lambda r: r.profit_pct)
+    worst_periods = [
+        {"date": r.date.strftime("%Y-%m-%d"), "profit_pct": round(r.profit_pct, 2)}
+        for r in sorted_history[:3]
+    ]
+    best_periods = [
+        {"date": r.date.strftime("%Y-%m-%d"), "profit_pct": round(r.profit_pct, 2)}
+        for r in sorted_history[-3:][::-1]
+    ]
+
+    # Cash periods and average stocks per rebalance
+    stocks_per_rebalance = [len(r.investments) for r in history]
+    cash_periods = sum(1 for n in stocks_per_rebalance if n == 0)
+    avg_stocks = (
+        round(sum(stocks_per_rebalance) / len(stocks_per_rebalance), 1)
+        if stocks_per_rebalance
+        else 0
+    )
+
+    # Stock selection stats
+    symbol_counter: Counter[str] = Counter()
+    for r in history:
+        for inv in r.investments:
+            symbol_counter[inv.symbol] += 1
+
+    top_held = [
+        {"symbol": sym, "count": count}
+        for sym, count in symbol_counter.most_common(5)
+    ]
+
+    return {
+        "worst_periods": worst_periods,
+        "best_periods": best_periods,
+        "cash_periods": cash_periods,
+        "avg_stocks_per_rebalance": avg_stocks,
+        "total_unique_stocks": len(symbol_counter),
+        "top_held_symbols": top_held,
+    }
+
+
 async def _run_backtest(params: dict) -> str:
-    """Execute a backtest and return scores as JSON."""
+    """Execute a backtest and return scores + diagnostics as JSON."""
     rule_str = params["rule"]
     date_start_str = params["date_start"]
     date_end_str = params["date_end"]
@@ -208,8 +330,8 @@ async def _run_backtest(params: dict) -> str:
         logger.exception(f"Backtest failed: {e}")
         return json.dumps({"error": f"Backtest failed: {e}"})
 
-    # Return a concise summary with scores
-    summary = {
+    # Return a concise summary with scores and diagnostics
+    summary: dict = {
         "rule": rule_str,
         "date_start": date_start_str,
         "date_end": date_end_str,
@@ -218,14 +340,117 @@ async def _run_backtest(params: dict) -> str:
         "index": index_str,
         "initial_balance": result.initial_balance,
         "final_balance": round(result.final_balance, 2),
-        "profit_pct": round(result.profit_pct * 100, 2),
-        "baseline_profit_pct": round(result.baseline_profit_pct * 100, 2),
-        "num_rebalances": len(result.rebalance_history),
+        "profit_pct": round(result.profit_pct, 2),
+        "baseline_profit_pct": round(result.baseline_profit_pct, 2),
+        "num_rebalances": len(result.backtest_rebalance),
     }
     if result.scores:
         summary["scores"] = result.scores.model_dump()
 
+    summary["diagnostics"] = _build_diagnostics(result)
+
     return json.dumps(summary)
+
+
+async def _preview_filter(params: dict) -> str:
+    """Preview how many stocks pass a filter rule at a given date."""
+    rule_str = params["rule"]
+    date_str = params["date"]
+    index_str = params.get("index", "SP500")
+
+    try:
+        rule_func = compile_rule(rule_str)
+    except Exception as e:
+        return json.dumps({"error": f"Invalid rule expression: {e}"})
+
+    try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return json.dumps({"error": "Invalid date format. Use YYYY-MM-DD."})
+
+    stock_index = StockIndex(index_str)
+    involved_keys = set(extract_involved_keys(rule_str))
+
+    try:
+        async with conn.get_db_session() as db_session:
+            symbols = await datasource_service.get_constituent_at(
+                db_session, stock_index, target_date.date()
+            )
+            total_constituents = len(symbols)
+
+            indicators_batch = await indicators_service.get_stock_indicators_batch(
+                db_session,
+                symbols=symbols,
+                indicators_date=target_date,
+                back_period_weeks=52,
+                compute_if_not_exists=True,
+            )
+
+            filtered = indicators_service.apply_rule(indicators_batch, rule_func=rule_func)
+    except Exception as e:
+        logger.exception(f"Preview filter failed: {e}")
+        return json.dumps({"error": f"Preview filter failed: {e}"})
+
+    # Build sample with relevant fields only
+    show_fields = _ALWAYS_INCLUDE_FIELDS | involved_keys
+    sample = []
+    for stock in filtered[:5]:
+        entry: dict[str, object] = {}
+        for field in show_fields:
+            if hasattr(stock, field):
+                val = getattr(stock, field)
+                entry[field] = round(val, 3) if isinstance(val, float) else val
+        sample.append(entry)
+
+    return json.dumps({
+        "date": date_str,
+        "total_constituents": total_constituents,
+        "matched": len(filtered),
+        "sample": sample,
+    })
+
+
+def _slugify(name: str) -> str:
+    """Convert a strategy name to a filesystem-safe slug."""
+    slug = name.lower().strip()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    return slug or "unnamed"
+
+
+def _write_strategy_notes(params: dict) -> str:
+    """Save strategy notes as a markdown file."""
+    strategy_name = params["strategy_name"]
+    content = params["content"]
+
+    slug = _slugify(strategy_name)
+    STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
+    filepath = STRATEGIES_DIR / f"{slug}.md"
+    filepath.write_text(content, encoding="utf-8")
+
+    return json.dumps({"path": str(filepath), "status": "saved"})
+
+
+def _read_strategy_notes(params: dict) -> str:
+    """Read strategy notes or list available strategies."""
+    strategy_name = params.get("strategy_name")
+
+    if not strategy_name:
+        # List all available strategy notes
+        if not STRATEGIES_DIR.exists():
+            return json.dumps({"strategies": []})
+        strategies = [
+            f.stem for f in sorted(STRATEGIES_DIR.glob("*.md"))
+        ]
+        return json.dumps({"strategies": strategies})
+
+    slug = _slugify(strategy_name)
+    filepath = STRATEGIES_DIR / f"{slug}.md"
+    if not filepath.exists():
+        return json.dumps({"error": f"No notes found for strategy '{strategy_name}'"})
+
+    content = filepath.read_text(encoding="utf-8")
+    return json.dumps({"strategy_name": slug, "content": content})
 
 
 def _list_indicator_fields() -> str:

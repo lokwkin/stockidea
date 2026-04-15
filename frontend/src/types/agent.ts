@@ -8,6 +8,15 @@ export interface AgentToolCallEvent {
   data: { name: string; input: Record<string, unknown> }
 }
 
+export interface BacktestDiagnostics {
+  worst_periods: { date: string; profit_pct: number }[]
+  best_periods: { date: string; profit_pct: number }[]
+  cash_periods: number
+  avg_stocks_per_rebalance: number
+  total_unique_stocks: number
+  top_held_symbols: { symbol: string; count: number }[]
+}
+
 export interface AgentToolResultEvent {
   event: "tool_result"
   data: {
@@ -17,8 +26,17 @@ export interface AgentToolResultEvent {
       profit_pct?: number
       baseline_profit_pct?: number
       scores?: BacktestScores
+      diagnostics?: BacktestDiagnostics
       error?: string
       fields?: IndicatorField[]
+      // preview_filter results
+      matched?: number
+      total_constituents?: number
+      sample?: Record<string, unknown>[]
+      // strategy notes results
+      strategies?: string[]
+      content?: string
+      strategy_name?: string
       [key: string]: unknown
     }
   }

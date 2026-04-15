@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useState } from "react"
 import { ArrowUp, ArrowDown } from "lucide-react"
-import type { Investment } from "@/types/backtest"
+import type { BacktestInvestment } from "@/types/backtest"
 import {
   Table,
   TableBody,
@@ -14,19 +14,19 @@ import { getColumnDisplayName } from "@/config/columnNames"
 type SortColumn = "buy_date" | "profit" | "profit_pct" | null
 type SortDirection = "asc" | "desc" | null
 
-interface InvestmentTableProps {
-  investments: Investment[]
+interface BacktestInvestmentTableProps {
+  investments: BacktestInvestment[]
   formatDate: (dateStr: string) => string
   formatCurrency: (value: number) => string
   formatPercent: (value: number) => string
 }
 
-export function InvestmentTable({
+export function BacktestInvestmentTable({
   investments,
   formatDate,
   formatCurrency,
   formatPercent,
-}: InvestmentTableProps) {
+}: BacktestInvestmentTableProps) {
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({
     column: null,
     direction: null,
@@ -42,7 +42,7 @@ export function InvestmentTable({
     })
   }, [])
 
-  const sortedInvestments = useMemo(() => {
+  const sortedBacktestInvestments = useMemo(() => {
     const sorted = [...investments]
 
     if (!sortConfig.column || !sortConfig.direction) {
@@ -142,7 +142,7 @@ export function InvestmentTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedInvestments.map((investment, idx) => (
+          {sortedBacktestInvestments.map((investment, idx) => (
             <TableRow key={idx}>
               <TableCell className="font-medium">{investment.symbol}</TableCell>
               <TableCell>{investment.position.toFixed(4)}</TableCell>

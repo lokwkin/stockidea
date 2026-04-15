@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import type { RebalanceHistory } from "@/types/backtest"
+import type { BacktestRebalance } from "@/types/backtest"
 import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import { StockTable } from "@/components/StockTable"
 import { Button } from "@/components/ui/button"
@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/table"
 import { getColumnDisplayName } from "@/config/columnNames"
 
-interface RebalanceDetailViewProps {
-  rebalance: RebalanceHistory
+interface BacktestRebalanceDetailViewProps {
+  rebalance: BacktestRebalance
   formatDate: (dateStr: string) => string
   formatCurrency: (value: number) => string
   formatPercent: (value: number) => string
@@ -23,14 +23,14 @@ interface RebalanceDetailViewProps {
   onOpenAnalysis?: (analysisDate: string) => void
 }
 
-export function RebalanceDetailView({
+export function BacktestRebalanceDetailView({
   rebalance,
   formatDate,
   formatCurrency,
   formatPercent,
   onClose,
   onOpenAnalysis,
-}: RebalanceDetailViewProps) {
+}: BacktestRebalanceDetailViewProps) {
   const navigate = useNavigate()
   const [analysisData, setAnalysisData] = useState<{ date: string; data: StockIndicators[] } | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
@@ -128,7 +128,7 @@ export function RebalanceDetailView({
         <div>
           <p className="text-sm text-muted-foreground">Profit %</p>
           <p className={`text-lg font-semibold ${rebalance.profit_pct >= 0 ? "text-green-600" : "text-red-600"}`}>
-            {formatPercent(rebalance.profit_pct * 100)}
+            {formatPercent(rebalance.profit_pct)}
           </p>
         </div>
         <div>

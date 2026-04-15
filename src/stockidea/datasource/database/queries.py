@@ -9,6 +9,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,8 +19,8 @@ from stockidea.datasource.database.models import (
     DBConstituentChange,
     DBConstituentMetadata,
     DBBacktest,
-    DBRebalanceHistory,
-    DBInvestment,
+    DBBacktestRebalance,
+    DBBacktestInvestment,
     DBStockIndicators,
     DBBacktestJob,
 )
@@ -31,8 +32,8 @@ from stockidea.types import (
     StockIndex,
     StockPrice,
     BacktestResult,
-    Investment,
-    RebalanceHistory,
+    BacktestInvestment,
+    BacktestRebalance,
     BacktestConfig,
     StockIndicators,
     BacktestJob,
@@ -44,84 +45,104 @@ logger = logging.getLogger(__name__)
 async def save_index_prices(
     db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]
 ) -> None:
-    logger.info(f"Saving index prices for {index.value}")
-    # Delete existing entries for this index
-    delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == index.value)
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(
-        DBStockPriceMetadata.symbol == index.value
-    )
-    await db_session.execute(delete_prices_stmt)
-    await db_session.execute(delete_metadata_stmt)
-    await db_session.commit()
+    now = datetime.now()
+    logger.info(f"Saving {len(prices)} index prices for {index.value}")
 
-    # Insert new entries
-    for price in prices:
-        price_record = DBStockPrice(
+    for p in prices:
+        stmt = pg_insert(DBStockPrice).values(
             symbol=index.value,
-            date=date.fromisoformat(price.date),
-            adj_close=price.price,
-            close=price.price,
-            volume=price.volume,
+            date=date.fromisoformat(p.date),
+            adj_close=p.price,
+            close=p.price,
+            volume=p.volume,
+            created_at=now,
         )
-        db_session.add(price_record)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        await db_session.execute(stmt)
 
-    # Update metadata for this index
-    metadata = DBStockPriceMetadata(symbol=index.value, fetched_at=datetime.now())
-    db_session.add(metadata)
+    # Upsert metadata
+    meta_stmt = pg_insert(DBStockPriceMetadata).values(
+        symbol=index.value, fetched_at=now
+    )
+    meta_stmt = meta_stmt.on_conflict_do_update(
+        index_elements=["symbol"],
+        set_={"fetched_at": meta_stmt.excluded.fetched_at},
+    )
+    await db_session.execute(meta_stmt)
+
     await db_session.commit()
 
 
 async def save_stock_prices(
     db_session: AsyncSession, symbol: str, prices: list[FMPAdjustedStockPrice]
 ) -> None:
+    upper_symbol = symbol.upper()
+    now = datetime.now()
+    logger.info(f"Saving {len(prices)} prices for {upper_symbol}")
 
-    # Delete existing entries for this symbol
-    delete_prices_stmt = delete(DBStockPrice).where(
-        DBStockPrice.symbol == symbol.upper()
-    )
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(
-        DBStockPriceMetadata.symbol == symbol.upper()
-    )
-    await db_session.execute(delete_prices_stmt)
-    await db_session.execute(delete_metadata_stmt)
-    await db_session.commit()
-
-    # Insert new entries
-    for price_data in prices:
-        price_record = DBStockPrice(
-            symbol=symbol.upper(),
-            date=date.fromisoformat(price_data.date),
-            open=price_data.adjOpen,
-            high=price_data.adjHigh,
-            low=price_data.adjLow,
-            close=price_data.adjClose,
-            adj_close=price_data.adjClose,
-            volume=price_data.volume,
-            created_at=datetime.now(),
+    for p in prices:
+        stmt = pg_insert(DBStockPrice).values(
+            symbol=upper_symbol,
+            date=date.fromisoformat(p.date),
+            open=p.adjOpen,
+            high=p.adjHigh,
+            low=p.adjLow,
+            close=p.adjClose,
+            adj_close=p.adjClose,
+            volume=p.volume,
+            created_at=now,
         )
-        db_session.add(price_record)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        await db_session.execute(stmt)
 
-    # Update metadata for this symbol
-    metadata = DBStockPriceMetadata(
-        symbol=symbol.upper(),
-        fetched_at=datetime.now(),
+    # Upsert metadata
+    meta_stmt = pg_insert(DBStockPriceMetadata).values(
+        symbol=upper_symbol, fetched_at=now
     )
-    db_session.add(metadata)
+    meta_stmt = meta_stmt.on_conflict_do_update(
+        index_elements=["symbol"],
+        set_={"fetched_at": meta_stmt.excluded.fetched_at},
+    )
+    await db_session.execute(meta_stmt)
 
     await db_session.commit()
 
 
-async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
-    stmt = select(DBStockPriceMetadata).where(
+async def get_last_fetched_at(
+    db_session: AsyncSession, symbol: str
+) -> datetime | None:
+    """Get the last fetched_at timestamp for a symbol, or None if never fetched."""
+    stmt = select(DBStockPriceMetadata.fetched_at).where(
         DBStockPriceMetadata.symbol == symbol.upper()
     )
     result = await db_session.execute(stmt)
-    metadata = result.scalar_one_or_none()
-    # if the symbol prices are last fetched more than 1 day ago, return False
-    if metadata is None:
-        return False
+    return result.scalar_one_or_none()
 
-    return metadata.fetched_at > datetime.now() - timedelta(days=1)
+
+async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
+    fetched_at = await get_last_fetched_at(db_session, symbol)
+    if fetched_at is None:
+        return False
+    return fetched_at > datetime.now() - timedelta(days=1)
 
 
 # =============================================================================
@@ -300,8 +321,8 @@ async def save_backtest_result(
     backtest_id = backtest.id  # Store ID before commit to avoid greenlet issues
 
     # Create rebalance history records
-    for rebalance in result.rebalance_history:
-        rebalance_history = DBRebalanceHistory(
+    for rebalance in result.backtest_rebalance:
+        backtest_rebalance = DBBacktestRebalance(
             backtest_id=backtest_id,
             date=rebalance.date,
             balance=rebalance.balance,
@@ -311,13 +332,13 @@ async def save_backtest_result(
             baseline_profit=rebalance.baseline_profit,
             baseline_balance=rebalance.baseline_balance,
         )
-        db_session.add(rebalance_history)
-        await db_session.flush()  # Flush to get the rebalance_history ID
+        db_session.add(backtest_rebalance)
+        await db_session.flush()  # Flush to get the backtest_rebalance ID
 
         # Create investment records
         for investment in rebalance.investments:
-            investment_record = DBInvestment(
-                rebalance_history_id=rebalance_history.id,
+            investment_record = DBBacktestInvestment(
+                backtest_rebalance_id=backtest_rebalance.id,
                 symbol=investment.symbol,
                 position=investment.position,
                 buy_price=investment.buy_price,
@@ -344,8 +365,8 @@ async def get_backtest_by_id(
         select(DBBacktest)
         .where(DBBacktest.id == backtest_id)
         .options(
-            selectinload(DBBacktest.rebalance_histories).selectinload(
-                DBRebalanceHistory.investments
+            selectinload(DBBacktest.backtest_rebalances).selectinload(
+                DBBacktestRebalance.backtest_investments
             )
         )
     )
@@ -390,10 +411,10 @@ async def list_backtests(
 
 def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
     """Convert a DBBacktest database object to a BacktestResult Pydantic model."""
-    rebalance_histories = []
-    for db_rebalance in db_backtest.rebalance_histories:
+    backtest_rebalances = []
+    for db_rebalance in db_backtest.backtest_rebalances:
         investments = [
-            Investment(
+            BacktestInvestment(
                 symbol=inv.symbol,
                 position=inv.position,
                 buy_price=inv.buy_price,
@@ -403,10 +424,10 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
                 profit_pct=inv.profit_pct,
                 profit=inv.profit,
             )
-            for inv in db_rebalance.investments
+            for inv in db_rebalance.backtest_investments
         ]
-        rebalance_histories.append(
-            RebalanceHistory(
+        backtest_rebalances.append(
+            BacktestRebalance(
                 date=db_rebalance.date,
                 balance=db_rebalance.balance,
                 investments=investments,
@@ -423,7 +444,7 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
         final_balance=db_backtest.final_balance,
         date_start=db_backtest.date_start,
         date_end=db_backtest.date_end,
-        rebalance_history=rebalance_histories,
+        backtest_rebalance=backtest_rebalances,
         profit_pct=db_backtest.profit_pct,
         profit=db_backtest.profit,
         baseline_index=StockIndex(db_backtest.baseline_index),

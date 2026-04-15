@@ -28,7 +28,9 @@ SUPPORTED_INDEXES = [StockIndex.SP500, StockIndex.NASDAQ]
 async def ensure_stock_prices_fresh(db_session: AsyncSession, symbol: str) -> None:
     """Ensure stock price data for a symbol is fresh, fetching from FMP if stale."""
     if not await queries.is_data_fresh(db_session, symbol):
-        fmp_prices = await fmp.fetch_stock_prices(symbol)
+        last_fetched = await queries.get_last_fetched_at(db_session, symbol)
+        from_date = last_fetched.date() if last_fetched else None
+        fmp_prices = await fmp.fetch_stock_prices(symbol, from_date=from_date)
         await queries.save_stock_prices(db_session, symbol, fmp_prices)
 
 
@@ -37,7 +39,9 @@ async def ensure_index_prices_fresh(
 ) -> None:
     """Ensure index price data is fresh, fetching from FMP if stale."""
     if not await queries.is_data_fresh(db_session, index.value):
-        fmp_prices = await fmp.fetch_index_prices(index)
+        last_fetched = await queries.get_last_fetched_at(db_session, index.value)
+        from_date = last_fetched.date() if last_fetched else None
+        fmp_prices = await fmp.fetch_index_prices(index, from_date=from_date)
         await queries.save_index_prices(db_session, index, fmp_prices)
 
 
@@ -139,7 +143,9 @@ async def fetch_index_prices(db_session: AsyncSession, index: StockIndex) -> int
 
     Returns the number of price records saved.
     """
-    fmp_prices = await fmp.fetch_index_prices(index)
+    last_fetched = await queries.get_last_fetched_at(db_session, index.value)
+    from_date = last_fetched.date() if last_fetched else None
+    fmp_prices = await fmp.fetch_index_prices(index, from_date=from_date)
     await queries.save_index_prices(db_session, index, fmp_prices)
     logger.info(f"Fetched {len(fmp_prices)} index prices for {index.value}")
     return len(fmp_prices)
@@ -167,12 +173,15 @@ async def fetch_stock_prices(
             if await queries.is_data_fresh(db_session, symbol):
                 results[symbol] = 0
                 continue
-            fmp_prices = await fmp.fetch_stock_prices(symbol)
+            last_fetched = await queries.get_last_fetched_at(db_session, symbol)
+            from_date = last_fetched.date() if last_fetched else None
+            fmp_prices = await fmp.fetch_stock_prices(symbol, from_date=from_date)
             await queries.save_stock_prices(db_session, symbol, fmp_prices)
             results[symbol] = len(fmp_prices)
             logger.info(f"Fetched {len(fmp_prices)} prices for {symbol}")
         except Exception as e:
             logger.error(f"Failed to fetch prices for {symbol}: {e}")
+            await db_session.rollback()
             results[symbol] = 0
 
     fetched_count = sum(1 for v in results.values() if v > 0)

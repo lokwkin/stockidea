@@ -131,16 +131,16 @@ class DBBacktest(Base):
         DateTime, nullable=False, default=datetime.now, index=True
     )
 
-    rebalance_histories: Mapped[list["DBRebalanceHistory"]] = relationship(
-        "DBRebalanceHistory", back_populates="backtest", cascade="all, delete-orphan"
+    backtest_rebalances: Mapped[list["DBBacktestRebalance"]] = relationship(
+        "DBBacktestRebalance", back_populates="backtest", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
         return f"<Backtest(id={self.id}, date_start={self.date_start}, profit_pct={self.profit_pct})>"
 
 
-class DBRebalanceHistory(Base):
-    __tablename__ = "rebalance_histories"
+class DBBacktestRebalance(Base):
+    __tablename__ = "backtest_rebalances"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
@@ -160,25 +160,25 @@ class DBRebalanceHistory(Base):
     baseline_balance: Mapped[float] = mapped_column(Float, nullable=False)
 
     backtest: Mapped["DBBacktest"] = relationship(
-        "DBBacktest", back_populates="rebalance_histories"
+        "DBBacktest", back_populates="backtest_rebalances"
     )
-    investments: Mapped[list["DBInvestment"]] = relationship(
-        "DBInvestment", back_populates="rebalance_history", cascade="all, delete-orphan"
+    backtest_investments: Mapped[list["DBBacktestInvestment"]] = relationship(
+        "DBBacktestInvestment", back_populates="backtest_rebalance", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
-        return f"<RebalanceHistory(id={self.id}, date={self.date}, balance={self.balance})>"
+        return f"<BacktestRebalance(id={self.id}, date={self.date}, balance={self.balance})>"
 
 
-class DBInvestment(Base):
-    __tablename__ = "investments"
+class DBBacktestInvestment(Base):
+    __tablename__ = "backtest_investments"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID, primary_key=True, index=True, default=uuid.uuid4
     )
-    rebalance_history_id: Mapped[uuid.UUID] = mapped_column(
+    backtest_rebalance_id: Mapped[uuid.UUID] = mapped_column(
         UUID,
-        ForeignKey("rebalance_histories.id", ondelete="CASCADE"),
+        ForeignKey("backtest_rebalances.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -191,12 +191,12 @@ class DBInvestment(Base):
     profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
     profit: Mapped[float] = mapped_column(Float, nullable=False)
 
-    rebalance_history: Mapped["DBRebalanceHistory"] = relationship(
-        "DBRebalanceHistory", back_populates="investments"
+    backtest_rebalance: Mapped["DBBacktestRebalance"] = relationship(
+        "DBBacktestRebalance", back_populates="backtest_investments"
     )
 
     def __repr__(self) -> str:
-        return f"<Investment(id={self.id}, symbol={self.symbol}, profit={self.profit})>"
+        return f"<BacktestInvestment(id={self.id}, symbol={self.symbol}, profit={self.profit})>"
 
 
 # =============================================================================

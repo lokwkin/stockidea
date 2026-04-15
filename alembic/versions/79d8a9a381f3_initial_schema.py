@@ -139,7 +139,7 @@ def upgrade() -> None:
     # -- Tables with foreign keys --
 
     op.create_table(
-        "rebalance_histories",
+        "backtest_rebalances",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("backtest_id", sa.UUID(), nullable=False),
         sa.Column("date", sa.Date(), nullable=False),
@@ -154,13 +154,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_rebalance_histories_id", "rebalance_histories", ["id"])
+    op.create_index("ix_backtest_rebalances_id", "backtest_rebalances", ["id"])
     op.create_index(
-        "ix_rebalance_histories_backtest_id",
-        "rebalance_histories",
+        "ix_backtest_rebalances_backtest_id",
+        "backtest_rebalances",
         ["backtest_id"],
     )
-    op.create_index("ix_rebalance_histories_date", "rebalance_histories", ["date"])
+    op.create_index("ix_backtest_rebalances_date", "backtest_rebalances", ["date"])
 
     op.create_table(
         "backtest_jobs",
@@ -182,9 +182,9 @@ def upgrade() -> None:
     op.create_index("ix_backtest_jobs_created_at", "backtest_jobs", ["created_at"])
 
     op.create_table(
-        "investments",
+        "backtest_investments",
         sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("rebalance_history_id", sa.UUID(), nullable=False),
+        sa.Column("backtest_rebalance_id", sa.UUID(), nullable=False),
         sa.Column("symbol", sa.String(), nullable=False),
         sa.Column("position", sa.Float(), nullable=False),
         sa.Column("buy_price", sa.Float(), nullable=False),
@@ -194,26 +194,26 @@ def upgrade() -> None:
         sa.Column("profit_pct", sa.Float(), nullable=False),
         sa.Column("profit", sa.Float(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["rebalance_history_id"],
-            ["rebalance_histories.id"],
+            ["backtest_rebalance_id"],
+            ["backtest_rebalances.id"],
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_investments_id", "investments", ["id"])
+    op.create_index("ix_backtest_investments_id", "backtest_investments", ["id"])
     op.create_index(
-        "ix_investments_rebalance_history_id",
-        "investments",
-        ["rebalance_history_id"],
+        "ix_backtest_investments_backtest_rebalance_id",
+        "backtest_investments",
+        ["backtest_rebalance_id"],
     )
-    op.create_index("ix_investments_symbol", "investments", ["symbol"])
+    op.create_index("ix_backtest_investments_symbol", "backtest_investments", ["symbol"])
 
 
 def downgrade() -> None:
     """Drop all tables."""
-    op.drop_table("investments")
+    op.drop_table("backtest_investments")
     op.drop_table("backtest_jobs")
-    op.drop_table("rebalance_histories")
+    op.drop_table("backtest_rebalances")
     op.drop_table("backtests")
     op.drop_table("stock_indicators")
     op.drop_table("stock_price_metadata")

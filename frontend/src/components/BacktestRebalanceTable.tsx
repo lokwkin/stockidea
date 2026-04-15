@@ -1,4 +1,4 @@
-import type { RebalanceHistory } from "@/types/backtest"
+import type { BacktestRebalance } from "@/types/backtest"
 import {
   Table,
   TableBody,
@@ -9,19 +9,19 @@ import {
 } from "@/components/ui/table"
 import { getColumnDisplayName } from "@/config/columnNames"
 
-interface RebalanceHistoryTableProps {
-  rebalanceHistory: RebalanceHistory[]
+interface BacktestRebalanceTableProps {
+  rebalanceHistory: BacktestRebalance[]
   formatDate: (dateStr: string) => string
   formatCurrency: (value: number) => string
   formatPercent: (value: number) => string
 }
 
-export function RebalanceHistoryTable({
+export function BacktestRebalanceTable({
   rebalanceHistory,
   formatDate,
   formatCurrency,
   formatPercent,
-}: RebalanceHistoryTableProps) {
+}: BacktestRebalanceTableProps) {
   return (
     <div className="mt-4 space-y-6">
       {rebalanceHistory.map((rebalance, rebalanceIdx) => (
@@ -39,7 +39,7 @@ export function RebalanceHistoryTable({
               <div>
                 <span className="text-muted-foreground">Profit: </span>
                 <span className={`font-medium ${rebalance.profit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {formatCurrency(rebalance.profit)} ({formatPercent(rebalance.profit_pct * 100)})
+                  {formatCurrency(rebalance.profit)} ({formatPercent(rebalance.profit_pct)})
                 </span>
               </div>
               <div>

@@ -1,4 +1,4 @@
-export interface Investment {
+export interface BacktestInvestment {
   symbol: string
   position: number
   buy_price: number
@@ -9,10 +9,10 @@ export interface Investment {
   profit: number
 }
 
-export interface RebalanceHistory {
+export interface BacktestRebalance {
   date: string
   balance: number
-  investments: Investment[]
+  investments: BacktestInvestment[]
   profit_pct: number
   profit: number
   baseline_profit_pct?: number
@@ -36,7 +36,7 @@ export interface Backtest {
   final_balance: number
   date_start: string
   date_end: string
-  rebalance_history: RebalanceHistory[]
+  backtest_rebalance: BacktestRebalance[]
   profit_pct: number
   profit: number
   baseline_index?: string

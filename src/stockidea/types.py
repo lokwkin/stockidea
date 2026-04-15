@@ -88,7 +88,7 @@ class StockIndicators(BaseModel):
 # =============================================================================
 
 
-class Investment(BaseModel):
+class BacktestInvestment(BaseModel):
     symbol: str
     position: float
     buy_price: float
@@ -99,10 +99,10 @@ class Investment(BaseModel):
     profit: float
 
 
-class RebalanceHistory(BaseModel):
+class BacktestRebalance(BaseModel):
     date: datetime
     balance: float
-    investments: list[Investment]
+    investments: list[BacktestInvestment]
     profit_pct: float
     profit: float
 
@@ -140,7 +140,7 @@ class BacktestResult(BaseModel):
     final_balance: float
     date_start: datetime
     date_end: datetime
-    rebalance_history: list[RebalanceHistory]
+    backtest_rebalance: list[BacktestRebalance]
     profit_pct: float
     profit: float
     baseline_index: StockIndex

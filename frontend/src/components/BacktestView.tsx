@@ -3,9 +3,9 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Copy, Check, TrendingDown, TrendingUp, ExternalLink } from "lucide-react"
 import type { Backtest } from "@/types/backtest"
 import { BalanceChart } from "@/components/BalanceChart"
-import { RebalanceDetailView } from "@/components/RebalanceDetailView"
-import { InvestmentTable } from "@/components/InvestmentTable"
-import { RebalanceHistoryTable } from "@/components/RebalanceHistoryTable"
+import { BacktestRebalanceDetailView } from "@/components/BacktestRebalanceDetailView"
+import { BacktestInvestmentTable } from "@/components/BacktestInvestmentTable"
+import { BacktestRebalanceTable } from "@/components/BacktestRebalanceTable"
 import { AnalysisPanel } from "@/components/AnalysisPanel"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -107,7 +107,7 @@ export function BacktestView() {
 
     if (rebalanceDate) {
       // Find the index of the rebalance with matching date
-      const index = backtestData.rebalance_history.findIndex((r) => r.date === rebalanceDate)
+      const index = backtestData.backtest_rebalance.findIndex((r) => r.date === rebalanceDate)
       if (index !== -1) {
         // Only update if different to avoid loops
         setSelectedRebalanceIndex((prev) => (prev !== index ? index : prev))
@@ -131,7 +131,7 @@ export function BacktestView() {
       // Update URL query param
       const newSearchParams = new URLSearchParams(searchParams)
       if (index !== null && backtestData) {
-        const rebalance = backtestData.rebalance_history[index]
+        const rebalance = backtestData.backtest_rebalance[index]
         if (rebalance) {
           newSearchParams.set("rebalance", rebalance.date)
         }
@@ -164,35 +164,35 @@ export function BacktestView() {
   }, [backtestData?.rule_ref])
 
   // Flatten all investments from all rebalances
-  const allInvestments = useMemo(() => {
+  const allBacktestInvestments = useMemo(() => {
     if (!backtestData) return []
-    return backtestData.rebalance_history.flatMap((rebalance) => rebalance.investments)
+    return backtestData.backtest_rebalance.flatMap((rebalance) => rebalance.investments)
   }, [backtestData])
 
   // Calculate top 3 biggest losses and profits (sorted by percentage)
   const topLosses = useMemo(() => {
-    if (!allInvestments.length) return []
-    return [...allInvestments]
+    if (!allBacktestInvestments.length) return []
+    return [...allBacktestInvestments]
       .sort((a, b) => a.profit_pct - b.profit_pct)
       .slice(0, 3)
-  }, [allInvestments])
+  }, [allBacktestInvestments])
 
   const topProfits = useMemo(() => {
-    if (!allInvestments.length) return []
-    return [...allInvestments]
+    if (!allBacktestInvestments.length) return []
+    return [...allBacktestInvestments]
       .sort((a, b) => b.profit_pct - a.profit_pct)
       .slice(0, 3)
-  }, [allInvestments])
+  }, [allBacktestInvestments])
 
   const selectedRebalance = useMemo(() => {
     return selectedRebalanceIndex !== null && backtestData
-      ? backtestData.rebalance_history[selectedRebalanceIndex]
+      ? backtestData.backtest_rebalance[selectedRebalanceIndex]
       : null
   }, [selectedRebalanceIndex, backtestData])
 
   const totalProfit = useMemo(() => backtestData?.profit || 0, [backtestData])
   const totalProfitPct = useMemo(() => {
-    return backtestData?.profit_pct ? backtestData.profit_pct * 100 : 0
+    return backtestData?.profit_pct ?? 0
   }, [backtestData])
 
   // Get backtest rule
@@ -216,7 +216,7 @@ export function BacktestView() {
     // Find the rebalance that contains this investment by matching buy_date
     if (!backtestData) return
     
-    const rebalance = backtestData.rebalance_history.find((r) =>
+    const rebalance = backtestData.backtest_rebalance.find((r) =>
       r.investments.some((inv) => inv.symbol === symbol && inv.buy_date === buyDate)
     )
     
@@ -456,7 +456,7 @@ export function BacktestView() {
 
               {/* Selected Rebalance Detail Section */}
               {selectedRebalance && (
-                <RebalanceDetailView
+                <BacktestRebalanceDetailView
                   rebalance={selectedRebalance}
                   formatDate={dateFormat}
                   formatCurrency={formatCurrency}
@@ -574,17 +574,17 @@ export function BacktestView() {
               {/* Investments Table */}
               <div className="rounded-lg border bg-card p-6">
                 <h2 className="mb-4 text-2xl font-semibold">
-                  Investments ({allInvestments.length})
+                  Investments ({allBacktestInvestments.length})
                 </h2>
                 <Tabs value={tableView} onValueChange={(v) => setTableView(v as "investment" | "rebalance")}>
                   <TabsList>
-                    <TabsTrigger value="investment">By Investment</TabsTrigger>
+                    <TabsTrigger value="investment">By BacktestInvestment</TabsTrigger>
                     <TabsTrigger value="rebalance">By Rebalance</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="investment">
-                    <InvestmentTable
-                      investments={allInvestments}
+                    <BacktestInvestmentTable
+                      investments={allBacktestInvestments}
                       formatDate={dateFormat}
                       formatCurrency={formatCurrency}
                       formatPercent={formatPercent}
@@ -592,8 +592,8 @@ export function BacktestView() {
                   </TabsContent>
 
                   <TabsContent value="rebalance">
-                    <RebalanceHistoryTable
-                      rebalanceHistory={backtestData.rebalance_history}
+                    <BacktestRebalanceTable
+                      rebalanceHistory={backtestData.backtest_rebalance}
                       formatDate={dateFormat}
                       formatCurrency={formatCurrency}
                       formatPercent={formatPercent}

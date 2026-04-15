@@ -255,7 +255,7 @@ function Sidebar() {
                 backtests.map((sim) => {
                   const dateStart = dateFormat(sim.date_start)
                   const dateEnd = dateFormat(sim.date_end)
-                  const displayName = `${dateStart} - ${dateEnd} (${(sim.profit_pct * 100).toFixed(1)}%)`
+                  const displayName = `${dateStart} - ${dateEnd} (${sim.profit_pct.toFixed(1)}%)`
                   return (
                     <Link
                       key={sim.id}
