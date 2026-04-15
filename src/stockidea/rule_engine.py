@@ -44,7 +44,9 @@ class RuleEngine:
             # Create a context with all StockMetrics attributes dynamically
             # Use getattr to safely access fields, falling back to model_dump for compatibility
             field_names = self._get_trend_analysis_field_names()
-            names = {field_name: getattr(analysis, field_name) for field_name in field_names}
+            names = {
+                field_name: getattr(analysis, field_name) for field_name in field_names
+            }
             try:
                 # SimpleEval automatically validates the expression and only allows safe operations
                 evaluator = SimpleEval(names=names)
@@ -114,7 +116,7 @@ class RuleEngine:
         # Find all identifiers in the rule string
         # Match valid Python identifiers (word characters and underscores)
         # Use word boundaries to avoid partial matches
-        pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b'
+        pattern = r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b"
         matches = re.findall(pattern, normalized)
 
         # Filter to only include valid StockMetrics keys

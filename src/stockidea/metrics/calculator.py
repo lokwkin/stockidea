@@ -38,7 +38,8 @@ def _aggregate_to_weekly(
 
     Args:
         prices: List of daily StockPrice objects (most recent first)
-        one_year_ago: Start date for analysis
+        date_from: Start date for analysis
+        date_to: End date for analysis
 
     Returns:
         List of WeeklyData sorted by week_ending (oldest first)
@@ -89,16 +90,24 @@ def compute_stock_metrics(
         StockMetrics with all computed metrics, or None if insufficient data
     """
     if not prices:
-        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
+        raise ValueError(
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+        )
 
-    weekly_data = _aggregate_to_weekly(prices, date_from=from_date.date(), date_to=to_date.date())
+    weekly_data = _aggregate_to_weekly(
+        prices, date_from=from_date.date(), date_to=to_date.date()
+    )
 
     if len(weekly_data) < 5:
-        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
+        raise ValueError(
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+        )
 
     # Check if the last week is more than 4 weeks old
     if weekly_data[-1].week_ending < (to_date - timedelta(weeks=4)).date():
-        raise ValueError(f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}")
+        raise ValueError(
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+        )
 
     total_weeks = len(weekly_data)
 
@@ -128,11 +137,11 @@ def compute_stock_metrics(
 
     # Find max movements
     max_jump_1w = max(weekly_changes) if weekly_changes else 0.0
-    max_drop_1w = - min(weekly_changes) if weekly_changes else 0.0
+    max_drop_1w = -min(weekly_changes) if weekly_changes else 0.0
     max_jump_2w = max(biweekly_changes) if biweekly_changes else 0.0
-    max_drop_2w = - min(biweekly_changes) if biweekly_changes else 0.0
+    max_drop_2w = -min(biweekly_changes) if biweekly_changes else 0.0
     max_jump_4w = max(monthly_changes) if monthly_changes else 0.0
-    max_drop_4w = - min(monthly_changes) if monthly_changes else 0.0
+    max_drop_4w = -min(monthly_changes) if monthly_changes else 0.0
 
     # Overall change (first week to last week)
     weeks_1y = min(52, len(weekly_data) - 1)
@@ -195,13 +204,22 @@ def compute_stock_metrics(
     weekly_close = np.array([w.closing_price for w in weekly_data])
     log_weekly_close = np.log(weekly_close)
 
-    log_slope, _log_intercept, log_r_value, _log_p_value, _log_std_err = stats.linregress(x, log_weekly_close)
+    log_slope, _log_intercept, log_r_value, _log_p_value, _log_std_err = (
+        stats.linregress(x, log_weekly_close)
+    )
     log_r_squared = log_r_value**2
 
-    linear_slope, _linear_intercept, linear_r_value, _linear_p_value, _linear_std_err = stats.linregress(
-        x, weekly_close)
+    (
+        linear_slope,
+        _linear_intercept,
+        linear_r_value,
+        _linear_p_value,
+        _linear_std_err,
+    ) = stats.linregress(x, weekly_close)
     starting_price = weekly_data[0].closing_price
-    linear_slope_pct = (linear_slope / starting_price) * 100 if starting_price != 0 else 0.0
+    linear_slope_pct = (
+        (linear_slope / starting_price) * 100 if starting_price != 0 else 0.0
+    )
     linear_r_squared = linear_r_value**2
 
     # Max drawdown (positive value: e.g. 18.5 means fell 18.5% from peak)
@@ -210,27 +228,39 @@ def compute_stock_metrics(
     max_drawdown_pct = float(-np.min(drawdowns))
 
     # Fraction of weeks that closed higher than the prior week
-    pct_weeks_positive = sum(1 for c in weekly_changes if c > 0) / len(weekly_changes) if weekly_changes else 0.0
+    pct_weeks_positive = (
+        sum(1 for c in weekly_changes if c > 0) / len(weekly_changes)
+        if weekly_changes
+        else 0.0
+    )
 
     # 13-week regression
-    w13 = weekly_data[-min(13, len(weekly_data)):]
+    w13 = weekly_data[-min(13, len(weekly_data)) :]
     if len(w13) >= 3:
         x13 = np.arange(len(w13))
         y13 = np.array([w.closing_price for w in w13])
         s13, _, r13, _, _ = stats.linregress(x13, y13)
-        slope_13w_pct = float((s13 / w13[0].closing_price) * 100) if w13[0].closing_price != 0 else 0.0
-        r_squared_13w = float(r13 ** 2)
+        slope_13w_pct = (
+            float((s13 / w13[0].closing_price) * 100)
+            if w13[0].closing_price != 0
+            else 0.0
+        )
+        r_squared_13w = float(r13**2)
     else:
         slope_13w_pct, r_squared_13w = 0.0, 0.0
 
     # 26-week regression
-    w26 = weekly_data[-min(26, len(weekly_data)):]
+    w26 = weekly_data[-min(26, len(weekly_data)) :]
     if len(w26) >= 3:
         x26 = np.arange(len(w26))
         y26 = np.array([w.closing_price for w in w26])
         s26, _, r26, _, _ = stats.linregress(x26, y26)
-        slope_26w_pct = float((s26 / w26[0].closing_price) * 100) if w26[0].closing_price != 0 else 0.0
-        r_squared_26w = float(r26 ** 2)
+        slope_26w_pct = (
+            float((s26 / w26[0].closing_price) * 100)
+            if w26[0].closing_price != 0
+            else 0.0
+        )
+        r_squared_26w = float(r26**2)
     else:
         slope_26w_pct, r_squared_26w = 0.0, 0.0
 
@@ -280,11 +310,10 @@ def rank_by_rising_stability_score(items: list[StockMetrics]) -> list[StockMetri
     r2_rank = r2s.argsort().argsort() / (len(r2s) - 1)
 
     # Combine: "must rise AND be stable", slightly overweight stability
-    scores = slope_rank * (r2_rank ** 1.7)
+    scores = slope_rank * (r2_rank**1.7)
 
     ranked_items = [
-        item for _, item in
-        sorted(zip(scores, items), key=lambda x: x[0], reverse=True)
+        item for _, item in sorted(zip(scores, items), key=lambda x: x[0], reverse=True)
     ]
 
     return ranked_items
@@ -314,5 +343,7 @@ def slope_outlier_mask(items: list[StockMetrics], k: float = 3.0) -> list[StockM
 
     modified_z = 0.6745 * (slopes - median) / mad
     is_not_outlier = np.abs(modified_z) <= 2.5
-    filtered_items = [item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier]
+    filtered_items = [
+        item for item, is_not_outlier in zip(items, is_not_outlier) if is_not_outlier
+    ]
     return filtered_items

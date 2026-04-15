@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 import logging
 from typing import Callable
@@ -6,7 +5,7 @@ from typing import Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-from stockidea.analysis import metrics_calculator
+from stockidea.metrics import calculator
 from stockidea.datasource import market_data
 from stockidea.datasource.database import queries
 from stockidea.types import StockMetrics
@@ -14,15 +13,20 @@ from stockidea.types import StockMetrics
 logger = logging.getLogger(__name__)
 
 
-def apply_rule(stock_metrics_batch: list[StockMetrics], rule_func: Callable[[StockMetrics], bool]
-               ) -> list[StockMetrics]:
-    filtered_stocks = [stock_metrics for stock_metrics in stock_metrics_batch if rule_func(stock_metrics)]
+def apply_rule(
+    stock_metrics_batch: list[StockMetrics], rule_func: Callable[[StockMetrics], bool]
+) -> list[StockMetrics]:
+    filtered_stocks = [
+        stock_metrics
+        for stock_metrics in stock_metrics_batch
+        if rule_func(stock_metrics)
+    ]
 
     # Sort by rising stability score
-    filtered_stocks = metrics_calculator.rank_by_rising_stability_score(filtered_stocks)
+    filtered_stocks = calculator.rank_by_rising_stability_score(filtered_stocks)
 
     # Remove outliers from the list of StockMetrics objects based on the linear slope percentage
-    filtered_stocks = metrics_calculator.slope_outlier_mask(filtered_stocks, k=3.0)
+    filtered_stocks = calculator.slope_outlier_mask(filtered_stocks, k=3.0)
 
     return filtered_stocks
 
@@ -41,18 +45,24 @@ async def get_stock_metrics_batch(
     for symbol in symbols:
         try:
             # Try to load from database first
-            stock_metrics = await queries.load_stock_metrics(db_session, symbol, metrics_date.date())
+            stock_metrics = await queries.load_stock_metrics(
+                db_session, symbol, metrics_date.date()
+            )
             if not stock_metrics and compute_if_not_exists:
-                prices = await market_data.get_stock_price_history(db_session, symbol, from_date, to_date)
+                prices = await market_data.get_stock_price_history(
+                    db_session, symbol, from_date, to_date
+                )
 
-                stock_metrics = metrics_calculator.compute_stock_metrics(
+                stock_metrics = calculator.compute_stock_metrics(
                     symbol=symbol,
                     prices=prices,
                     from_date=metrics_date - timedelta(weeks=back_period_weeks),
                     to_date=metrics_date,
                 )
                 # Save to database for cache
-                await queries.save_stock_metrics(db_session, stock_metrics, metrics_date.date())
+                await queries.save_stock_metrics(
+                    db_session, stock_metrics, metrics_date.date()
+                )
 
             if stock_metrics:
                 results.append(stock_metrics)

@@ -1,7 +1,6 @@
 """PostgreSQL database implementation for storing price data using SQLAlchemy."""
 
 from datetime import date, datetime, timedelta
-import json
 import logging
 from uuid import UUID
 
@@ -16,6 +15,8 @@ from sqlalchemy.orm import selectinload
 from stockidea.datasource.database.models import (
     DBStockPrice,
     DBStockPriceMetadata,
+    DBConstituentChange,
+    DBConstituentMetadata,
     DBSimulation,
     DBRebalanceHistory,
     DBInvestment,
@@ -24,6 +25,7 @@ from stockidea.datasource.database.models import (
 )
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
+    ConstituentChange,
     FMPAdjustedStockPrice,
     FMPLightPrice,
     StockIndex,
@@ -39,11 +41,15 @@ from stockidea.types import (
 logger = logging.getLogger(__name__)
 
 
-async def save_index_prices(db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]) -> None:
+async def save_index_prices(
+    db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]
+) -> None:
     logger.info(f"Saving index prices for {index.value}")
     # Delete existing entries for this index
     delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == index.value)
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == index.value)
+    delete_metadata_stmt = delete(DBStockPriceMetadata).where(
+        DBStockPriceMetadata.symbol == index.value
+    )
     await db_session.execute(delete_prices_stmt)
     await db_session.execute(delete_metadata_stmt)
     await db_session.commit()
@@ -51,7 +57,12 @@ async def save_index_prices(db_session: AsyncSession, index: StockIndex, prices:
     # Insert new entries
     for price in prices:
         price_record = DBStockPrice(
-            symbol=index.value, date=date.fromisoformat(price.date), adj_close=price.price, close=price.price, volume=price.volume)
+            symbol=index.value,
+            date=date.fromisoformat(price.date),
+            adj_close=price.price,
+            close=price.price,
+            volume=price.volume,
+        )
         db_session.add(price_record)
 
     # Update metadata for this index
@@ -60,11 +71,17 @@ async def save_index_prices(db_session: AsyncSession, index: StockIndex, prices:
     await db_session.commit()
 
 
-async def save_stock_prices(db_session: AsyncSession, symbol: str, prices: list[FMPAdjustedStockPrice]) -> None:
+async def save_stock_prices(
+    db_session: AsyncSession, symbol: str, prices: list[FMPAdjustedStockPrice]
+) -> None:
 
     # Delete existing entries for this symbol
-    delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == symbol.upper())
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == symbol.upper())
+    delete_prices_stmt = delete(DBStockPrice).where(
+        DBStockPrice.symbol == symbol.upper()
+    )
+    delete_metadata_stmt = delete(DBStockPriceMetadata).where(
+        DBStockPriceMetadata.symbol == symbol.upper()
+    )
     await db_session.execute(delete_prices_stmt)
     await db_session.execute(delete_metadata_stmt)
     await db_session.commit()
@@ -95,7 +112,9 @@ async def save_stock_prices(db_session: AsyncSession, symbol: str, prices: list[
 
 
 async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
-    stmt = select(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == symbol.upper())
+    stmt = select(DBStockPriceMetadata).where(
+        DBStockPriceMetadata.symbol == symbol.upper()
+    )
     result = await db_session.execute(stmt)
     metadata = result.scalar_one_or_none()
     # if the symbol prices are last fetched more than 1 day ago, return False
@@ -105,53 +124,154 @@ async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
     return metadata.fetched_at > datetime.now() - timedelta(days=1)
 
 
-async def get_prices_by_date_range(db_session: AsyncSession, symbol: str, from_date: date, to_date: date) -> list[StockPrice]:
+# =============================================================================
+# Constituent Change Queries
+# =============================================================================
+
+
+async def save_constituent_changes(
+    db_session: AsyncSession,
+    index: StockIndex,
+    changes: list[ConstituentChange],
+) -> None:
+    """Replace all constituent changes for an index and update metadata."""
+    # Delete existing
+    await db_session.execute(
+        delete(DBConstituentChange).where(DBConstituentChange.index == index.value)
+    )
+    await db_session.execute(
+        delete(DBConstituentMetadata).where(DBConstituentMetadata.index == index.value)
+    )
+    await db_session.flush()
+
+    # Insert new
+    for change in changes:
+        db_session.add(
+            DBConstituentChange(
+                index=index.value,
+                date=change.date,
+                added_symbol=change.added_symbol,
+                removed_symbol=change.removed_symbol,
+            )
+        )
+
+    db_session.add(DBConstituentMetadata(index=index.value, fetched_at=datetime.now()))
+    await db_session.commit()
+
+
+async def load_constituent_changes(
+    db_session: AsyncSession,
+    index: StockIndex,
+) -> list[ConstituentChange] | None:
+    """Load constituent changes for an index. Returns None if stale or missing."""
+    # Check freshness
+    meta_stmt = select(DBConstituentMetadata).where(
+        DBConstituentMetadata.index == index.value
+    )
+    meta_result = await db_session.execute(meta_stmt)
+    metadata = meta_result.scalar_one_or_none()
+    if metadata is None or metadata.fetched_at < datetime.now() - timedelta(days=1):
+        return None
+
+    # Load changes
+    changes_stmt = (
+        select(DBConstituentChange)
+        .where(DBConstituentChange.index == index.value)
+        .order_by(DBConstituentChange.date)
+    )
+    changes_result = await db_session.execute(changes_stmt)
+    rows = changes_result.scalars().all()
+
+    return [
+        ConstituentChange(
+            date=row.date,
+            added_symbol=row.added_symbol,
+            removed_symbol=row.removed_symbol,
+        )
+        for row in rows
+    ]
+
+
+async def is_constituent_data_fresh(
+    db_session: AsyncSession, index: StockIndex
+) -> bool:
+    """Check if constituent data for an index was fetched today."""
+    stmt = select(DBConstituentMetadata).where(
+        DBConstituentMetadata.index == index.value
+    )
+    result = await db_session.execute(stmt)
+    metadata = result.scalar_one_or_none()
+    if metadata is None:
+        return False
+    return metadata.fetched_at > datetime.now() - timedelta(days=1)
+
+
+async def get_prices_by_date_range(
+    db_session: AsyncSession, symbol: str, from_date: date, to_date: date
+) -> list[StockPrice]:
     """
     Get the stock prices for a given symbol and date range.
     """
-    stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-        DBStockPrice.date >= from_date).where(DBStockPrice.date <= to_date).order_by(DBStockPrice.date.desc())
+    stmt = (
+        select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+        .where(DBStockPrice.symbol == symbol.upper())
+        .where(DBStockPrice.date >= from_date)
+        .where(DBStockPrice.date <= to_date)
+        .order_by(DBStockPrice.date.desc())
+    )
     result = await db_session.execute(stmt)
     prices = result.all()  # Returns Row objects when selecting multiple columns
-    return [StockPrice(
-        symbol=price.symbol,
-        date=price.date,
-        adj_close=price.adj_close
-    ) for price in prices]
+    return [
+        StockPrice(symbol=price.symbol, date=price.date, adj_close=price.adj_close)
+        for price in prices
+    ]
 
 
-async def get_price_by_date(db_session: AsyncSession, symbol: str, target_date: date, nearest: bool = False) -> StockPrice:
+async def get_price_by_date(
+    db_session: AsyncSession, symbol: str, target_date: date, nearest: bool = False
+) -> StockPrice:
     """
     Get the stock price for a given symbol and date.
     If nearest is True, and the price is not found for the given date, return the price for the nearest date before the given date.
     """
-    stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-        DBStockPrice.date == target_date).order_by(DBStockPrice.date.desc())
+    stmt = (
+        select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+        .where(DBStockPrice.symbol == symbol.upper())
+        .where(DBStockPrice.date == target_date)
+        .order_by(DBStockPrice.date.desc())
+    )
     result = await db_session.execute(stmt)
     price = result.first()  # Returns Row object or None when selecting multiple columns
     if price is not None:
         return StockPrice(
-            symbol=price.symbol,
-            date=price.date,
-            adj_close=price.adj_close
+            symbol=price.symbol, date=price.date, adj_close=price.adj_close
         )
     if nearest:
         # Find the price of nearest date we have before the target date
-        stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-            DBStockPrice.date < target_date).order_by(DBStockPrice.date.desc()).limit(1)
+        stmt = (
+            select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+            .where(DBStockPrice.symbol == symbol.upper())
+            .where(DBStockPrice.date < target_date)
+            .order_by(DBStockPrice.date.desc())
+            .limit(1)
+        )
         result = await db_session.execute(stmt)
-        price = result.first()  # Returns Row object or None when selecting multiple columns
+        price = (
+            result.first()
+        )  # Returns Row object or None when selecting multiple columns
         if price is not None:
             return StockPrice(
-                symbol=price.symbol,
-                date=price.date,
-                adj_close=price.adj_close
+                symbol=price.symbol, date=price.date, adj_close=price.adj_close
             )
 
-    raise ValueError(f"No price data available for symbol: {symbol} on date: {target_date}")
+    raise ValueError(
+        f"No price data available for symbol: {symbol} on date: {target_date}"
+    )
 
 
-async def save_simulation_result(db_session: AsyncSession, result: SimulationResult) -> UUID:
+async def save_simulation_result(
+    db_session: AsyncSession, result: SimulationResult
+) -> UUID:
     """
     Save a simulation result to the database.
     Returns the simulation ID.
@@ -214,7 +334,9 @@ async def save_simulation_result(db_session: AsyncSession, result: SimulationRes
     return simulation_id
 
 
-async def get_simulation_by_id(db_session: AsyncSession, simulation_id: UUID) -> SimulationResult | None:
+async def get_simulation_by_id(
+    db_session: AsyncSession, simulation_id: UUID
+) -> SimulationResult | None:
     """
     Get a simulation result by ID from the database.
     """
@@ -222,7 +344,9 @@ async def get_simulation_by_id(db_session: AsyncSession, simulation_id: UUID) ->
         select(DBSimulation)
         .where(DBSimulation.id == simulation_id)
         .options(
-            selectinload(DBSimulation.rebalance_histories).selectinload(DBRebalanceHistory.investments)
+            selectinload(DBSimulation.rebalance_histories).selectinload(
+                DBRebalanceHistory.investments
+            )
         )
     )
     result = await db_session.execute(stmt)
@@ -234,7 +358,9 @@ async def get_simulation_by_id(db_session: AsyncSession, simulation_id: UUID) ->
     return _db_simulation_to_result(simulation)
 
 
-async def list_simulations(db_session: AsyncSession, limit: int = 100, offset: int = 0) -> list[dict]:
+async def list_simulations(
+    db_session: AsyncSession, limit: int = 100, offset: int = 0
+) -> list[dict]:
     """
     List simulations from the database.
     Returns a list of simulation summaries (id, date_start, date_end, profit_pct, created_at).
@@ -347,8 +473,11 @@ async def load_stock_metrics(
     Load stock metrics for a specific date from the database.
     Returns a StockMetrics object, or None if no data found.
     """
-    stmt = select(DBStockMetrics).where(DBStockMetrics.symbol ==
-                                        symbol.upper()).where(DBStockMetrics.date == metrics_date)
+    stmt = (
+        select(DBStockMetrics)
+        .where(DBStockMetrics.symbol == symbol.upper())
+        .where(DBStockMetrics.date == metrics_date)
+    )
     result = await db_session.execute(stmt)
     record = result.scalar_one_or_none()
 
@@ -395,7 +524,9 @@ async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
 # =============================================================================
 
 
-async def create_simulation_job(db_session: AsyncSession, config: SimulationConfig) -> UUID:
+async def create_simulation_job(
+    db_session: AsyncSession, config: SimulationConfig
+) -> UUID:
     """Enqueue a new simulation job. Returns the job ID."""
     job = DBSimulationJob(
         status="pending",
@@ -419,9 +550,13 @@ async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> SimulationJob
     return _job_to_model(job)
 
 
-async def list_recent_jobs(db_session: AsyncSession, limit: int = 50) -> list[SimulationJob]:
+async def list_recent_jobs(
+    db_session: AsyncSession, limit: int = 50
+) -> list[SimulationJob]:
     """List recent simulation jobs ordered by creation time descending."""
-    stmt = select(DBSimulationJob).order_by(DBSimulationJob.created_at.desc()).limit(limit)
+    stmt = (
+        select(DBSimulationJob).order_by(DBSimulationJob.created_at.desc()).limit(limit)
+    )
     result = await db_session.execute(stmt)
     return [_job_to_model(job) for job in result.scalars().all()]
 
@@ -451,21 +586,29 @@ async def claim_next_pending_job(db_session: AsyncSession) -> DBSimulationJob | 
     return job
 
 
-async def mark_job_completed(db_session: AsyncSession, job_id: UUID, simulation_id: UUID) -> None:
+async def mark_job_completed(
+    db_session: AsyncSession, job_id: UUID, simulation_id: UUID
+) -> None:
     stmt = (
         update(DBSimulationJob)
         .where(DBSimulationJob.id == job_id)
-        .values(status="completed", simulation_id=simulation_id, completed_at=datetime.now())
+        .values(
+            status="completed", simulation_id=simulation_id, completed_at=datetime.now()
+        )
     )
     await db_session.execute(stmt)
     await db_session.commit()
 
 
-async def mark_job_failed(db_session: AsyncSession, job_id: UUID, error_message: str) -> None:
+async def mark_job_failed(
+    db_session: AsyncSession, job_id: UUID, error_message: str
+) -> None:
     stmt = (
         update(DBSimulationJob)
         .where(DBSimulationJob.id == job_id)
-        .values(status="failed", error_message=error_message, completed_at=datetime.now())
+        .values(
+            status="failed", error_message=error_message, completed_at=datetime.now()
+        )
     )
     await db_session.execute(stmt)
     await db_session.commit()

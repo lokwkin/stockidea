@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table"
 import { dateFormat } from "@/lib/utils"
 
-type StockIndex = "SP500" | "DOWJONES" | "NASDAQ"
+type StockIndex = "SP500" | "NASDAQ"
 
 interface SimulateRequest {
   max_stocks: number
@@ -244,7 +244,6 @@ export function CreateSimulationView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="SP500">S&P 500</SelectItem>
-                <SelectItem value="DOWJONES">Dow Jones</SelectItem>
                 <SelectItem value="NASDAQ">NASDAQ</SelectItem>
               </SelectContent>
             </Select>

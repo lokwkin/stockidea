@@ -1,14 +1,20 @@
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import logging
 from uuid import UUID
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 import uvicorn
 
-from stockidea.analysis import metrics, metrics_calculator
+from stockidea.metrics import (
+    service as metrics_service,
+    calculator as metrics_calculator,
+)
 from stockidea.rule_engine import compile_rule, extract_involved_keys
 from stockidea.simulation.simulator import Simulator
 from stockidea.types import EnqueuedJob, SimulationConfig, SimulationJob, StockIndex
@@ -48,7 +54,9 @@ async def _worker_loop() -> None:
                         baseline_index=StockIndex.SP500,
                     )
                     simulation_result = await simulator.simulate()
-                    simulation_id = await queries.save_simulation_result(db_session, simulation_result)
+                    simulation_id = await queries.save_simulation_result(
+                        db_session, simulation_result
+                    )
 
                 async with conn.get_db_session() as db_session:
                     await queries.mark_job_completed(db_session, job.id, simulation_id)
@@ -71,9 +79,22 @@ async def _worker_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Auto-refresh market data on startup (runs in background, non-blocking)
+    from stockidea.datasource import service as datasource_service
+
+    refresh_task = asyncio.create_task(datasource_service.refresh_all())
+    refresh_task.add_done_callback(
+        lambda t: (
+            logger.error(f"Data refresh failed: {t.exception()}")
+            if t.exception()
+            else None
+        )
+    )
+
     worker_task = asyncio.create_task(_worker_loop())
     yield
     worker_task.cancel()
+    refresh_task.cancel()
     try:
         await worker_task
     except asyncio.CancelledError:
@@ -104,39 +125,53 @@ async def list_simulations() -> list[dict]:
 async def get_simulation(simulation_id: UUID) -> dict:
     """Return the full JSON content of a simulation by ID."""
     async with conn.get_db_session() as db_session:
-        simulation_result = await queries.get_simulation_by_id(db_session, simulation_id)
+        simulation_result = await queries.get_simulation_by_id(
+            db_session, simulation_id
+        )
         if simulation_result is None:
-            raise HTTPException(status_code=404, detail=f"Simulation not found: {simulation_id}")
+            raise HTTPException(
+                status_code=404, detail=f"Simulation not found: {simulation_id}"
+            )
         return simulation_result.model_dump()
 
 
 @app.get("/metrics")
 async def list_analysis() -> list[str]:
     async with conn.get_db_session() as db_session:
-        dates = await metrics.list_metrics_dates(db_session)
+        dates = await metrics_service.list_metrics_dates(db_session)
     return [date.strftime("%Y-%m-%d") for date in dates]
 
 
 @app.get("/metrics/{date}/")
-async def get_analysis(date: str, rule: Optional[str] = None, index: StockIndex = StockIndex.SP500) -> dict:
+async def get_analysis(
+    date: str, rule: Optional[str] = None, index: StockIndex = StockIndex.SP500
+) -> dict:
 
     metrics_date = datetime.strptime(date, "%Y-%m-%d")
-    # Get the symbols of the constituent
-    symbols = await constituent.get_constituent_at(index, metrics_date.date())
 
-    # Analyze the stock prices and save to database
     async with conn.get_db_session() as db_session:
-        stock_metrics_batch = await metrics.get_stock_metrics_batch(
-            db_session, symbols=symbols, metrics_date=metrics_date, back_period_weeks=52)
+        # Get the symbols of the constituent
+        symbols = await constituent.get_constituent_at(
+            db_session, index, metrics_date.date()
+        )
+        stock_metrics_batch = await metrics_service.get_stock_metrics_batch(
+            db_session, symbols=symbols, metrics_date=metrics_date, back_period_weeks=52
+        )
 
     # Apply rule if provided
     if rule:
         try:
             rule_func = compile_rule(rule)
             # Filter analyses using the rule (no max_stocks limit for API)
-            stock_metrics_batch = [stock_metric for stock_metric in stock_metrics_batch if rule_func(stock_metric)]
+            stock_metrics_batch = [
+                stock_metric
+                for stock_metric in stock_metrics_batch
+                if rule_func(stock_metric)
+            ]
             # Sort by rising stability score
-            stock_metrics_batch = metrics_calculator.rank_by_rising_stability_score(stock_metrics_batch)
+            stock_metrics_batch = metrics_calculator.rank_by_rising_stability_score(
+                stock_metrics_batch
+            )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
@@ -193,13 +228,53 @@ async def get_snp500_prices() -> list[dict]:
     """
     async with conn.get_db_session() as db_session:
         try:
-            prices = await market_data.get_index_prices(db_session, StockIndex.SP500, datetime.now() - timedelta(weeks=700), datetime.now())
+            prices = await market_data.get_index_prices(
+                db_session,
+                StockIndex.SP500,
+                datetime.now() - timedelta(weeks=700),
+                datetime.now(),
+            )
             return [price.model_dump() for price in prices]
         except Exception as e:
             raise HTTPException(
-                status_code=500,
-                detail=f"Failed to fetch S&P 500 data: {str(e)}"
+                status_code=500, detail=f"Failed to fetch S&P 500 data: {str(e)}"
             )
+
+
+# =============================================================================
+# Agent Endpoints
+# =============================================================================
+
+
+class AgentRequest(BaseModel):
+    instruction: str
+    model: str = "claude-sonnet-4-20250514"
+
+
+@app.post("/agent/run")
+async def agent_run(request: AgentRequest):
+    """Run the AI strategy agent and stream events via SSE."""
+    from stockidea.agent.agent import run_agent_stream
+
+    async def event_stream():
+        try:
+            async for event in run_agent_stream(request.instruction, request.model):
+                event_type = event["event"]
+                data = json.dumps(event["data"])
+                yield f"event: {event_type}\ndata: {data}\n\n"
+        except Exception as e:
+            logger.exception(f"Agent stream error: {e}")
+            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 if __name__ == "__main__":

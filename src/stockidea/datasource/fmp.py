@@ -1,34 +1,40 @@
 from datetime import date
 import logging
-import os
 import httpx
 
-from stockidea.config import FMP_API_KEY, FMP_BASE_URL
-from stockidea.types import ConstituentChange, FMPAdjustedStockPrice, FMPLightPrice, StockIndex
+from stockidea.constants import FMP_API_KEY, FMP_BASE_URL
+from stockidea.types import (
+    ConstituentChange,
+    FMPAdjustedStockPrice,
+    FMPLightPrice,
+    StockIndex,
+)
 
 logger = logging.getLogger(__name__)
 
-if not os.getenv("FMP_API_KEY"):
-    raise ValueError(
-        "FMP_API_KEY not found in environment variables. Check your .env file."
-    )
+
+def _require_api_key() -> str:
+    if not FMP_API_KEY:
+        raise ValueError(
+            "FMP_API_KEY not found in environment variables. Check your .env file."
+        )
+    return FMP_API_KEY
 
 
 async def fetch_index_prices(index: StockIndex) -> list[FMPLightPrice]:
+    api_key = _require_api_key()
     match index:
         case StockIndex.SP500:
             symbol = "^GSPC"
-        case StockIndex.DOWJONES:
-            symbol = "^DJI"
         case StockIndex.NASDAQ:
             symbol = "^IXIC"
         case _:
-            raise ValueError(f"Invalid index: {index}")
+            raise ValueError(f"Unsupported index: {index}")
     logger.info(f"Fetching index prices for {index.value} ({symbol})")
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
             f"{FMP_BASE_URL}/stable/historical-price-eod/light",
-            params={"symbol": symbol.upper(), "apikey": FMP_API_KEY, "from": "2011-01-01"},
+            params={"symbol": symbol.upper(), "apikey": api_key, "from": "2011-01-01"},
         )
         response.raise_for_status()
         data: list[dict] = response.json()
@@ -36,11 +42,12 @@ async def fetch_index_prices(index: StockIndex) -> list[FMPLightPrice]:
 
 
 async def fetch_stock_prices(symbol: str) -> list[FMPAdjustedStockPrice]:
+    api_key = _require_api_key()
     logger.info(f"Fetching stock prices for {symbol}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
             f"{FMP_BASE_URL}/stable/historical-price-eod/dividend-adjusted",
-            params={"symbol": symbol.upper(), "apikey": FMP_API_KEY, "from": "2011-01-01"},
+            params={"symbol": symbol.upper(), "apikey": api_key, "from": "2011-01-01"},
         )
         response.raise_for_status()
 
@@ -52,11 +59,12 @@ async def fetch_stock_prices(symbol: str) -> list[FMPAdjustedStockPrice]:
 
 
 async def fetch_historical_constituent(index: StockIndex) -> list[ConstituentChange]:
+    api_key = _require_api_key()
     logger.info(f"Fetching historical constituent for {index.value}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
             f"{FMP_BASE_URL}/stable/historical-{index.value}-constituent",
-            params={"apikey": FMP_API_KEY},
+            params={"apikey": api_key},
         )
         response.raise_for_status()
 

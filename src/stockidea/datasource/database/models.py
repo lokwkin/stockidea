@@ -24,15 +24,21 @@ class Base(DeclarativeBase):
 class DBSimulationJob(Base):
     __tablename__ = "simulation_jobs"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, index=True, default=uuid.uuid4)
-    status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending", index=True
+    )
     # SimulationConfig stored as JSON text
     config_json: Mapped[str] = mapped_column(Text, nullable=False)
     simulation_id: Mapped[uuid.UUID] = mapped_column(
         UUID, ForeignKey("simulations.id", ondelete="SET NULL"), nullable=True
     )
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now, index=True
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
@@ -51,7 +57,9 @@ class DBStockPrice(Base):
     close: Mapped[float] = mapped_column(Float, nullable=True)
     adj_close: Mapped[float] = mapped_column(Float, nullable=True)
     volume: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
 
     def __repr__(self) -> str:
         return f"<StockPrice(symbol={self.symbol}, date={self.date})>"
@@ -61,16 +69,49 @@ class DBStockPriceMetadata(Base):
     __tablename__ = "stock_price_metadata"
 
     symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
 
     def __repr__(self) -> str:
-        return f"<StockPriceMetadata(symbol={self.symbol}, fetched_at={self.fetched_at})>"
+        return (
+            f"<StockPriceMetadata(symbol={self.symbol}, fetched_at={self.fetched_at})>"
+        )
+
+
+class DBConstituentChange(Base):
+    __tablename__ = "constituent_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    index: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    added_symbol: Mapped[str] = mapped_column(String, nullable=True)
+    removed_symbol: Mapped[str] = mapped_column(String, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<ConstituentChange(index={self.index}, date={self.date}, added={self.added_symbol}, removed={self.removed_symbol})>"
+
+
+class DBConstituentMetadata(Base):
+    __tablename__ = "constituent_metadata"
+
+    index: Mapped[str] = mapped_column(String, primary_key=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ConstituentMetadata(index={self.index}, fetched_at={self.fetched_at})>"
+        )
 
 
 class DBSimulation(Base):
     __tablename__ = "simulations"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, index=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
     initial_balance: Mapped[float] = mapped_column(Float, nullable=False)
     final_balance: Mapped[float] = mapped_column(Float, nullable=False)
     date_start: Mapped[datetime] = mapped_column(Date, nullable=False, index=True)
@@ -86,7 +127,9 @@ class DBSimulation(Base):
     rebalance_interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     rule: Mapped[str] = mapped_column(Text, nullable=False)
     index: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now, index=True
+    )
 
     rebalance_histories: Mapped[list["DBRebalanceHistory"]] = relationship(
         "DBRebalanceHistory", back_populates="simulation", cascade="all, delete-orphan"
@@ -99,9 +142,15 @@ class DBSimulation(Base):
 class DBRebalanceHistory(Base):
     __tablename__ = "rebalance_histories"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, index=True, default=uuid.uuid4)
-    simulation_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey(
-        "simulations.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    simulation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("simulations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     date: Mapped[datetime] = mapped_column(Date, nullable=False, index=True)
     balance: Mapped[float] = mapped_column(Float, nullable=False)
     profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
@@ -110,7 +159,9 @@ class DBRebalanceHistory(Base):
     baseline_profit: Mapped[float] = mapped_column(Float, nullable=False)
     baseline_balance: Mapped[float] = mapped_column(Float, nullable=False)
 
-    simulation: Mapped["DBSimulation"] = relationship("DBSimulation", back_populates="rebalance_histories")
+    simulation: Mapped["DBSimulation"] = relationship(
+        "DBSimulation", back_populates="rebalance_histories"
+    )
     investments: Mapped[list["DBInvestment"]] = relationship(
         "DBInvestment", back_populates="rebalance_history", cascade="all, delete-orphan"
     )
@@ -122,9 +173,15 @@ class DBRebalanceHistory(Base):
 class DBInvestment(Base):
     __tablename__ = "investments"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, index=True, default=uuid.uuid4)
-    rebalance_history_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey(
-        "rebalance_histories.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, index=True, default=uuid.uuid4
+    )
+    rebalance_history_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("rebalance_histories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     symbol: Mapped[str] = mapped_column(String, nullable=False, index=True)
     position: Mapped[float] = mapped_column(Float, nullable=False)
     buy_price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -134,7 +191,9 @@ class DBInvestment(Base):
     profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
     profit: Mapped[float] = mapped_column(Float, nullable=False)
 
-    rebalance_history: Mapped["DBRebalanceHistory"] = relationship("DBRebalanceHistory", back_populates="investments")
+    rebalance_history: Mapped["DBRebalanceHistory"] = relationship(
+        "DBRebalanceHistory", back_populates="investments"
+    )
 
     def __repr__(self) -> str:
         return f"<Investment(id={self.id}, symbol={self.symbol}, profit={self.profit})>"
@@ -175,7 +234,9 @@ class DBStockMetrics(Base):
     r_squared_13w: Mapped[float] = mapped_column(Float, nullable=False)
     slope_26w_pct: Mapped[float] = mapped_column(Float, nullable=False)
     r_squared_26w: Mapped[float] = mapped_column(Float, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
 
     def __repr__(self) -> str:
         return f"<StockMetrics(symbol={self.symbol}, date={self.date}, slope={self.linear_slope_pct:.2f}%)>"

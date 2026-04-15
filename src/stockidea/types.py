@@ -1,14 +1,12 @@
-
-
 from datetime import datetime, date
 import enum
+import uuid as _uuid
 
 from pydantic import BaseModel
 
 
 class StockIndex(enum.Enum):
     SP500 = "SP500"
-    DOWJONES = "DOWJONES"
     NASDAQ = "NASDAQ"
 
 
@@ -70,12 +68,13 @@ class StockMetrics(BaseModel):
     max_jump_4w_pct: float
     max_drop_4w_pct: float
     # Stability metrics
-    max_drawdown_pct: float      # positive value: e.g. 18.5 means fell 18.5% from peak
-    pct_weeks_positive: float    # 0.0–1.0 fraction of up-weeks
-    slope_13w_pct: float         # linear slope over last 13 weeks (% per week)
-    r_squared_13w: float         # R² of 13-week regression
-    slope_26w_pct: float         # linear slope over last 26 weeks (% per week)
-    r_squared_26w: float         # R² of 26-week regression
+    max_drawdown_pct: float  # positive value: e.g. 18.5 means fell 18.5% from peak
+    pct_weeks_positive: float  # 0.0–1.0 fraction of up-weeks
+    slope_13w_pct: float  # linear slope over last 13 weeks (% per week)
+    r_squared_13w: float  # R² of 13-week regression
+    slope_26w_pct: float  # linear slope over last 26 weeks (% per week)
+    r_squared_26w: float  # R² of 26-week regression
+
 
 # =============================================================================
 # Simulation Models
@@ -105,6 +104,20 @@ class RebalanceHistory(BaseModel):
     baseline_balance: float
 
 
+class SimulationScores(BaseModel):
+    """Objective scores computed from simulation results."""
+
+    sharpe_ratio: float
+    sortino_ratio: float
+    calmar_ratio: float
+    max_drawdown_pct: float
+    max_drawdown_duration_weeks: int
+    win_rate: float
+    avg_win_pct: float
+    avg_loss_pct: float
+    total_rebalances: int
+
+
 class SimulationConfig(BaseModel):
     max_stocks: int
     rebalance_interval_weeks: int
@@ -128,13 +141,12 @@ class SimulationResult(BaseModel):
     baseline_profit: float
     baseline_balance: float
     simulation_config: SimulationConfig
+    scores: SimulationScores | None = None
 
 
 # =============================================================================
 # Job Queue Models
 # =============================================================================
-
-import uuid as _uuid
 
 
 class SimulationJob(BaseModel):

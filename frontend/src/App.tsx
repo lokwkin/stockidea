@@ -1,10 +1,11 @@
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, Loader2, Bot } from "lucide-react"
 import { AnalysisView } from "@/components/AnalysisView"
 import { SimulationView } from "@/components/SimulationView"
 import { CreateSimulationView } from "@/components/CreateSimulationView"
 import { SimulationJobView } from "@/components/SimulationJobView"
+import { AgentView } from "@/components/AgentView"
 import { SimulationJob, SimulationSummary } from "@/types/simulation"
 import { cn, dateFormat } from "@/lib/utils"
 
@@ -124,6 +125,21 @@ function Sidebar() {
           title={!isHovered ? "Create Simulations" : undefined}
         >
           {isHovered ? "Create Simulations" : <Plus className="h-5 w-5" />}
+        </Link>
+
+        {/* AI Agent */}
+        <Link
+          to="/agent"
+          className={cn(
+            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
+            isHovered ? "text-base" : "text-sm justify-center",
+            location.pathname === "/agent"
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          )}
+          title={!isHovered ? "AI Agent" : undefined}
+        >
+          {isHovered ? "AI Agent" : <Bot className="h-5 w-5" />}
         </Link>
 
         {/* Jobs Section */}
@@ -296,6 +312,7 @@ function App() {
             <Route path="/analysis/:date" element={<AnalysisView />} />
             <Route path="/simulation" element={<SimulationView />} />
             <Route path="/simulation/create" element={<CreateSimulationView />} />
+            <Route path="/agent" element={<AgentView />} />
             <Route path="/simulation/job/:jobId" element={<SimulationJobView />} />
             <Route path="/simulation/:id" element={<SimulationView />} />
           </Routes>

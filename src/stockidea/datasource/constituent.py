@@ -1,36 +1,38 @@
 from datetime import date
-from stockidea.datasource import fmp, file_cache
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from stockidea.datasource import fmp
+from stockidea.datasource.database import queries
 from stockidea.types import ConstituentChange, StockIndex
 
 
-async def _load_constituent_changes(index: StockIndex) -> list[ConstituentChange]:
-    cached_changes = file_cache.load_from_cache(f"constituent_changes_{index.value}")
-    if cached_changes is not None:
-        return [ConstituentChange.model_validate(change) for change in cached_changes]
+async def _load_constituent_changes(
+    db_session: AsyncSession, index: StockIndex
+) -> list[ConstituentChange]:
+    """Load constituent changes from DB, fetching from FMP if stale."""
+    cached = await queries.load_constituent_changes(db_session, index)
+    if cached is not None:
+        return cached
     changes = await fmp.fetch_historical_constituent(index)
-    file_cache.save_to_cache(f"constituent_changes_{index.value}", [change.model_dump(mode="json") for change in changes])
+    await queries.save_constituent_changes(db_session, index, changes)
     return changes
 
 
-async def get_constituent_at(index: StockIndex, target_date: date) -> list[str]:
+async def get_constituent_at(
+    db_session: AsyncSession, index: StockIndex, target_date: date
+) -> list[str]:
+    """Get the constituent symbols of the index at the target date.
+
+    Loads constituent change history and reconstructs membership at the given date.
     """
-    Get the constituent of the index at the target date.
-    Load the constituent changes and re-construct the constituent at the target date.
-    """
-    changes = await _load_constituent_changes(index)
+    changes = await _load_constituent_changes(db_session, index)
     symbols = set()
     for change in changes:
-        # Stop processing if we've passed the target date
         if change.date > target_date:
             break
-
-        # Remove the old symbol first (if it exists)
         if change.removed_symbol:
             symbols.discard(change.removed_symbol)
-
-        # Add the new symbol
         if change.added_symbol:
             symbols.add(change.added_symbol)
-
-    # Return sorted list
     return sorted(symbols)
