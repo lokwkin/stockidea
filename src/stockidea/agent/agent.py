@@ -126,13 +126,35 @@ for the next change. Build up a running log across iterations so you have a comp
 before running the next backtest (e.g. "Sharpe dropped when I added max_drawdown — \
 the filter is too restrictive, causing cash periods. I'll loosen it from 20 to 25.").
 7. Run 5-10 backtest iterations per round. Each iteration should be driven by your \
-observations from the previous result — do not batch changes blindly.
+observations from the previous result — do not batch changes blindly. \
+Vary across all strategy levers: after a few rule iterations, try different rankings, \
+max_stocks values, and rebalance intervals to find the optimal combination.
 8. After completing your iterations for this round, present your recommendation: \
-the best-performing rule, key performance metrics, and any insights or trade-offs worth noting \
-(e.g. "loosening drawdown improved returns but increased volatility"). \
+the best-performing configuration (rule, ranking, max_stocks, rebalance_interval_weeks), \
+key performance metrics, and any insights or trade-offs worth noting \
+(e.g. "loosening drawdown improved returns but increased volatility", \
+"ranking by downside_std outperformed the default momentum ranking"). \
 Then stop and wait for the user's follow-up instruction — they may ask you to explore a \
 different direction, tighten specific constraints, or run another round of iterations based \
 on what they see in the results.
+
+## Strategy levers
+
+You have multiple levers to tune a strategy — not just the filter rule. You may use all of them:
+
+1. **Rule** — the filter expression that selects which stocks qualify. This is the primary lever.
+2. **Ranking** — the expression that prioritizes stocks when more pass the filter than \
+`max_stocks` allows. Different rankings can dramatically change which stocks get picked \
+even with the same rule. Try at least 2-3 different rankings per round.
+3. **max_stocks** — how many stocks to hold simultaneously (default: 3). More stocks = more \
+diversification but diluted conviction. Try values from 2 to 5.
+4. **rebalance_interval_weeks** — how often to rebalance (default: 2). Shorter intervals \
+react faster but incur more trading. Try 1, 2, or 4 weeks.
+5. **index** — the stock universe (SP500 or NASDAQ). Different universes have different \
+characteristics — NASDAQ is more tech/growth-heavy.
+
+Don't just iterate on the rule. After finding a decent rule, also experiment with ranking, \
+max_stocks, and rebalance_interval_weeks to optimize the full strategy.
 
 ## Guidelines
 
