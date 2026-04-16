@@ -68,30 +68,43 @@ The ultimate goal is an **AI-driven strategy design and optimization platform**:
 
 ### Backend (`src/stockidea/`)
 
-FastAPI app with an **in-process async worker loop** for long-running backtests:
+FastAPI app with an **in-process async worker loop** for long-running backtests. CLI and API routes are distributed across component modules — the root `api.py` and `cli.py` are thin assemblers that wire components together.
 
+**Shared modules:**
+- `api.py` — Assembles FastAPI app: lifespan (startup data refresh + backtest worker), CORS, includes component routers
+- `cli.py` — Assembles Click CLI: flattens component subcommands into top-level commands
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
-- `api.py` — All HTTP routes + `lifespan` context that starts the background worker and auto-refreshes data on startup
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`) into callables using `simpleeval`
+
+**Component modules** — each has `service.py` (business logic), `router.py` (API routes), and `cli.py` (CLI commands):
+
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
-  - `datasource/service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
-  - `datasource/fmp.py` — FMP API client; API key checked at call time (not import time)
-  - `datasource/database/` — SQLAlchemy models (`models.py`), queries (`queries.py`), connection pool (`conn.py`)
+  - `router.py` — `GET /snp500`
+  - `cli.py` — `fetch-data`, `fetch-prices`, `fetch-index`, `fetch-constituents`
+  - `service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
+  - `fmp.py` — FMP API client; API key checked at call time (not import time)
+  - `database/` — SQLAlchemy models (`models.py`), queries (`queries.py`), connection pool (`conn.py`)
 - `indicators/` — Pre-computed stock indicators for strategy evaluation
-  - `indicators/service.py` — Fetches/computes indicator batches, applies rules
-  - `indicators/calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields, ranks by stability score
+  - `router.py` — `GET /indicators`, `GET /indicators/{date}/`
+  - `cli.py` — `compute`, `pick`
+  - `service.py` — Fetches/computes indicator batches, applies rules
+  - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields, ranks by stability score
 - `backtest/` — Core backtest engine
-  - `backtest/backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
-  - `backtest/scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
+  - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}`, `GET /jobs`, `GET /jobs/{id}`, `worker_loop()`
+  - `cli.py` — `backtest`
+  - `backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
+  - `scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
-  - `agent/agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
-  - `agent/tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
+  - `router.py` — `GET/POST/DELETE /strategies`, `POST /strategies/{id}/messages`
+  - `cli.py` — `agent`
+  - `agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
+  - `tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
 
 **Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
 
-**Job queue flow**: `POST /backtest` saves a "pending" `backtest_job` row and returns a `job_id`. The worker loop (`_worker_loop` in `api.py`) polls the DB, claims pending jobs, runs `Backtester.backtest()`, and writes the result back. No external queue.
+**Job queue flow**: `POST /backtest` saves a "pending" `backtest_job` row and returns a `job_id`. The `worker_loop()` in `backtest/router.py` polls the DB, claims pending jobs, runs `Backtester.backtest()`, and writes the result back. No external queue.
 
 **Strategy flow**: `POST /strategies` creates a `DBStrategy`, saves the user message as `DBStrategyMessage`, runs the agent (SSE stream), and persists agent events + LLM history on completion. `POST /strategies/{id}/messages` loads prior LLM history and resumes the agent for multi-turn conversation.
 

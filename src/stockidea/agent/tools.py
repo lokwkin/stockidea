@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -114,38 +113,30 @@ _LIST_INDICATORS_PARAMS = {
 _WRITE_NOTES_PARAMS = {
     "type": "object",
     "properties": {
-        "strategy_name": {
-            "type": "string",
-            "description": "Name for the strategy (used as filename, e.g. 'momentum-low-vol')",
-        },
         "content": {
             "type": "string",
             "description": "Markdown content — your reasoning, iteration history, and observations",
         },
     },
-    "required": ["strategy_name", "content"],
+    "required": ["content"],
 }
 
 _WRITE_NOTES_DESC = (
     "Save strategy notes as a markdown file. Use this to persist your reasoning, "
     "iteration history, what worked and what didn't, and your current best approach. "
-    "Overwrites any existing notes for the same strategy name."
+    "Overwrites any existing notes for this strategy. Call this after every backtest "
+    "to build up a running log."
 )
 
 _READ_NOTES_PARAMS = {
     "type": "object",
-    "properties": {
-        "strategy_name": {
-            "type": "string",
-            "description": "Name of the strategy to read notes for. Omit to list all available strategies.",
-        },
-    },
+    "properties": {},
     "required": [],
 }
 
 _READ_NOTES_DESC = (
-    "Read strategy notes. If strategy_name is provided, returns the markdown content. "
-    "If omitted, lists all available strategy note files."
+    "Read back the strategy notes for the current strategy. "
+    "Returns the markdown content previously saved with write_strategy_notes."
 )
 
 _LOOKUP_STOCK_PARAMS = {
@@ -276,7 +267,7 @@ async def execute_tool(tool_name: str, tool_input: dict, strategy_id: str) -> st
     elif tool_name == "write_strategy_notes":
         return await _write_strategy_notes(tool_input, strategy_id=strategy_id)
     elif tool_name == "read_strategy_notes":
-        return _read_strategy_notes(tool_input)
+        return _read_strategy_notes(tool_input, strategy_id=strategy_id)
     elif tool_name == "lookup_stock":
         return await _lookup_stock(tool_input)
     else:
@@ -463,50 +454,26 @@ async def _preview_filter(params: dict) -> str:
     )
 
 
-def _slugify(name: str) -> str:
-    """Convert a strategy name to a filesystem-safe slug."""
-    slug = name.lower().strip()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug or "unnamed"
-
-
 async def _write_strategy_notes(params: dict, strategy_id: str) -> str:
-    """Save strategy notes as a markdown file and to the strategy DB record."""
+    """Save strategy notes as a markdown file on the filesystem."""
     content = params["content"]
 
     STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
     filepath = STRATEGIES_DIR / f"{strategy_id}.md"
     filepath.write_text(content, encoding="utf-8")
 
-    from uuid import UUID as _UUID
-
-    from stockidea.datasource.database.queries import update_strategy_notes
-
-    async with conn.get_db_session() as db_session:
-        await update_strategy_notes(db_session, _UUID(strategy_id), content)
-
     return json.dumps({"path": str(filepath), "status": "saved"})
 
 
-def _read_strategy_notes(params: dict) -> str:
-    """Read strategy notes or list available strategies."""
-    strategy_name = params.get("strategy_name")
-
-    if not strategy_name:
-        # List all available strategy notes
-        if not STRATEGIES_DIR.exists():
-            return json.dumps({"strategies": []})
-        strategies = [f.stem for f in sorted(STRATEGIES_DIR.glob("*.md"))]
-        return json.dumps({"strategies": strategies})
-
-    slug = _slugify(strategy_name)
-    filepath = STRATEGIES_DIR / f"{slug}.md"
+def _read_strategy_notes(params: dict, strategy_id: str) -> str:
+    """Read strategy notes from the filesystem."""
+    # Read notes for the current strategy
+    filepath = STRATEGIES_DIR / f"{strategy_id}.md"
     if not filepath.exists():
-        return json.dumps({"error": f"No notes found for strategy '{strategy_name}'"})
+        return json.dumps({"error": "No notes found for this strategy yet."})
 
     content = filepath.read_text(encoding="utf-8")
-    return json.dumps({"strategy_name": slug, "content": content})
+    return json.dumps({"strategy_id": strategy_id, "content": content})
 
 
 async def _lookup_stock(params: dict) -> str:
