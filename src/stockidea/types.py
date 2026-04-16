@@ -218,8 +218,6 @@ class StrategyDetail(BaseModel):
     date_start: date
     date_end: date
     status: str
-    final_rule: str | None = None
-    notes: str | None = None
     created_at: datetime
     updated_at: datetime
     messages: list[StrategyMessage] = []

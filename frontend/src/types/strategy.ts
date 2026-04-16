@@ -37,8 +37,6 @@ export interface StrategyDetail {
   date_start: string
   date_end: string
   status: StrategyStatus
-  final_rule: string | null
-  notes: string | null
   created_at: string
   updated_at: string
   messages: StrategyMessage[]

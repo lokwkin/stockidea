@@ -30,8 +30,6 @@ def upgrade() -> None:
         sa.Column("date_start", sa.Date(), nullable=False),
         sa.Column("date_end", sa.Date(), nullable=False),
         sa.Column("status", sa.String(), nullable=False, server_default="idle"),
-        sa.Column("final_rule", sa.Text(), nullable=True),
-        sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("llm_history_json", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),

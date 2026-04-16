@@ -120,8 +120,6 @@ class DBStrategy(Base):
     status: Mapped[str] = mapped_column(
         String, nullable=False, default="idle", index=True
     )
-    final_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now, index=True

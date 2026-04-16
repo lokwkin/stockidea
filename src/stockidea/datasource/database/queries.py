@@ -738,8 +738,6 @@ async def get_strategy_by_id(
         date_start=strategy.date_start,
         date_end=strategy.date_end,
         status=strategy.status,
-        final_rule=strategy.final_rule,
-        notes=strategy.notes,
         created_at=strategy.created_at,
         updated_at=strategy.updated_at,
         messages=messages,
@@ -790,32 +788,6 @@ async def update_strategy_llm_history(
         update(DBStrategy)
         .where(DBStrategy.id == strategy_id)
         .values(llm_history_json=llm_history_json, updated_at=datetime.now())
-    )
-    await db_session.execute(stmt)
-    await db_session.commit()
-
-
-async def update_strategy_notes(
-    db_session: AsyncSession, strategy_id: UUID, notes: str
-) -> None:
-    """Update the notes for a strategy."""
-    stmt = (
-        update(DBStrategy)
-        .where(DBStrategy.id == strategy_id)
-        .values(notes=notes, updated_at=datetime.now())
-    )
-    await db_session.execute(stmt)
-    await db_session.commit()
-
-
-async def update_strategy_final_rule(
-    db_session: AsyncSession, strategy_id: UUID, final_rule: str
-) -> None:
-    """Update the final rule for a strategy."""
-    stmt = (
-        update(DBStrategy)
-        .where(DBStrategy.id == strategy_id)
-        .values(final_rule=final_rule, updated_at=datetime.now())
     )
     await db_session.execute(stmt)
     await db_session.commit()
