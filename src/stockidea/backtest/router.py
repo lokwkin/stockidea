@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from stockidea.backtest.backtester import Backtester
 from stockidea.datasource.database import conn, queries
-from stockidea.rule_engine import compile_rule, extract_involved_keys
+from stockidea.rule_engine import compile_ranking, compile_rule, extract_involved_keys
 from stockidea.types import BacktestConfig, BacktestJob, EnqueuedJob, StockIndex
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ async def worker_loop() -> None:
                         rule_raw=config.rule,
                         from_index=config.index,
                         baseline_index=StockIndex.SP500,
+                        ranking_func=compile_ranking(config.ranking),
                     )
                     backtest_result = await backtester.backtest()
                     backtest_id = await queries.save_backtest_result(

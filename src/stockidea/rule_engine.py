@@ -8,6 +8,9 @@ from simpleeval import SimpleEval  # type: ignore
 from stockidea.types import StockIndicators
 
 
+DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+
+
 class RuleEngine:
     """Engine for parsing and evaluating string-based rules on StockIndicators objects."""
 
@@ -131,6 +134,38 @@ class RuleEngine:
                 result.append(key)
 
         return result
+
+
+def compile_ranking(ranking_expr: str) -> Callable[[StockIndicators], float]:
+    """
+    Compile a ranking expression string into a callable that returns a numeric score.
+
+    The expression uses StockIndicators field names and arithmetic operators.
+    Higher scores rank higher. Stocks where evaluation fails (e.g. division by zero)
+    receive -inf.
+
+    Args:
+        ranking_expr: Arithmetic expression like "change_13w_pct / weekly_return_std"
+
+    Returns:
+        A callable that takes StockIndicators and returns a float score.
+
+    Examples:
+        >>> rank = compile_ranking("change_13w_pct / weekly_return_std")
+        >>> score = rank(indicators)
+    """
+    field_names = set(StockIndicators.model_fields.keys())
+
+    def evaluate(indicators: StockIndicators) -> float:
+        names = {name: getattr(indicators, name) for name in field_names}
+        try:
+            evaluator = SimpleEval(names=names)
+            result = evaluator.eval(ranking_expr)
+            return float(result)
+        except Exception:
+            return float("-inf")
+
+    return evaluate
 
 
 def compile_rule(rule_string: str) -> Callable[[StockIndicators], bool]:

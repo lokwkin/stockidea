@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
+from typing import Callable
 
 import numpy as np
 from scipy import stats  # type: ignore
@@ -347,28 +348,21 @@ def compute_stock_indicators(
     )
 
 
-def rank_by_rising_stability_score(
+def rank_by_expression(
     items: list[StockIndicators],
+    ranking_func: Callable[[StockIndicators], float],
 ) -> list[StockIndicators]:
-    """Rank items by rising stability score (slope * r² weighted)."""
+    """Rank items by a user-defined ranking expression.
+
+    Items are sorted by score descending (higher = better).
+    Items where the ranking function fails get pushed to the bottom.
+    """
     if len(items) <= 1:
-        return items  # no ranking needed
+        return items
 
-    slopes = np.array([i.linear_slope_pct for i in items], dtype=float)
-    r2s = np.array([i.linear_r_squared for i in items], dtype=float)
-
-    # Rank normalization (percentiles in [0, 1])
-    slope_rank = slopes.argsort().argsort() / (len(slopes) - 1)
-    r2_rank = r2s.argsort().argsort() / (len(r2s) - 1)
-
-    # Combine: "must rise AND be stable", slightly overweight stability
-    scores = slope_rank * (r2_rank**1.7)
-
-    ranked_items = [
-        item for _, item in sorted(zip(scores, items), key=lambda x: x[0], reverse=True)
-    ]
-
-    return ranked_items
+    scored = [(ranking_func(item), item) for item in items]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored]
 
 
 def slope_outlier_mask(

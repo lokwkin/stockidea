@@ -16,13 +16,18 @@ logger = logging.getLogger(__name__)
 def apply_rule(
     indicators_batch: list[StockIndicators],
     rule_func: Callable[[StockIndicators], bool],
+    ranking_func: Callable[[StockIndicators], float] | None = None,
 ) -> list[StockIndicators]:
+    from stockidea.rule_engine import compile_ranking, DEFAULT_RANKING
+
     filtered_stocks = [
         indicator for indicator in indicators_batch if rule_func(indicator)
     ]
 
-    # Sort by rising stability score
-    filtered_stocks = calculator.rank_by_rising_stability_score(filtered_stocks)
+    # Rank by expression (default: risk-adjusted momentum)
+    if ranking_func is None:
+        ranking_func = compile_ranking(DEFAULT_RANKING)
+    filtered_stocks = calculator.rank_by_expression(filtered_stocks, ranking_func)
 
     # Remove outliers based on the linear slope percentage
     filtered_stocks = calculator.slope_outlier_mask(filtered_stocks, k=3.0)

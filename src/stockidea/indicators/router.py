@@ -7,11 +7,8 @@ from fastapi import APIRouter, HTTPException
 
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
-from stockidea.indicators import (
-    service as indicators_service,
-    calculator as indicators_calculator,
-)
-from stockidea.rule_engine import compile_rule
+from stockidea.indicators import service as indicators_service
+from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
 from stockidea.types import StockIndex
 
 router = APIRouter()
@@ -26,7 +23,10 @@ async def list_analysis() -> list[str]:
 
 @router.get("/indicators/{date}/")
 async def get_analysis(
-    date: str, rule: Optional[str] = None, index: StockIndex = StockIndex.SP500
+    date: str,
+    rule: Optional[str] = None,
+    ranking: Optional[str] = None,
+    index: StockIndex = StockIndex.SP500,
 ) -> dict:
 
     indicators_date = datetime.strptime(date, "%Y-%m-%d")
@@ -45,15 +45,11 @@ async def get_analysis(
     if rule:
         try:
             rule_func = compile_rule(rule)
-            stock_indicators_batch = [
-                stock_indicator
-                for stock_indicator in stock_indicators_batch
-                if rule_func(stock_indicator)
-            ]
-            stock_indicators_batch = (
-                indicators_calculator.rank_by_rising_stability_score(
-                    stock_indicators_batch
-                )
+            ranking_func = compile_ranking(ranking or DEFAULT_RANKING)
+            stock_indicators_batch = indicators_service.apply_rule(
+                stock_indicators_batch,
+                rule_func=rule_func,
+                ranking_func=ranking_func,
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")

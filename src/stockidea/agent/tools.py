@@ -10,7 +10,12 @@ from pathlib import Path
 from stockidea.datasource.database import conn
 from stockidea.datasource import service as datasource_service
 from stockidea.indicators import service as indicators_service
-from stockidea.rule_engine import compile_rule, extract_involved_keys
+from stockidea.rule_engine import (
+    DEFAULT_RANKING,
+    compile_ranking,
+    compile_rule,
+    extract_involved_keys,
+)
 from stockidea.backtest.backtester import Backtester
 from stockidea.types import StockIndex, StockIndicators, BacktestResult
 
@@ -60,6 +65,17 @@ _BACKTEST_PARAMS = {
             "description": "Stock index universe (default: SP500)",
             "default": "SP500",
         },
+        "ranking": {
+            "type": "string",
+            "description": (
+                "Ranking expression to sort filtered stocks. Uses StockIndicators fields "
+                "and returns a numeric score (higher = better). "
+                f"Default: '{DEFAULT_RANKING}'. "
+                "Examples: 'linear_slope_pct * linear_r_squared', "
+                "'change_26w_pct / max_drawdown_pct', "
+                "'slope_13w_pct * r_squared_13w + 0.5 * change_4w_pct'"
+            ),
+        },
     },
     "required": ["rule", "date_start", "date_end"],
 }
@@ -87,6 +103,13 @@ _PREVIEW_FILTER_PARAMS = {
             "enum": ["SP500", "NASDAQ"],
             "description": "Stock index universe (default: SP500)",
             "default": "SP500",
+        },
+        "ranking": {
+            "type": "string",
+            "description": (
+                "Ranking expression to sort filtered stocks (higher = better). "
+                f"Default: '{DEFAULT_RANKING}'"
+            ),
         },
     },
     "required": ["rule", "date"],
@@ -326,11 +349,17 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
     max_stocks = params.get("max_stocks", 3)
     rebalance_interval_weeks = params.get("rebalance_interval_weeks", 2)
     index_str = params.get("index", "SP500")
+    ranking_str = params.get("ranking", DEFAULT_RANKING)
 
     try:
         rule_func = compile_rule(rule_str)
     except Exception as e:
         return json.dumps({"error": f"Invalid rule expression: {e}"})
+
+    try:
+        ranking_func = compile_ranking(ranking_str)
+    except Exception as e:
+        return json.dumps({"error": f"Invalid ranking expression: {e}"})
 
     try:
         date_start = datetime.strptime(date_start_str, "%Y-%m-%d")
@@ -358,6 +387,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
                 rule_raw=rule_str,
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
+                ranking_func=ranking_func,
             )
             result: BacktestResult = await backtester.backtest()
 
@@ -373,6 +403,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
     # Return a concise summary with scores and diagnostics
     summary: dict = {
         "rule": rule_str,
+        "ranking": ranking_str,
         "date_start": date_start_str,
         "date_end": date_end_str,
         "max_stocks": max_stocks,
@@ -397,11 +428,17 @@ async def _preview_filter(params: dict) -> str:
     rule_str = params["rule"]
     date_str = params["date"]
     index_str = params.get("index", "SP500")
+    ranking_str = params.get("ranking", DEFAULT_RANKING)
 
     try:
         rule_func = compile_rule(rule_str)
     except Exception as e:
         return json.dumps({"error": f"Invalid rule expression: {e}"})
+
+    try:
+        ranking_func = compile_ranking(ranking_str)
+    except Exception as e:
+        return json.dumps({"error": f"Invalid ranking expression: {e}"})
 
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
@@ -427,7 +464,9 @@ async def _preview_filter(params: dict) -> str:
             )
 
             filtered = indicators_service.apply_rule(
-                indicators_batch, rule_func=rule_func
+                indicators_batch,
+                rule_func=rule_func,
+                ranking_func=ranking_func,
             )
     except Exception as e:
         logger.exception(f"Preview filter failed: {e}")

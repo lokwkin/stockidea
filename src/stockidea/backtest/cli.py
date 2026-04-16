@@ -10,7 +10,7 @@ from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import (
     save_backtest_result as save_backtest_to_db,
 )
-from stockidea.rule_engine import compile_rule
+from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
 from stockidea.types import StockIndex
 
 
@@ -61,6 +61,12 @@ def backtest_cli():
     type=str,
     help="Rule expression string (e.g., 'change_13w_pct > 10 AND max_drop_2w_pct > 15')",
 )
+@click.option(
+    "--ranking",
+    type=str,
+    default=DEFAULT_RANKING,
+    help=f"Ranking expression for stock selection (default: '{DEFAULT_RANKING}')",
+)
 def backtest(
     max_stocks: int,
     rebalance_interval_weeks: int,
@@ -68,6 +74,7 @@ def backtest(
     date_end: str,
     rule: str,
     index: str,
+    ranking: str,
 ):
     stock_index = StockIndex(index)
     try:
@@ -84,6 +91,11 @@ def backtest(
     except Exception as e:
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
+    try:
+        ranking_func = compile_ranking(ranking)
+    except Exception as e:
+        raise click.BadParameter(f"Invalid ranking expression: {e}")
+
     click.echo(
         f"Running backtest from {date_start_parsed.date()} to {date_end_parsed.date()}"
     )
@@ -91,6 +103,7 @@ def backtest(
         f"Max stocks: {max_stocks}, Rebalance interval: {rebalance_interval_weeks} weeks"
     )
     click.echo(f"Rule: {rule}")
+    click.echo(f"Ranking: {ranking}")
     click.echo(f"Stock index: {stock_index}")
 
     async def _backtest_and_save():
@@ -105,6 +118,7 @@ def backtest(
                 rule_raw=rule,
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
+                ranking_func=ranking_func,
             )
             backtest_result = await backtester.backtest()
             backtest_id = await save_backtest_to_db(db_session, backtest_result)

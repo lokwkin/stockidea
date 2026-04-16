@@ -131,6 +131,7 @@ class BacktestConfig(BaseModel):
     date_start: datetime
     date_end: datetime
     rule: str
+    ranking: str = "change_13w_pct / weekly_return_std"
     index: StockIndex
     involved_keys: list[str] = []
 

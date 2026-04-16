@@ -72,14 +72,33 @@ Examples:
 - `linear_r_squared > 0.7 AND change_26w_pct > 20 AND max_drawdown_pct < 25`
 - `slope_13w_pct > 0.5 AND pct_weeks_positive > 0.55 OR change_1y_pct > 50`
 
+## Ranking expression
+
+After filtering, stocks are ranked by a **ranking expression** — a numeric formula using the same \
+StockIndicators fields. Higher score = higher priority for selection. You can customize this \
+per backtest via the `ranking` parameter.
+
+Default ranking: `change_13w_pct / weekly_return_std` (risk-adjusted momentum — return per unit of volatility).
+
+Examples:
+- `change_13w_pct / weekly_return_std` — risk-adjusted momentum (default)
+- `linear_slope_pct * linear_r_squared` — trend quality (strong + consistent)
+- `change_26w_pct / max_drawdown_pct` — return per unit of drawdown
+- `slope_13w_pct * r_squared_13w + 0.5 * change_4w_pct` — composite: mid-term trend quality + short-term momentum
+- `change_13w_pct / downside_std` — upside-to-downside ratio
+
+Ranking matters because it determines which stocks get selected when more pass the filter \
+than `max_stocks` allows. Experiment with different rankings alongside rule changes.
+
 ## Available tools
 
 - `list_indicator_fields` — Discover available indicator fields and their ranges.
-- `preview_filter` — Quickly check how many stocks pass a rule at a given date. Use this \
-to calibrate thresholds before running a full backtest. If too few stocks match (<5), \
-loosen constraints; if too many (>50), tighten them.
-- `run_backtest` — Run a full backtest. Returns scores AND diagnostics: worst/best periods, \
-cash periods (where no stocks matched), stock selection stats (unique stocks, top-held symbols).
+- `preview_filter` — Quickly check how many stocks pass a rule at a given date. Accepts an \
+optional `ranking` parameter. Use this to calibrate thresholds before running a full backtest. \
+If too few stocks match (<5), loosen constraints; if too many (>50), tighten them.
+- `run_backtest` — Run a full backtest with a rule and optional `ranking` expression. \
+Returns scores AND diagnostics: worst/best periods, cash periods (where no stocks matched), \
+stock selection stats (unique stocks, top-held symbols).
 - `write_strategy_notes` — Save your reasoning, iteration history, and observations as markdown. \
 Use this to track what you've tried and what worked.
 - `read_strategy_notes` — Read back previous strategy notes or list all saved strategies.

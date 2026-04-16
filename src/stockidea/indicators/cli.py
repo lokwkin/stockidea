@@ -9,7 +9,7 @@ import click
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.indicators import service as indicators_service
-from stockidea.rule_engine import compile_rule
+from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
 from stockidea.types import StockIndex, StockIndicators
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,13 @@ def compute(date: str | None, date_start: str | None, date_end: str | None, inde
     default=StockIndex.SP500.value,
     help="Stock index to analyze",
 )
-def pick(date: str, rule: str, max_stocks: int, index: str):
+@click.option(
+    "--ranking",
+    type=str,
+    default=DEFAULT_RANKING,
+    help=f"Ranking expression for stock selection (default: '{DEFAULT_RANKING}')",
+)
+def pick(date: str, rule: str, max_stocks: int, index: str, ranking: str):
     stock_index = StockIndex(index)
     try:
         date_parsed = datetime.strptime(date, "%Y-%m-%d")
@@ -174,10 +180,17 @@ def pick(date: str, rule: str, max_stocks: int, index: str):
     except Exception as e:
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
+    try:
+        ranking_func = compile_ranking(ranking)
+    except Exception as e:
+        raise click.BadParameter(f"Invalid ranking expression: {e}")
+
     stock_indicators_batch = asyncio.run(_compute(date=date_parsed, index=stock_index))
 
     filtered_stocks = indicators_service.apply_rule(
-        indicators_batch=stock_indicators_batch, rule_func=rule_func
+        indicators_batch=stock_indicators_batch,
+        rule_func=rule_func,
+        ranking_func=ranking_func,
     )
 
     selected_stocks = filtered_stocks[:max_stocks]

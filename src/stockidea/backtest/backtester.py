@@ -31,6 +31,7 @@ class Backtester:
     max_stocks: int
     rule_func: Callable[[StockIndicators], bool]
     rule_raw: str
+    ranking_func: Callable[[StockIndicators], float] | None
 
     def __init__(
         self,
@@ -43,6 +44,7 @@ class Backtester:
         rule_raw: str,
         from_index: StockIndex,
         baseline_index: StockIndex,
+        ranking_func: Callable[[StockIndicators], float] | None = None,
     ):
         self.db_session = db_session
         self.initial_balance = 10000
@@ -54,6 +56,7 @@ class Backtester:
         self.rule_raw = rule_raw
         self.from_index = from_index
         self.baseline_index = baseline_index
+        self.ranking_func = ranking_func
 
     async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
         # Get the symbols of the constituent
@@ -70,7 +73,9 @@ class Backtester:
         )
 
         filtered_stocks = indicators_service.apply_rule(
-            stock_indicators_batch, rule_func=self.rule_func
+            stock_indicators_batch,
+            rule_func=self.rule_func,
+            ranking_func=self.ranking_func,
         )
 
         selected_stocks = filtered_stocks[: self.max_stocks]
