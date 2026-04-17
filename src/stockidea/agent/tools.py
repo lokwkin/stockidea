@@ -401,6 +401,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
                 ranking_func=ranking_func,
+                ranking_raw=ranking_str,
             )
             result: BacktestResult = await backtester.backtest()
 

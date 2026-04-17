@@ -119,6 +119,7 @@ def backtest(
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
                 ranking_func=ranking_func,
+                ranking_raw=ranking,
             )
             backtest_result = await backtester.backtest()
             backtest_id = await save_backtest_to_db(db_session, backtest_result)

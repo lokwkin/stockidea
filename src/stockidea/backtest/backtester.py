@@ -32,6 +32,7 @@ class Backtester:
     rule_func: Callable[[StockIndicators], bool]
     rule_raw: str
     ranking_func: Callable[[StockIndicators], float] | None
+    ranking_raw: str
 
     def __init__(
         self,
@@ -44,7 +45,8 @@ class Backtester:
         rule_raw: str,
         from_index: StockIndex,
         baseline_index: StockIndex,
-        ranking_func: Callable[[StockIndicators], float] | None = None,
+        ranking_func: Callable[[StockIndicators], float],
+        ranking_raw: str,
     ):
         self.db_session = db_session
         self.initial_balance = 10000
@@ -57,6 +59,7 @@ class Backtester:
         self.from_index = from_index
         self.baseline_index = baseline_index
         self.ranking_func = ranking_func
+        self.ranking_raw = ranking_raw
 
     async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
         # Get the symbols of the constituent
@@ -238,6 +241,7 @@ class Backtester:
                 date_start=self.date_start,
                 date_end=self.date_end,
                 rule=self.rule_raw,
+                ranking=self.ranking_raw,
                 index=self.from_index,
                 involved_keys=extract_involved_keys(self.rule_raw),
             ),
