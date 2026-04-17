@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { useParams, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Copy, Check, TrendingDown, TrendingUp, ExternalLink } from "lucide-react"
 import type { Backtest } from "@/types/backtest"
 import { BalanceChart } from "@/components/BalanceChart"
@@ -272,7 +272,7 @@ export function BacktestView() {
         {/* Header */}
         <header className="mb-8">
           <div className="mb-6 text-center">
-            <h1 className="mb-4 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
+            <h1 className="mb-4 text-3xl font-semibold tracking-tight text-foreground">
               Backtest Results
             </h1>
             {backtestId && (
@@ -283,18 +283,17 @@ export function BacktestView() {
           {/* Backtest Summary */}
           {backtestData && (
             <div className="mx-auto max-w-6xl">
-              <div className="rounded-lg border bg-card p-6 shadow-sm">
-                <div className="mb-6 flex items-center justify-between">
+              <div className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold">Backtest Summary</h2>
                   <Button
                     variant="outline"
                     onClick={() => {
                       if (!backtestData?.backtest_config) return
                       const config = backtestData.backtest_config
-                      // Convert dates from ISO to yyyy/mm/dd format for URL
                       const dateStart = dateFormat(config.date_start).replace(/-/g, "/")
                       const dateEnd = dateFormat(config.date_end).replace(/-/g, "/")
-                      
+
                       const params = new URLSearchParams({
                         max_stocks: config.max_stocks.toString(),
                         rebalance_interval_weeks: config.rebalance_interval_weeks.toString(),
@@ -303,7 +302,7 @@ export function BacktestView() {
                         rule: config.rule,
                         index: config.index,
                       })
-                      
+
                       navigate(`/backtest/create?${params.toString()}`)
                     }}
                     className="flex items-center gap-2"
@@ -312,117 +311,126 @@ export function BacktestView() {
                     Clone Backtest
                   </Button>
                 </div>
-                
-                {/* Period and Performance */}
-                <div className="mb-6 grid grid-cols-1 gap-6 border-b pb-6 md:grid-cols-2 lg:grid-cols-4">
+
+                {/* Header line — matches strategy iteration card */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                  <span>{dateFormat(backtestData.date_start)} → {dateFormat(backtestData.date_end)}</span>
+                  {backtestData.backtest_config && (
+                    <>
+                      <span>·</span>
+                      <span>{backtestData.backtest_config.index}</span>
+                      <span>·</span>
+                      <span>Max {backtestData.backtest_config.max_stocks}</span>
+                      <span>·</span>
+                      <span>Rebal {backtestData.backtest_config.rebalance_interval_weeks}w</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Rule */}
+                {(backtestData.backtest_config?.rule || backtestData.rule_ref) && (
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Period</p>
-                    <p className="text-base font-medium">
-                      {dateFormat(backtestData.date_start)} - {dateFormat(backtestData.date_end)}
-                    </p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Selection Rule</p>
+                    <div className="flex gap-2 items-start">
+                      <textarea
+                        readOnly
+                        value={backtestData.backtest_config?.rule ?? backtestData.rule_ref ?? ""}
+                        className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                        rows={Math.min(Math.max((backtestData.backtest_config?.rule ?? backtestData.rule_ref ?? "").split('\n').length, 2), 6)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCopyRule}
+                        className="shrink-0"
+                        title="Copy rule to clipboard"
+                      >
+                        {ruleCopied ? (
+                          <Check className="h-4 w-4 text-positive" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Balances */}
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4 pt-2 border-t">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Initial</p>
+                    <p className="text-lg font-semibold font-mono tabular-nums">{formatCurrency(backtestData.initial_balance)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Initial Balance</p>
-                    <p className="text-base font-medium">{formatCurrency(backtestData.initial_balance)}</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Final</p>
+                    <p className="text-lg font-semibold font-mono tabular-nums">{formatCurrency(backtestData.final_balance)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Final Balance</p>
-                    <p className="text-base font-medium">
-                      {formatCurrency(backtestData.final_balance)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Return</p>
-                    <p className={`text-base font-semibold ${totalProfitPct >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Return</p>
+                    <p className={cn("text-lg font-semibold font-mono tabular-nums", totalProfitPct >= 0 ? "text-positive" : "text-negative")}>
                       {formatPercent(totalProfitPct)}
                     </p>
-                    <p className={`text-sm ${totalProfitPct >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    <p className={cn("text-xs font-mono tabular-nums", totalProfitPct >= 0 ? "text-positive" : "text-negative")}>
                       {formatCurrency(totalProfit)}
                     </p>
                   </div>
+                  {backtestData.baseline_profit_pct !== undefined && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                        Baseline {backtestData.baseline_index ? `(${backtestData.baseline_index})` : ""}
+                      </p>
+                      <p className={cn("text-lg font-semibold font-mono tabular-nums", backtestData.baseline_profit_pct >= 0 ? "text-positive" : "text-negative")}>
+                        {formatPercent(backtestData.baseline_profit_pct)}
+                      </p>
+                      <p className={cn("text-xs font-mono tabular-nums", (backtestData.baseline_profit ?? 0) >= 0 ? "text-positive" : "text-negative")}>
+                        {backtestData.baseline_profit !== undefined ? formatCurrency(backtestData.baseline_profit) : ""}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {/* Configuration */}
-                <div>
-                  <h3 className="mb-4 text-lg font-semibold">Configuration</h3>
-                  {backtestData.backtest_config ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Stock Index</p>
-                          <p className="text-base font-medium">{backtestData.backtest_config.index}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Max Stocks</p>
-                          <p className="text-base font-medium">{backtestData.backtest_config.max_stocks}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Rebalance Interval</p>
-                          <p className="text-base font-medium">{backtestData.backtest_config.rebalance_interval_weeks} weeks</p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">Selection Rule</p>
-                        <div className="flex gap-2 items-start">
-                          <textarea
-                            readOnly
-                            value={backtestData.backtest_config.rule}
-                            className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                            rows={Math.min(Math.max(backtestData.backtest_config.rule.split('\n').length, 2), 6)}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(backtestData.backtest_config!.rule)
-                                setRuleCopied(true)
-                                setTimeout(() => setRuleCopied(false), 2000)
-                              } catch (err) {
-                                console.error("Failed to copy rule:", err)
-                              }
-                            }}
-                            className="shrink-0"
-                            title="Copy rule to clipboard"
-                          >
-                            {ruleCopied ? (
-                              <Check className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : backtestData.rule_ref ? (
+                {/* Scores */}
+                {backtestData.scores && (
+                  <div className="grid grid-cols-3 gap-3 md:grid-cols-6 pt-2 border-t">
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Selection Rule</p>
-                      <div className="flex gap-2 items-start">
-                        <textarea
-                          readOnly
-                          value={backtestData.rule_ref}
-                          className="flex min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                          rows={Math.min(Math.max(backtestData.rule_ref.split('\n').length, 2), 6)}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={handleCopyRule}
-                          className="shrink-0"
-                          title="Copy rule to clipboard"
-                        >
-                          {ruleCopied ? (
-                            <Check className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Sharpe</p>
+                      <p className={cn("text-lg font-semibold font-mono tabular-nums", backtestData.scores.sharpe_ratio >= 1 ? "text-positive" : "")}>
+                        {backtestData.scores.sharpe_ratio.toFixed(2)}
+                      </p>
                     </div>
-                  ) : null}
-                </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Sortino</p>
+                      <p className="text-lg font-semibold font-mono tabular-nums">{backtestData.scores.sortino_ratio.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Calmar</p>
+                      <p className="text-lg font-semibold font-mono tabular-nums">{backtestData.scores.calmar_ratio.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Max DD</p>
+                      <p className="text-lg font-semibold font-mono tabular-nums text-negative">
+                        {backtestData.scores.max_drawdown_pct.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono tabular-nums">
+                        {backtestData.scores.max_drawdown_duration_weeks}w
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Win Rate</p>
+                      <p className={cn("text-lg font-semibold font-mono tabular-nums", backtestData.scores.win_rate >= 0.5 ? "text-positive" : "text-negative")}>
+                        {(backtestData.scores.win_rate * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono tabular-nums">
+                        +{backtestData.scores.avg_win_pct.toFixed(1)}% / {backtestData.scores.avg_loss_pct.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Rebalances</p>
+                      <p className="text-lg font-semibold font-mono tabular-nums">{backtestData.scores.total_rebalances}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -473,14 +481,14 @@ export function BacktestView() {
                     {/* Top Losses */}
                     <div>
                       <div className="mb-3 flex items-center gap-2">
-                        <TrendingDown className="h-5 w-5 text-red-600" />
+                        <TrendingDown className="h-5 w-5 text-negative" />
                         <h3 className="text-lg font-semibold">Biggest Losses</h3>
                       </div>
                       <div className="space-y-3">
                         {topLosses.map((investment, idx) => (
                           <div
                             key={`loss-${investment.symbol}-${investment.buy_date}`}
-                            className="rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-900 dark:bg-red-950/20"
+                            className="rounded-lg border border-negative-border bg-negative-bg p-4"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
@@ -488,7 +496,12 @@ export function BacktestView() {
                                   <Badge variant="destructive" className="text-xs">
                                     #{idx + 1}
                                   </Badge>
-                                  <span className="font-semibold">{investment.symbol}</span>
+                                  <Link
+                                    to={`/chart/${investment.symbol}`}
+                                    className="font-semibold text-primary hover:underline"
+                                  >
+                                    {investment.symbol}
+                                  </Link>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
                                   {dateFormat(investment.buy_date)} → {dateFormat(investment.sell_date)}
@@ -496,10 +509,10 @@ export function BacktestView() {
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="text-sm font-semibold text-red-600">
+                                  <p className="text-sm font-semibold text-negative">
                                     {formatPercent(investment.profit_pct)}
                                   </p>
-                                  <p className="text-xs text-red-600">
+                                  <p className="text-xs text-negative">
                                     {formatCurrency(investment.profit)}
                                   </p>
                                 </div>
@@ -522,22 +535,27 @@ export function BacktestView() {
                     {/* Top Profits */}
                     <div>
                       <div className="mb-3 flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        <TrendingUp className="h-5 w-5 text-positive" />
                         <h3 className="text-lg font-semibold">Biggest Profits</h3>
                       </div>
                       <div className="space-y-3">
                         {topProfits.map((investment, idx) => (
                           <div
                             key={`profit-${investment.symbol}-${investment.buy_date}`}
-                            className="rounded-lg border border-green-200 bg-green-50/50 p-4 dark:border-green-900 dark:bg-green-950/20"
+                            className="rounded-lg border border-positive-border bg-positive-bg p-4"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
                                 <div className="mb-1 flex items-center gap-2">
-                                  <Badge variant="default" className="bg-green-600 text-xs">
+                                  <Badge variant="default" className="bg-positive text-xs">
                                     #{idx + 1}
                                   </Badge>
-                                  <span className="font-semibold">{investment.symbol}</span>
+                                  <Link
+                                    to={`/chart/${investment.symbol}`}
+                                    className="font-semibold text-primary hover:underline"
+                                  >
+                                    {investment.symbol}
+                                  </Link>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
                                   {dateFormat(investment.buy_date)} → {dateFormat(investment.sell_date)}
@@ -545,10 +563,10 @@ export function BacktestView() {
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="text-sm font-semibold text-green-600">
+                                  <p className="text-sm font-semibold text-positive">
                                     {formatPercent(investment.profit_pct)}
                                   </p>
-                                  <p className="text-xs text-green-600">
+                                  <p className="text-xs text-positive">
                                     {formatCurrency(investment.profit)}
                                   </p>
                                 </div>
@@ -578,7 +596,7 @@ export function BacktestView() {
                 </h2>
                 <Tabs value={tableView} onValueChange={(v) => setTableView(v as "investment" | "rebalance")}>
                   <TabsList>
-                    <TabsTrigger value="investment">By BacktestInvestment</TabsTrigger>
+                    <TabsTrigger value="investment">By Investment</TabsTrigger>
                     <TabsTrigger value="rebalance">By Rebalance</TabsTrigger>
                   </TabsList>
 

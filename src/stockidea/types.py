@@ -33,6 +33,7 @@ class StockPrice(BaseModel):
     symbol: str
     date: date
     adj_close: float
+    volume: int | None = None
 
 
 class ConstituentChange(BaseModel):
@@ -153,26 +154,6 @@ class BacktestResult(BaseModel):
 
 
 # =============================================================================
-# Job Queue Models
-# =============================================================================
-
-
-class BacktestJob(BaseModel):
-    id: _uuid.UUID
-    status: str  # pending | running | completed | failed
-    backtest_id: _uuid.UUID | None = None
-    error_message: str | None = None
-    created_at: datetime
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-
-
-class EnqueuedJob(BaseModel):
-    job_id: _uuid.UUID
-    status: str
-
-
-# =============================================================================
 # Strategy Models
 # =============================================================================
 
@@ -207,6 +188,9 @@ class StrategyBacktestSummary(BaseModel):
     rule: str
     profit_pct: float
     baseline_profit_pct: float
+    max_stocks: int
+    rebalance_interval_weeks: int
+    index: str
     scores: BacktestScores | None = None
     created_at: datetime
 

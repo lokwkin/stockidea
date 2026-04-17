@@ -15,14 +15,17 @@ logger = logging.getLogger(__name__)
 
 def apply_rule(
     indicators_batch: list[StockIndicators],
-    rule_func: Callable[[StockIndicators], bool],
+    rule_func: Callable[[StockIndicators], bool] | None = None,
     ranking_func: Callable[[StockIndicators], float] | None = None,
 ) -> list[StockIndicators]:
     from stockidea.rule_engine import compile_ranking, DEFAULT_RANKING
 
-    filtered_stocks = [
-        indicator for indicator in indicators_batch if rule_func(indicator)
-    ]
+    if rule_func is None:
+        filtered_stocks = list(indicators_batch)
+    else:
+        filtered_stocks = [
+            indicator for indicator in indicators_batch if rule_func(indicator)
+        ]
 
     # Rank by expression (default: risk-adjusted momentum)
     if ranking_func is None:

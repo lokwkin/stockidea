@@ -25,6 +25,9 @@ export interface StrategyBacktestSummary {
   rule: string
   profit_pct: number
   baseline_profit_pct: number
+  max_stocks: number
+  rebalance_interval_weeks: number
+  index: string
   scores: BacktestScores | null
   created_at: string
 }

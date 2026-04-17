@@ -540,10 +540,10 @@ async def _lookup_stock(params: dict) -> str:
 
     results = []
     for ind in indicators:
-        entry: dict[str, object] = {}
-        for field_name in ind.model_fields:
-            val = getattr(ind, field_name)
-            entry[field_name] = round(val, 4) if isinstance(val, float) else val
+        entry = ind.model_dump(mode="json")
+        for field_name, val in entry.items():
+            if isinstance(val, float):
+                entry[field_name] = round(val, 4)
         results.append(entry)
 
     # Report symbols that weren't found

@@ -1,24 +1,45 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Bot, Send, Loader2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Activity } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, AgentEvent, BacktestScores } from "@/types/agent"
 import type { StrategyDetail, StrategyBacktestSummary } from "@/types/strategy"
 
+const POLL_INTERVAL_MS = 2000
+
 // --- Reusable components from AgentView ---
 
-function ScoreCard({ scores, rule, profitPct, baselinePct }: {
+function ScoreCard({ scores, rule, ranking, maxStocks, rebalanceWeeks, indexName, profitPct, baselinePct }: {
   scores: BacktestScores
   rule?: string
+  ranking?: string
+  maxStocks?: number
+  rebalanceWeeks?: number
+  indexName?: string
   profitPct?: number
   baselinePct?: number
 }) {
   return (
-    <div className="rounded-lg border bg-card/50 p-4 space-y-3">
+    <div className="rounded-lg border bg-muted p-4 space-y-3">
       {rule && (
         <div className="text-xs">
           <span className="text-muted-foreground">Rule: </span>
           <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{rule}</code>
+        </div>
+      )}
+      {ranking && (
+        <div className="text-xs">
+          <span className="text-muted-foreground">Ranking: </span>
+          <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{ranking}</code>
+        </div>
+      )}
+      {(maxStocks !== undefined || rebalanceWeeks !== undefined || indexName) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {indexName && (<div><span>Index: </span><span className="text-foreground font-medium">{indexName}</span></div>)}
+          {maxStocks !== undefined && (<div><span>Max stocks: </span><span className="text-foreground font-medium">{maxStocks}</span></div>)}
+          {rebalanceWeeks !== undefined && (<div><span>Rebalance: </span><span className="text-foreground font-medium">{rebalanceWeeks}w</span></div>)}
         </div>
       )}
       {profitPct !== undefined && (
@@ -41,31 +62,31 @@ function ScoreCard({ scores, rule, profitPct, baselinePct }: {
       )}
       <div className="grid grid-cols-3 gap-3 text-sm">
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Sharpe</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Sharpe</div>
           <div className={cn("font-semibold", scores.sharpe_ratio >= 1 ? "text-positive" : "text-foreground")}>
             {scores.sharpe_ratio.toFixed(2)}
           </div>
         </div>
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Sortino</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Sortino</div>
           <div className="font-semibold">{scores.sortino_ratio.toFixed(2)}</div>
         </div>
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Calmar</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Calmar</div>
           <div className="font-semibold">{scores.calmar_ratio.toFixed(2)}</div>
         </div>
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Win Rate</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Win Rate</div>
           <div className={cn("font-semibold", scores.win_rate >= 0.5 ? "text-positive" : "text-destructive")}>
             {(scores.win_rate * 100).toFixed(0)}%
           </div>
         </div>
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Max DD</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Max DD</div>
           <div className="font-semibold text-destructive">{scores.max_drawdown_pct.toFixed(1)}%</div>
         </div>
         <div className="space-y-1">
-          <div className="text-muted-foreground text-xs">Rebalances</div>
+          <div className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Rebalances</div>
           <div className="font-semibold">{scores.total_rebalances}</div>
         </div>
       </div>
@@ -76,10 +97,10 @@ function ScoreCard({ scores, rule, profitPct, baselinePct }: {
 function ToolCallCard({ name, input }: { name: string; input: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+    <div className="rounded-lg border bg-muted p-3">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-sm text-primary/80 w-full text-left"
+        className="flex items-center gap-2 text-sm text-muted-foreground w-full text-left"
       >
         <Activity className="h-3.5 w-3.5 flex-shrink-0" />
         <span className="font-medium">Running {name}</span>
@@ -94,11 +115,61 @@ function ToolCallCard({ name, input }: { name: string; input: Record<string, unk
   )
 }
 
+function MarkdownText({ content }: { content: string }) {
+  return (
+    <div className="text-sm leading-relaxed max-w-[85%] space-y-2 [&_p]:m-0 [&_p+p]:mt-2">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h1 className="text-lg font-bold mt-3 mb-1">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
+          h4: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
+          h5: ({ children }) => <h5 className="text-xs font-semibold uppercase tracking-wide mt-2 mb-1">{children}</h5>,
+          h6: ({ children }) => <h6 className="text-xs font-semibold uppercase tracking-wide mt-2 mb-1">{children}</h6>,
+          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc pl-5 space-y-0.5 my-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5 space-y-0.5 my-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-primary/40 pl-3 italic text-muted-foreground my-2">
+              {children}
+            </blockquote>
+          ),
+          code: ({ className, children }) => {
+            const isBlock = className?.includes("language-")
+            if (isBlock) {
+              return (
+                <pre className="bg-muted rounded-md p-3 overflow-x-auto my-2 text-xs">
+                  <code className={className}>{children}</code>
+                </pre>
+              )
+            }
+            return (
+              <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{children}</code>
+            )
+          },
+          pre: ({ children }) => <>{children}</>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              {children}
+            </a>
+          ),
+          hr: () => <hr className="my-3 border-border" />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backtestIndex?: number }) {
   if (message.type === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-lg bg-primary/20 px-4 py-3 text-sm">
+        <div className="max-w-[80%] rounded-lg bg-info-bg px-4 py-3 text-sm">
           {message.content}
         </div>
       </div>
@@ -113,7 +184,7 @@ function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backt
             <Bot className="h-3.5 w-3.5 text-primary" />
           </div>
         </div>
-        <div className="text-sm whitespace-pre-wrap leading-relaxed max-w-[85%]">{message.content}</div>
+        <MarkdownText content={message.content} />
       </div>
     )
   }
@@ -142,6 +213,10 @@ function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backt
           <ScoreCard
             scores={result.scores}
             rule={result.rule as string | undefined}
+            ranking={result.ranking as string | undefined}
+            maxStocks={result.max_stocks as number | undefined}
+            rebalanceWeeks={result.rebalance_interval_weeks as number | undefined}
+            indexName={result.index as string | undefined}
             profitPct={result.profit_pct}
             baselinePct={result.baseline_profit_pct}
           />
@@ -150,7 +225,7 @@ function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backt
     }
     return (
       <div className="ml-9">
-        <div className="rounded-lg border bg-card/50 p-3 text-xs text-muted-foreground">
+        <div className="rounded-lg border bg-muted p-3 text-xs text-muted-foreground">
           {name} completed
         </div>
       </div>
@@ -185,54 +260,68 @@ function BacktestComparisonTable({ backtests }: { backtests: StrategyBacktestSum
   })
 
   return (
-    <div className="border-t pt-4 mt-4">
+    <div>
       <h3 className="text-sm font-semibold mb-3">Backtest Iterations</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="py-2 px-2 text-left">#</th>
-              <th className="py-2 px-2 text-left">Rule</th>
-              <th className="py-2 px-2 text-right">Return</th>
-              <th className="py-2 px-2 text-right">Sharpe</th>
-              <th className="py-2 px-2 text-right">Sortino</th>
-              <th className="py-2 px-2 text-right">Max DD</th>
-              <th className="py-2 px-2 text-right">Win Rate</th>
-              <th className="py-2 px-2 text-right"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {backtests.map((bt, i) => (
-              <tr
-                key={bt.id}
-                className={cn(
-                  "border-b hover:bg-muted/50 transition-colors",
-                  i === bestIdx && "bg-primary/5 font-medium"
+      <div className="space-y-3">
+        {backtests.map((bt, i) => (
+          <div
+            key={bt.id}
+            className={cn(
+              "rounded-lg border p-3 space-y-2 hover:bg-muted/40 transition-colors",
+              i === bestIdx && "border-primary/40 bg-primary/5"
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">#{i + 1}</span>
+                {i === bestIdx && (
+                  <span className="text-[10px] uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">Best</span>
                 )}
-              >
-                <td className="py-2 px-2">{i + 1}</td>
-                <td className="py-2 px-2 max-w-[200px] truncate">
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">{bt.rule}</code>
-                </td>
-                <td className={cn("py-2 px-2 text-right", bt.profit_pct >= 0 ? "text-positive" : "text-destructive")}>
+                <span>·</span>
+                <span>{bt.index}</span>
+                <span>·</span>
+                <span>Max {bt.max_stocks}</span>
+                <span>·</span>
+                <span>Rebal {bt.rebalance_interval_weeks}w</span>
+              </div>
+              <Link to={`/backtest/${bt.id}`} className="text-xs text-primary hover:underline flex-shrink-0">
+                View
+              </Link>
+            </div>
+
+            <div className="text-xs">
+              <span className="text-muted-foreground">Rule: </span>
+              <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.rule}</code>
+            </div>
+
+            {/* Ranking is not persisted per backtest yet — TODO: surface it once a `ranking` column is added to DBBacktest. */}
+
+            <div className="grid grid-cols-5 gap-2 text-xs pt-1">
+              <div>
+                <div className="text-muted-foreground text-[10px] uppercase tracking-wider">Return</div>
+                <div className={cn("font-semibold font-mono tabular-nums", bt.profit_pct >= 0 ? "text-positive" : "text-destructive")}>
                   {bt.profit_pct >= 0 ? "+" : ""}{bt.profit_pct.toFixed(1)}%
-                </td>
-                <td className="py-2 px-2 text-right">{bt.scores?.sharpe_ratio.toFixed(2) ?? "—"}</td>
-                <td className="py-2 px-2 text-right">{bt.scores?.sortino_ratio.toFixed(2) ?? "—"}</td>
-                <td className="py-2 px-2 text-right text-destructive">{bt.scores?.max_drawdown_pct.toFixed(1) ?? "—"}%</td>
-                <td className="py-2 px-2 text-right">{bt.scores ? `${(bt.scores.win_rate * 100).toFixed(0)}%` : "—"}</td>
-                <td className="py-2 px-2 text-right">
-                  <Link
-                    to={`/backtest/${bt.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-[10px] uppercase tracking-wider">Sharpe</div>
+                <div className="font-semibold font-mono tabular-nums">{bt.scores?.sharpe_ratio.toFixed(2) ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-[10px] uppercase tracking-wider">Sortino</div>
+                <div className="font-semibold font-mono tabular-nums">{bt.scores?.sortino_ratio.toFixed(2) ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-[10px] uppercase tracking-wider">Max DD</div>
+                <div className="font-semibold font-mono tabular-nums text-destructive">{bt.scores?.max_drawdown_pct.toFixed(1) ?? "—"}%</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-[10px] uppercase tracking-wider">Win</div>
+                <div className="font-semibold font-mono tabular-nums">{bt.scores ? `${(bt.scores.win_rate * 100).toFixed(0)}%` : "—"}</div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -257,9 +346,9 @@ function parseStrategyMessages(strategy: StrategyDetail): ChatMessage[] {
         for (const evt of events) {
           if (evt.event === "text") {
             result.push({ type: "text", content: evt.data.content })
-          } else if (evt.event === "tool_call") {
+          } else if (evt.event === "tool_call" && evt.data.name === "run_backtest") {
             result.push({ type: "tool_call", name: evt.data.name, input: evt.data.input })
-          } else if (evt.event === "tool_result") {
+          } else if (evt.event === "tool_result" && evt.data.name === "run_backtest") {
             result.push({ type: "tool_result", name: evt.data.name, result: evt.data.result })
           } else if (evt.event === "error") {
             result.push({ type: "error", message: evt.data.message })
@@ -283,108 +372,40 @@ export function StrategyView() {
   const [followUp, setFollowUp] = useState("")
   const [isRunning, setIsRunning] = useState(false)
   const [loading, setLoading] = useState(true)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
-
-  // Load strategy on mount
+  // Continuously poll the strategy. While idle/failed, poll slowly; while running, poll fast.
   useEffect(() => {
     if (!id) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-    fetch(`/api/strategies/${id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Strategy not found")
-        return res.json()
-      })
-      .then((data: StrategyDetail) => {
+    const tick = async () => {
+      try {
+        const stratRes = await fetch(`/api/strategies/${id}`)
+        if (!stratRes.ok) throw new Error("Strategy not found")
+        const data: StrategyDetail = await stratRes.json()
         if (cancelled) return
         setStrategy(data)
         setMessages(parseStrategyMessages(data))
         setIsRunning(data.status === "running")
         setLoading(false)
-      })
-      .catch((err) => {
+        const interval = data.status === "running" ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * 5
+        timer = setTimeout(tick, interval)
+      } catch (err) {
         if (cancelled) return
         console.error(err)
         setLoading(false)
-      })
-
-    return () => { cancelled = true }
-  }, [id])
-
-  // Process SSE stream from a response
-  const processSSEStream = useCallback(async (response: Response) => {
-    const reader = response.body?.getReader()
-    if (!reader) return
-
-    const decoder = new TextDecoder()
-    let buffer = ""
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = ""
-
-        let currentEvent = ""
-        let currentData = ""
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7)
-          } else if (line.startsWith("data: ")) {
-            currentData = line.slice(6)
-          } else if (line === "" && currentEvent && currentData) {
-            try {
-              const parsed: AgentEvent = {
-                event: currentEvent as AgentEvent["event"],
-                data: JSON.parse(currentData),
-              }
-
-              if (parsed.event === "text") {
-                setMessages((prev) => [...prev, { type: "text", content: parsed.data.content }])
-              } else if (parsed.event === "tool_call") {
-                setMessages((prev) => [
-                  ...prev,
-                  { type: "tool_call", name: parsed.data.name, input: parsed.data.input },
-                ])
-              } else if (parsed.event === "tool_result") {
-                setMessages((prev) => [
-                  ...prev,
-                  { type: "tool_result", name: parsed.data.name, result: parsed.data.result },
-                ])
-              } else if (parsed.event === "error") {
-                setMessages((prev) => [...prev, { type: "error", message: parsed.data.message }])
-              }
-              // "done" and "strategy_created" — just let the stream end
-            } catch {
-              // Skip malformed events
-            }
-            currentEvent = ""
-            currentData = ""
-          } else if (line !== "") {
-            buffer = lines.slice(lines.indexOf(line)).join("\n")
-            break
-          }
-        }
-      }
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setMessages((prev) => [...prev, { type: "error", message: `Connection error: ${err}` }])
+        timer = setTimeout(tick, POLL_INTERVAL_MS * 5)
       }
     }
-  }, [])
+
+    tick()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [id])
 
   const handleFollowUp = useCallback(async () => {
     if (!followUp.trim() || isRunning || !id) return
@@ -394,48 +415,23 @@ export function StrategyView() {
     setMessages((prev) => [...prev, { type: "user", content: userMessage }])
     setIsRunning(true)
 
-    const controller = new AbortController()
-    abortRef.current = controller
-
     try {
       const response = await fetch(`/api/strategies/${id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instruction: userMessage }),
-        signal: controller.signal,
       })
 
       if (!response.ok) {
         const err = await response.text()
         setMessages((prev) => [...prev, { type: "error", message: `Request failed: ${err}` }])
         setIsRunning(false)
-        return
       }
-
-      await processSSEStream(response)
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setMessages((prev) => [...prev, { type: "error", message: `Connection error: ${err}` }])
-      }
-    } finally {
+      setMessages((prev) => [...prev, { type: "error", message: `Connection error: ${err}` }])
       setIsRunning(false)
-      abortRef.current = null
-      // Refresh strategy data to get updated backtests
-      if (id) {
-        fetch(`/api/strategies/${id}`)
-          .then((res) => res.ok ? res.json() : null)
-          .then((data: StrategyDetail | null) => {
-            if (data) setStrategy(data)
-          })
-          .catch(() => {})
-      }
     }
-  }, [followUp, isRunning, id, processSSEStream])
-
-  const handleStop = useCallback(() => {
-    abortRef.current?.abort()
-    setIsRunning(false)
-  }, [])
+  }, [followUp, isRunning, id])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -467,7 +463,7 @@ export function StrategyView() {
   let simIndex = 0
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto">
+    <div className="flex flex-col h-screen">
       {/* Header */}
       <div className="flex-shrink-0 border-b px-6 py-4">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
@@ -483,85 +479,91 @@ export function StrategyView() {
           </span>
           <span className={cn(
             "text-xs px-1.5 py-0.5 rounded-full",
-            strategy.status === "idle" && "bg-green-100 text-green-700",
-            strategy.status === "running" && "bg-blue-100 text-blue-700",
-            strategy.status === "failed" && "bg-red-100 text-red-700",
+            strategy.status === "idle" && "bg-positive-bg text-positive-foreground",
+            strategy.status === "running" && "bg-info-bg text-info-foreground",
+            strategy.status === "failed" && "bg-negative-bg text-negative-foreground",
           )}>
             {strategy.status}
           </span>
         </div>
       </div>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-        {messages.length === 0 && !isRunning && (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground/60 space-y-3">
-            <Bot className="h-16 w-16" />
-            <p className="text-sm">Waiting for agent response...</p>
-          </div>
-        )}
-
-        {messages.map((msg, i) => {
-          let si: number | undefined
-          if (msg.type === "tool_result" && msg.name === "run_backtest" && msg.result.scores) {
-            simIndex++
-            si = simIndex
-          }
-          return <MessageBubble key={i} message={msg} backtestIndex={si} />
-        })}
-
-        {isRunning && messages.length > 0 && (
-          <div className="flex gap-3 items-center ml-9">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Thinking...</span>
-          </div>
-        )}
-
-        {/* Backtest comparison table */}
-        {strategy.backtests.length > 0 && (
-          <BacktestComparisonTable backtests={strategy.backtests} />
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Follow-up input */}
-      <div className="flex-shrink-0 px-6 py-4 border-t">
-        <div className="flex gap-3">
-          <textarea
-            value={followUp}
-            onChange={(e) => setFollowUp(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Send a follow-up instruction... (Option+Enter to send)"
-            className={cn(
-              "flex-1 rounded-lg border bg-background px-4 py-3 text-sm resize-none",
-              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30",
-              "min-h-[50px] max-h-[100px]"
+      {/* Split: messages on left (50%), backtest iterations on right (50%) */}
+      <div className="flex-1 flex min-h-0">
+        {/* Left: messages + follow-up */}
+        <div className="basis-1/2 flex flex-col border-r min-w-0">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {messages.length === 0 && !isRunning && (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground/60 space-y-3">
+                <Bot className="h-16 w-16" />
+                <p className="text-sm">Waiting for agent response...</p>
+              </div>
             )}
-            disabled={isRunning}
-            rows={2}
-          />
-          {isRunning ? (
-            <button
-              onClick={handleStop}
-              className="flex-shrink-0 rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 px-4 py-2 text-sm font-medium transition-colors self-end"
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={handleFollowUp}
-              disabled={!followUp.trim()}
-              className={cn(
-                "flex-shrink-0 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors self-end",
-                "hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed",
-                "flex items-center gap-2"
-              )}
-            >
-              <Send className="h-4 w-4" />
-              Send
-            </button>
-          )}
+
+            {messages.map((msg, i) => {
+              let si: number | undefined
+              if (msg.type === "tool_result" && msg.name === "run_backtest" && msg.result.scores) {
+                simIndex++
+                si = simIndex
+              }
+              return <MessageBubble key={i} message={msg} backtestIndex={si} />
+            })}
+
+            {isRunning && messages.length > 0 && (
+              <div className="flex gap-3 items-center ml-9">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">Thinking...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Follow-up input */}
+          <div className="flex-shrink-0 px-6 py-4 border-t">
+            <div className="flex gap-3">
+              <textarea
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Send a follow-up instruction... (Option+Enter to send)"
+                className={cn(
+                  "flex-1 rounded-lg border bg-background px-4 py-3 text-sm resize-none",
+                  "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  "min-h-[50px] max-h-[100px]"
+                )}
+                disabled={isRunning}
+                rows={2}
+              />
+              <button
+                onClick={handleFollowUp}
+                disabled={!followUp.trim() || isRunning}
+                className={cn(
+                  "flex-shrink-0 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors self-end",
+                  "hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed",
+                  "flex items-center gap-2"
+                )}
+              >
+                {isRunning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {isRunning ? "Running..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: backtest iterations */}
+        <div className="basis-1/2 flex flex-col min-w-0">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {strategy.backtests.length > 0 ? (
+              <BacktestComparisonTable backtests={strategy.backtests} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground/60 space-y-3">
+                <p className="text-sm">No backtest iterations yet.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -44,6 +44,34 @@ export interface IndicatorsDataAPI {
   data: StockIndicators[];
 }
 
+// FMP company profile (subset of fields we surface in UI)
+export interface CompanyProfile {
+  symbol?: string;
+  companyName?: string;
+  description?: string;
+  industry?: string;
+  sector?: string;
+  country?: string;
+  exchange?: string;
+  exchangeShortName?: string;
+  ceo?: string;
+  website?: string;
+  fullTimeEmployees?: string;
+  mktCap?: number;
+  beta?: number;
+  ipoDate?: string;
+  image?: string;
+  isEtf?: boolean;
+  isFund?: boolean;
+  isAdr?: boolean;
+}
+
+export interface StockProfileResponse {
+  symbol: string;
+  profile: CompanyProfile | null;
+  peers: string[];
+}
+
 export type SortDirection = "asc" | "desc" | null;
 
 export interface SortConfig {
@@ -72,4 +100,5 @@ export interface ColumnConfig {
   filterName: string;
   type: ColumnType;
   decimals?: number;
+  group?: string;
 }

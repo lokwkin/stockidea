@@ -64,6 +64,35 @@ async def fetch_stock_prices(
         return sorted(prices, key=lambda x: x.date, reverse=True)
 
 
+async def fetch_company_profile(symbol: str) -> dict | None:
+    """Fetch FMP company profile (description, industry, sector, ceo, etc.). Returns None if unknown."""
+    api_key = _require_api_key()
+    logger.info(f"Fetching company profile for {symbol}")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{FMP_BASE_URL}/stable/profile",
+            params={"symbol": symbol.upper(), "apikey": api_key},
+        )
+        response.raise_for_status()
+        data: list[dict] = response.json()
+        return data[0] if data else None
+
+
+async def fetch_stock_peers(symbol: str) -> list[str]:
+    """Fetch peer/competitor symbols for a given stock. Returns [] if none."""
+    api_key = _require_api_key()
+    logger.info(f"Fetching stock peers for {symbol}")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{FMP_BASE_URL}/stable/stock-peers",
+            params={"symbol": symbol.upper(), "apikey": api_key},
+        )
+        response.raise_for_status()
+        data: list[dict] = response.json()
+        # FMP returns a list of objects with a `symbol` field for each peer
+        return [item["symbol"] for item in data if "symbol" in item]
+
+
 async def fetch_historical_constituent(index: StockIndex) -> list[ConstituentChange]:
     api_key = _require_api_key()
     logger.info(f"Fetching historical constituent for {index.value}")

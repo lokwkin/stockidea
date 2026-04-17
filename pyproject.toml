@@ -20,6 +20,7 @@ dependencies = [
     "types-requests>=2.32.4.20260107",
     "uvicorn>=0.34.0",
     "alembic>=1.18.4",
+    "bs4>=0.0.2",
 ]
 
 [project.scripts]

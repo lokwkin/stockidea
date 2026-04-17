@@ -52,14 +52,22 @@ Computes per-stock performance indicators from raw price data. Daily prices are 
 - **Volatility** -- Maximum upward/downward swings at 1w, 2w, and 4w windows
 - **Stability** -- Maximum drawdown, fraction of positive weeks
 
-Stocks are ranked by a composite rising-stability score that balances trend strength with consistency. Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`). Rules support comparison operators and `AND`/`OR` logic.
+Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`). Rules support comparison operators and `AND`/`OR` logic.
+
+After filtering, the remaining stocks are sorted by a **ranking expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_13w_pct / weekly_return_std` (risk-adjusted momentum). Pass `--ranking` to override it: e.g. `--ranking 'linear_slope_pct * linear_r_squared'` for trend quality, or `--ranking 'change_26w_pct / max_drawdown_pct'` for return per unit of drawdown. Ranking matters whenever more stocks pass the filter than `--max-stocks` allows.
 
 ```bash
 # Compute indicators for all SP500 constituents at a given date
 uv run python -m stockidea.cli compute -d 2026-01-20
 
-# Compute indicators and filter by a rule
+# Compute indicators and filter by a rule (uses the default ranking)
 uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
+
+# Filter and rank with a custom ranking expression
+uv run python -m stockidea.cli pick \
+  -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15' \
+  --ranking 'linear_slope_pct * linear_r_squared' \
+  --max-stocks 5
 ```
 
 ### Backtest

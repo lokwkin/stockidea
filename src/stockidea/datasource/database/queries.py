@@ -22,7 +22,6 @@ from stockidea.datasource.database.models import (
     DBBacktestRebalance,
     DBBacktestInvestment,
     DBStockIndicators,
-    DBBacktestJob,
     DBStrategy,
     DBStrategyMessage,
 )
@@ -39,7 +38,6 @@ from stockidea.types import (
     BacktestConfig,
     BacktestScores,
     StockIndicators,
-    BacktestJob,
     StrategyCreate,
     StrategySummary,
     StrategyDetail,
@@ -240,16 +238,26 @@ async def get_prices_by_date_range(
     Get the stock prices for a given symbol and date range.
     """
     stmt = (
-        select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+        select(
+            DBStockPrice.symbol,
+            DBStockPrice.date,
+            DBStockPrice.adj_close,
+            DBStockPrice.volume,
+        )
         .where(DBStockPrice.symbol == symbol.upper())
         .where(DBStockPrice.date >= from_date)
         .where(DBStockPrice.date <= to_date)
         .order_by(DBStockPrice.date.desc())
     )
     result = await db_session.execute(stmt)
-    prices = result.all()  # Returns Row objects when selecting multiple columns
+    prices = result.all()
     return [
-        StockPrice(symbol=price.symbol, date=price.date, adj_close=price.adj_close)
+        StockPrice(
+            symbol=price.symbol,
+            date=price.date,
+            adj_close=price.adj_close,
+            volume=price.volume,
+        )
         for price in prices
     ]
 
@@ -408,11 +416,13 @@ async def list_backtests(
     return [
         {
             "id": sim.id,
+            "strategy_id": sim.strategy_id,
             "date_start": sim.date_start.isoformat(),
             "date_end": sim.date_end.isoformat(),
             "profit_pct": sim.profit_pct,
             "profit": sim.profit,
             "baseline_profit_pct": sim.baseline_profit_pct,
+            "index": sim.index,
             "created_at": sim.created_at.isoformat(),
         }
         for sim in backtests
@@ -470,6 +480,9 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
             index=StockIndex(db_backtest.index),
             involved_keys=extract_involved_keys(db_backtest.rule),
         ),
+        scores=BacktestScores.model_validate_json(db_backtest.scores_json)
+        if db_backtest.scores_json
+        else None,
     )
 
 
@@ -557,109 +570,6 @@ async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
 
 
 # =============================================================================
-# Backtest Job Queue Queries
-# =============================================================================
-
-
-async def create_backtest_job(db_session: AsyncSession, config: BacktestConfig) -> UUID:
-    """Enqueue a new backtest job. Returns the job ID."""
-    job = DBBacktestJob(
-        status="pending",
-        config_json=config.model_dump_json(),
-    )
-    db_session.add(job)
-    await db_session.flush()
-    job_id = job.id
-    await db_session.commit()
-    logger.info(f"Backtest job enqueued: {job_id}")
-    return job_id
-
-
-async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> BacktestJob | None:
-    """Return BacktestJob or None if not found."""
-    stmt = select(DBBacktestJob).where(DBBacktestJob.id == job_id)
-    result = await db_session.execute(stmt)
-    job = result.scalar_one_or_none()
-    if job is None:
-        return None
-    return _job_to_model(job)
-
-
-async def list_recent_jobs(
-    db_session: AsyncSession, limit: int = 50
-) -> list[BacktestJob]:
-    """List recent backtest jobs ordered by creation time descending."""
-    stmt = select(DBBacktestJob).order_by(DBBacktestJob.created_at.desc()).limit(limit)
-    result = await db_session.execute(stmt)
-    return [_job_to_model(job) for job in result.scalars().all()]
-
-
-async def claim_next_pending_job(db_session: AsyncSession) -> DBBacktestJob | None:
-    """
-    Atomically claim the oldest pending job by setting its status to 'running'.
-    Uses SKIP LOCKED so concurrent workers don't double-claim.
-    Returns the claimed job row, or None if no pending jobs exist.
-    """
-    stmt = (
-        select(DBBacktestJob)
-        .where(DBBacktestJob.status == "pending")
-        .order_by(DBBacktestJob.created_at)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    result = await db_session.execute(stmt)
-    job = result.scalar_one_or_none()
-    if job is None:
-        return None
-
-    job.status = "running"
-    job.started_at = datetime.now()
-    await db_session.commit()
-    await db_session.refresh(job)
-    return job
-
-
-async def mark_job_completed(
-    db_session: AsyncSession, job_id: UUID, backtest_id: UUID
-) -> None:
-    stmt = (
-        update(DBBacktestJob)
-        .where(DBBacktestJob.id == job_id)
-        .values(
-            status="completed", backtest_id=backtest_id, completed_at=datetime.now()
-        )
-    )
-    await db_session.execute(stmt)
-    await db_session.commit()
-
-
-async def mark_job_failed(
-    db_session: AsyncSession, job_id: UUID, error_message: str
-) -> None:
-    stmt = (
-        update(DBBacktestJob)
-        .where(DBBacktestJob.id == job_id)
-        .values(
-            status="failed", error_message=error_message, completed_at=datetime.now()
-        )
-    )
-    await db_session.execute(stmt)
-    await db_session.commit()
-
-
-def _job_to_model(job: DBBacktestJob) -> BacktestJob:
-    return BacktestJob(
-        id=job.id,
-        status=job.status,
-        backtest_id=job.backtest_id,
-        error_message=job.error_message,
-        created_at=job.created_at,
-        started_at=job.started_at,
-        completed_at=job.completed_at,
-    )
-
-
-# =============================================================================
 # Strategy Queries
 # =============================================================================
 
@@ -722,6 +632,9 @@ async def get_strategy_by_id(
             rule=bt.rule,
             profit_pct=bt.profit_pct,
             baseline_profit_pct=bt.baseline_profit_pct,
+            max_stocks=bt.max_stocks,
+            rebalance_interval_weeks=bt.rebalance_interval_weeks,
+            index=bt.index,
             scores=BacktestScores.model_validate_json(bt.scores_json)
             if bt.scores_json
             else None,

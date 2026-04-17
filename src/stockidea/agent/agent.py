@@ -352,7 +352,37 @@ async def _run_openai_stream(
         # Execute tool calls
         for tool_call in message.tool_calls:
             func = tool_call.function  # type: ignore[union-attr]
-            tool_input = json.loads(func.arguments)
+            try:
+                tool_input = json.loads(func.arguments)
+            except json.JSONDecodeError as e:
+                # Model emitted malformed JSON (often truncated by max_completion_tokens).
+                # Surface the error back as a tool_result so the agent can retry rather
+                # than crashing the whole strategy run.
+                logger.warning(
+                    f"Failed to parse tool arguments for {func.name}: {e}. "
+                    f"Raw args: {func.arguments[:200]!r}"
+                )
+                error_payload = json.dumps(
+                    {
+                        "error": (
+                            f"Failed to parse tool arguments as JSON: {e}. "
+                            "The arguments string was likely truncated. "
+                            "Please retry with a shorter rule or fewer parameters."
+                        )
+                    }
+                )
+                yield {
+                    "event": "tool_result",
+                    "data": {"name": func.name, "result": json.loads(error_payload)},
+                }
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": error_payload,
+                    }
+                )
+                continue
 
             yield {
                 "event": "tool_call",
@@ -382,6 +412,79 @@ async def _run_openai_stream(
             return
 
     yield {"event": "done", "data": {"llm_history": json.dumps(messages)}}
+
+
+# =============================================================================
+# Strategy name generation
+# =============================================================================
+
+NAME_SYSTEM_PROMPT = """\
+You generate short, descriptive titles for stock trading strategies.
+
+Given a user's strategy idea, respond with a concise title — 3 to 6 words, \
+title case, no quotes, no trailing punctuation. The title should capture the \
+essence of the strategy (e.g. "Momentum with Drawdown Guard", "Low-Volatility \
+Mean Reversion", "Quality Trend Following"). Output ONLY the title, nothing else.\
+"""
+
+
+def _truncate_fallback_name(instruction: str) -> str:
+    name = instruction[:50].strip()
+    if len(instruction) > 50:
+        name += "..."
+    return name
+
+
+async def generate_strategy_name(instruction: str, model: str) -> str:
+    """Generate a short descriptive name for a strategy via the LLM.
+
+    Falls back to a truncated instruction if the API call fails or the key
+    is missing, so strategy creation never blocks on naming.
+    """
+    provider = _detect_provider(model)
+    fallback = _truncate_fallback_name(instruction)
+
+    try:
+        if provider == "openai":
+            if not OPENAI_API_KEY:
+                return fallback
+            from openai import AsyncOpenAI
+
+            openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+            openai_response = await openai_client.chat.completions.create(
+                model=model,
+                max_completion_tokens=32,
+                messages=[
+                    {"role": "system", "content": NAME_SYSTEM_PROMPT},
+                    {"role": "user", "content": instruction},
+                ],
+            )
+            content = openai_response.choices[0].message.content or ""
+        else:
+            if not ANTHROPIC_API_KEY:
+                return fallback
+            import anthropic
+
+            anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            anthropic_response = await anthropic_client.messages.create(
+                model=model,
+                max_tokens=32,
+                system=NAME_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": instruction}],
+            )
+            text_blocks = [
+                b.text for b in anthropic_response.content if b.type == "text"
+            ]
+            content = "".join(text_blocks)
+    except Exception as e:
+        logger.warning(f"Strategy name generation failed: {e}")
+        return fallback
+
+    name = content.strip().strip('"').strip("'").rstrip(".")
+    if not name:
+        return fallback
+    # Clamp to a sane length in case the model ignores instructions.
+    return name[:80]
 
 
 # =============================================================================

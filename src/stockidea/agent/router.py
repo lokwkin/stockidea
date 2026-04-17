@@ -1,11 +1,12 @@
 """API routes for strategy and agent operations."""
 
+import asyncio
 import json
 import logging
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from stockidea.datasource.database import conn, queries
@@ -14,6 +15,68 @@ from stockidea.types import StrategyCreate, StrategySummary, StrategyDetail
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _run_agent_and_persist(
+    strategy_id: UUID,
+    instruction: str,
+    model: str,
+    date_start: date,
+    date_end: date,
+    history: list[dict] | None = None,
+) -> None:
+    """Run the agent to completion in the background and persist results.
+
+    Owns its own DB sessions so it survives the originating HTTP request.
+    """
+    from stockidea.agent.agent import run_agent_stream
+
+    strategy_id_str = str(strategy_id)
+
+    async with conn.get_db_session() as db_session:
+        await queries.update_strategy_status(db_session, strategy_id, "running")
+
+    agent_events: list[dict] = []
+    llm_history: str | None = None
+    try:
+        async for event in run_agent_stream(
+            instruction,
+            model,
+            date_start=date_start,
+            date_end=date_end,
+            history=history,
+            strategy_id=strategy_id_str,
+        ):
+            if event["event"] == "done":
+                llm_history = event["data"].get("llm_history")
+            else:
+                agent_events.append(event)
+    except Exception as e:
+        logger.exception(f"Agent run failed for strategy {strategy_id}: {e}")
+        agent_events.append({"event": "error", "data": {"message": str(e)}})
+        async with conn.get_db_session() as db_session:
+            if agent_events:
+                await queries.add_strategy_message(
+                    db_session,
+                    strategy_id,
+                    role="assistant",
+                    content_json=json.dumps(agent_events),
+                )
+            await queries.update_strategy_status(db_session, strategy_id, "failed")
+        return
+
+    async with conn.get_db_session() as db_session:
+        await queries.add_strategy_message(
+            db_session,
+            strategy_id,
+            role="assistant",
+            content_json=json.dumps(agent_events),
+        )
+        if llm_history:
+            await queries.update_strategy_llm_history(
+                db_session, strategy_id, llm_history
+            )
+        await queries.update_strategy_status(db_session, strategy_id, "idle")
 
 
 @router.get("/strategies")
@@ -33,28 +96,33 @@ async def get_strategy(strategy_id: UUID) -> StrategyDetail:
     return strategy
 
 
-@router.post("/strategies")
-async def create_strategy(request: StrategyCreate):
-    """Create a new strategy and start the first agent run via SSE."""
-    from datetime import date, timedelta
+@router.get("/strategies/{strategy_id}/notes")
+async def get_strategy_notes(strategy_id: UUID) -> dict:
+    """Return the markdown notes the agent wrote for this strategy, if any."""
+    from stockidea.agent.tools import STRATEGIES_DIR
 
-    from stockidea.agent.agent import run_agent_stream
+    filepath = STRATEGIES_DIR / f"{strategy_id}.md"
+    if not filepath.exists():
+        return {"content": None}
+    return {"content": filepath.read_text(encoding="utf-8")}
+
+
+@router.post("/strategies")
+async def create_strategy(request: StrategyCreate) -> dict:
+    """Create a new strategy and start the agent in the background."""
+    from datetime import timedelta
+
+    from stockidea.agent.agent import generate_strategy_name
 
     end = request.date_end or date.today()
     start = request.date_start or (end - timedelta(days=365 * 3))
 
-    # Generate a name from the first ~50 chars of the instruction
-    name = request.instruction[:50].strip()
-    if len(request.instruction) > 50:
-        name += "..."
+    name = await generate_strategy_name(request.instruction, request.model)
 
     async with conn.get_db_session() as db_session:
         strategy_id = await queries.create_strategy(
             db_session, request, name=name, date_start=start, date_end=end
         )
-
-    # Save user message
-    async with conn.get_db_session() as db_session:
         await queries.add_strategy_message(
             db_session,
             strategy_id,
@@ -62,66 +130,17 @@ async def create_strategy(request: StrategyCreate):
             content_json=json.dumps({"text": request.instruction}),
         )
 
-    strategy_id_str = str(strategy_id)
-
-    async def event_stream():
-        # First emit the strategy ID so the frontend knows where to navigate
-        yield f"event: strategy_created\ndata: {json.dumps({'strategy_id': strategy_id_str})}\n\n"
-
-        async with conn.get_db_session() as db_session:
-            await queries.update_strategy_status(db_session, strategy_id, "running")
-
-        agent_events: list[dict] = []
-        llm_history: str | None = None
-        try:
-            async for event in run_agent_stream(
-                request.instruction,
-                request.model,
-                date_start=start,
-                date_end=end,
-                strategy_id=strategy_id_str,
-            ):
-                event_type = event["event"]
-
-                if event_type == "done":
-                    llm_history = event["data"].get("llm_history")
-                    # Don't include llm_history in the SSE data sent to frontend
-                    yield f"event: done\ndata: {json.dumps({})}\n\n"
-                else:
-                    agent_events.append(event)
-                    data = json.dumps(event["data"])
-                    yield f"event: {event_type}\ndata: {data}\n\n"
-
-        except Exception as e:
-            logger.exception(f"Agent stream error: {e}")
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
-            async with conn.get_db_session() as db_session:
-                await queries.update_strategy_status(db_session, strategy_id, "failed")
-            return
-
-        # Persist agent events as a message
-        async with conn.get_db_session() as db_session:
-            await queries.add_strategy_message(
-                db_session,
-                strategy_id,
-                role="assistant",
-                content_json=json.dumps(agent_events),
-            )
-            if llm_history:
-                await queries.update_strategy_llm_history(
-                    db_session, strategy_id, llm_history
-                )
-            await queries.update_strategy_status(db_session, strategy_id, "idle")
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    asyncio.create_task(
+        _run_agent_and_persist(
+            strategy_id=strategy_id,
+            instruction=request.instruction,
+            model=request.model,
+            date_start=start,
+            date_end=end,
+        )
     )
+
+    return {"strategy_id": str(strategy_id)}
 
 
 class FollowUpRequest(BaseModel):
@@ -129,12 +148,8 @@ class FollowUpRequest(BaseModel):
 
 
 @router.post("/strategies/{strategy_id}/messages")
-async def send_strategy_message(strategy_id: UUID, request: FollowUpRequest):
-    """Send a follow-up message to a strategy and run the agent with prior context."""
-
-    from stockidea.agent.agent import run_agent_stream
-
-    # Load strategy and its LLM history
+async def send_strategy_message(strategy_id: UUID, request: FollowUpRequest) -> dict:
+    """Send a follow-up message to a strategy and run the agent in the background."""
     async with conn.get_db_session() as db_session:
         strategy = await queries.get_strategy_by_id(db_session, strategy_id)
 
@@ -144,7 +159,6 @@ async def send_strategy_message(strategy_id: UUID, request: FollowUpRequest):
     if strategy.status == "running":
         raise HTTPException(status_code=409, detail="Strategy is already running")
 
-    # Parse LLM history for continuation
     history: list[dict] | None = None
     if strategy.llm_history_json:
         try:
@@ -152,7 +166,6 @@ async def send_strategy_message(strategy_id: UUID, request: FollowUpRequest):
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse LLM history for strategy {strategy_id}")
 
-    # Save user follow-up message
     async with conn.get_db_session() as db_session:
         await queries.add_strategy_message(
             db_session,
@@ -161,67 +174,22 @@ async def send_strategy_message(strategy_id: UUID, request: FollowUpRequest):
             content_json=json.dumps({"text": request.instruction}),
         )
 
-    strategy_id_str = str(strategy_id)
-
-    async def event_stream():
-        async with conn.get_db_session() as db_session:
-            await queries.update_strategy_status(db_session, strategy_id, "running")
-
-        agent_events: list[dict] = []
-        llm_history_result: str | None = None
-        try:
-            async for event in run_agent_stream(
-                request.instruction,
-                strategy.model,
-                date_start=strategy.date_start,
-                date_end=strategy.date_end,
-                history=history,
-                strategy_id=strategy_id_str,
-            ):
-                event_type = event["event"]
-
-                if event_type == "done":
-                    llm_history_result = event["data"].get("llm_history")
-                    yield f"event: done\ndata: {json.dumps({})}\n\n"
-                else:
-                    agent_events.append(event)
-                    data = json.dumps(event["data"])
-                    yield f"event: {event_type}\ndata: {data}\n\n"
-
-        except Exception as e:
-            logger.exception(f"Agent stream error: {e}")
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
-            async with conn.get_db_session() as db_session:
-                await queries.update_strategy_status(db_session, strategy_id, "failed")
-            return
-
-        # Persist agent events as a message
-        async with conn.get_db_session() as db_session:
-            await queries.add_strategy_message(
-                db_session,
-                strategy_id,
-                role="assistant",
-                content_json=json.dumps(agent_events),
-            )
-            if llm_history_result:
-                await queries.update_strategy_llm_history(
-                    db_session, strategy_id, llm_history_result
-                )
-            await queries.update_strategy_status(db_session, strategy_id, "idle")
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    asyncio.create_task(
+        _run_agent_and_persist(
+            strategy_id=strategy_id,
+            instruction=request.instruction,
+            model=strategy.model,
+            date_start=strategy.date_start,
+            date_end=strategy.date_end,
+            history=history,
+        )
     )
+
+    return {"status": "running"}
 
 
 @router.delete("/strategies/{strategy_id}")
-async def delete_strategy(strategy_id: UUID):
+async def delete_strategy(strategy_id: UUID) -> dict:
     """Delete a strategy and all its messages."""
     async with conn.get_db_session() as db_session:
         deleted = await queries.delete_strategy(db_session, strategy_id)

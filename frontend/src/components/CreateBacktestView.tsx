@@ -135,15 +135,11 @@ export function CreateBacktestView() {
       }
 
       const result = await response.json()
-
-      // API now returns a job; navigate to job status page
-      if (result.job_id) {
-        setLoading(false)
-        navigate(`/backtest/job/${result.job_id}`)
+      setLoading(false)
+      if (result.backtest_id) {
+        navigate(`/backtest/${result.backtest_id}`)
         return
       }
-
-      setLoading(false)
       navigate("/backtest")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create backtest")
@@ -214,7 +210,7 @@ export function CreateBacktestView() {
   return (
     <div className="relative mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8">
-        <h1 className="mb-2 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
+        <h1 className="mb-2 text-3xl font-semibold tracking-tight text-foreground">
           Create Backtest
         </h1>
         <p className="text-muted-foreground">

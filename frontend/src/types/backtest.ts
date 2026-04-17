@@ -30,6 +30,18 @@ export interface BacktestConfig {
   involved_keys?: string[]
 }
 
+export interface BacktestScores {
+  sharpe_ratio: number
+  sortino_ratio: number
+  calmar_ratio: number
+  max_drawdown_pct: number
+  max_drawdown_duration_weeks: number
+  win_rate: number
+  avg_win_pct: number
+  avg_loss_pct: number
+  total_rebalances: number
+}
+
 export interface Backtest {
   id?: number
   initial_balance: number
@@ -45,31 +57,21 @@ export interface Backtest {
   baseline_balance?: number
   rule_ref?: string | null
   backtest_config?: BacktestConfig
+  scores?: BacktestScores | null
 }
 
 export interface BacktestSummary {
   id: number
+  strategy_id?: string | null
   date_start: string
   date_end: string
   profit_pct: number
   profit: number
   baseline_profit_pct: number
+  index: string
   created_at: string
 }
 
-export type JobStatus = "pending" | "running" | "completed" | "failed"
-
-export interface BacktestJob {
-  id: string
-  status: JobStatus
-  backtest_id: string | null
-  error_message: string | null
-  created_at: string
-  started_at: string | null
-  completed_at: string | null
-}
-
-export interface EnqueuedJob {
-  job_id: string
-  status: JobStatus
+export interface CreatedBacktest {
+  backtest_id: string
 }

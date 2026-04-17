@@ -43,52 +43,10 @@ export function CreateStrategyView() {
         return
       }
 
-      // Read the SSE stream to get the strategy_id from the first event
-      const reader = response.body?.getReader()
-      if (!reader) {
-        setIsSubmitting(false)
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ""
-
-      // Read until we get the strategy_created event
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = ""
-
-        let currentEvent = ""
-        let currentData = ""
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7)
-          } else if (line.startsWith("data: ")) {
-            currentData = line.slice(6)
-          } else if (line === "" && currentEvent && currentData) {
-            if (currentEvent === "strategy_created") {
-              const parsed = JSON.parse(currentData)
-              // Cancel the reader — the StrategyView will reconnect
-              reader.cancel()
-              navigate(`/strategy/${parsed.strategy_id}`)
-              return
-            }
-            currentEvent = ""
-            currentData = ""
-          } else if (line !== "") {
-            buffer = lines.slice(lines.indexOf(line)).join("\n")
-            break
-          }
-        }
-      }
+      const data = await response.json()
+      navigate(`/strategy/${data.strategy_id}`)
     } catch (err) {
       console.error("Error creating strategy:", err)
-    } finally {
       setIsSubmitting(false)
     }
   }, [instruction, model, dateStart, dateEnd, isSubmitting, navigate])

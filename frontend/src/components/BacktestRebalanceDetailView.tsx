@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import type { BacktestRebalance } from "@/types/backtest"
 import type { StockIndicators, IndicatorsDataAPI } from "@/types/stock"
 import { StockTable } from "@/components/StockTable"
@@ -116,23 +116,23 @@ export function BacktestRebalanceDetailView({
       </div>
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <div>
-          <p className="text-sm text-muted-foreground">Balance</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Balance</p>
           <p className="text-lg font-semibold">{formatCurrency(rebalance.balance)}</p>
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">Profit</p>
-          <p className={`text-lg font-semibold ${rebalance.profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profit</p>
+          <p className={`text-lg font-semibold ${rebalance.profit >= 0 ? "text-positive" : "text-negative"}`}>
             {formatCurrency(rebalance.profit)}
           </p>
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">Profit %</p>
-          <p className={`text-lg font-semibold ${rebalance.profit_pct >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Profit %</p>
+          <p className={`text-lg font-semibold ${rebalance.profit_pct >= 0 ? "text-positive" : "text-negative"}`}>
             {formatPercent(rebalance.profit_pct)}
           </p>
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">Investments</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Investments</p>
           <p className="text-lg font-semibold">{rebalance.investments.length}</p>
         </div>
       </div>
@@ -153,23 +153,30 @@ export function BacktestRebalanceDetailView({
           <TableBody>
             {rebalance.investments.map((investment, idx) => (
               <TableRow key={idx}>
-                <TableCell className="font-medium">{investment.symbol}</TableCell>
-                <TableCell>{investment.position.toFixed(4)}</TableCell>
-                <TableCell>{formatCurrency(investment.buy_price)}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    to={`/chart/${investment.symbol}`}
+                    className="text-primary hover:underline"
+                  >
+                    {investment.symbol}
+                  </Link>
+                </TableCell>
+                <TableCell className="font-mono tabular-nums">{investment.position.toFixed(4)}</TableCell>
+                <TableCell className="font-mono tabular-nums">{formatCurrency(investment.buy_price)}</TableCell>
                 <TableCell>{formatDate(investment.buy_date)}</TableCell>
-                <TableCell>{formatCurrency(investment.sell_price)}</TableCell>
+                <TableCell className="font-mono tabular-nums">{formatCurrency(investment.sell_price)}</TableCell>
                 <TableCell>{formatDate(investment.sell_date)}</TableCell>
                 <TableCell
-                  className={
-                    investment.profit_pct >= 0 ? "text-green-600" : "text-red-600"
-                  }
+                  className={`font-mono tabular-nums ${
+                    investment.profit_pct >= 0 ? "text-positive" : "text-negative"
+                  }`}
                 >
                   {formatPercent(investment.profit_pct)}
                 </TableCell>
                 <TableCell
-                  className={
-                    investment.profit >= 0 ? "text-green-600" : "text-red-600"
-                  }
+                  className={`font-mono tabular-nums ${
+                    investment.profit >= 0 ? "text-positive" : "text-negative"
+                  }`}
                 >
                   {formatCurrency(investment.profit)}
                 </TableCell>
@@ -186,7 +193,7 @@ export function BacktestRebalanceDetailView({
           <div className="flex items-center justify-center py-8">
             <div className="flex flex-col items-center gap-4">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">Loading trend data...</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Loading trend data...</p>
             </div>
           </div>
         ) : filteredAnalysisData ? (

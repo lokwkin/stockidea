@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom"
 import type { BacktestRebalance } from "@/types/backtest"
 import {
   Table,
@@ -38,7 +39,7 @@ export function BacktestRebalanceTable({
               </div>
               <div>
                 <span className="text-muted-foreground">Profit: </span>
-                <span className={`font-medium ${rebalance.profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <span className={`font-medium ${rebalance.profit >= 0 ? "text-positive" : "text-negative"}`}>
                   {formatCurrency(rebalance.profit)} ({formatPercent(rebalance.profit_pct)})
                 </span>
               </div>
@@ -65,23 +66,30 @@ export function BacktestRebalanceTable({
               <TableBody>
                 {rebalance.investments.map((investment, invIdx) => (
                   <TableRow key={invIdx}>
-                    <TableCell className="font-medium">{investment.symbol}</TableCell>
-                    <TableCell>{investment.position.toFixed(4)}</TableCell>
-                    <TableCell>{formatCurrency(investment.buy_price)}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        to={`/chart/${investment.symbol}`}
+                        className="text-primary hover:underline"
+                      >
+                        {investment.symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums">{investment.position.toFixed(4)}</TableCell>
+                    <TableCell className="font-mono tabular-nums">{formatCurrency(investment.buy_price)}</TableCell>
                     <TableCell>{formatDate(investment.buy_date)}</TableCell>
-                    <TableCell>{formatCurrency(investment.sell_price)}</TableCell>
+                    <TableCell className="font-mono tabular-nums">{formatCurrency(investment.sell_price)}</TableCell>
                     <TableCell>{formatDate(investment.sell_date)}</TableCell>
                     <TableCell
-                      className={
-                        investment.profit_pct >= 0 ? "text-green-600" : "text-red-600"
-                      }
+                      className={`font-mono tabular-nums ${
+                        investment.profit_pct >= 0 ? "text-positive" : "text-negative"
+                      }`}
                     >
                       {formatPercent(investment.profit_pct)}
                     </TableCell>
                     <TableCell
-                      className={
-                        investment.profit >= 0 ? "text-green-600" : "text-red-600"
-                      }
+                      className={`font-mono tabular-nums ${
+                        investment.profit >= 0 ? "text-positive" : "text-negative"
+                      }`}
                     >
                       {formatCurrency(investment.profit)}
                     </TableCell>
