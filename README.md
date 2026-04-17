@@ -19,11 +19,9 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 
 The frontend dashboard is organized around **Strategy Ideas**. Users create a strategy with a natural language instruction, and the AI agent designs, backtests, and iterates on it autonomously. Users can send follow-up instructions to refine the strategy further. All backtests from a strategy are linked and displayed in a comparison table for easy iteration tracking.
 
-<img src="docs/agent.gif" alt="Agent strategy workflow" width="60%">
+<img src="docs/agent.gif" alt="Agent strategy workflow" width="100%">
 
 ## Architecture
-
-<img src="docs/architecture.svg" alt="Architecture" width="100%">
 
 The project is organized around four core components: **Datasource**, **Indicators**, **Backtest**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
 
@@ -83,7 +81,7 @@ The engine tracks portfolio value over time against a baseline index (S&P 500) a
 
 Backtests submitted through the web dashboard run synchronously inside the `POST /backtest` request -- the engine executes the full date range and returns the result in the response.
 
-<img src="docs/backtest.gif" alt="Backtest workflow" width="60%">
+<img src="docs/backtest.gif" alt="Backtest workflow">
 
 ```bash
 uv run python -m stockidea.cli backtest \
