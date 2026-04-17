@@ -6,7 +6,8 @@
       "Bash(npm run:*)",
       "Bash(find *)",
       "Bash(git mv *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(npm run *)"
     ]
   }
 }

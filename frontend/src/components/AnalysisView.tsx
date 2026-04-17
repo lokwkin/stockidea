@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/config/columns"
 import { dateFormat, cn } from "@/lib/utils"
 
-const DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+const DEFAULT_RANKING = "change_pct_13w / return_std_52w"
 
 /** Group columns by their `group` field for the column picker */
 function groupColumns() {
@@ -363,7 +363,7 @@ export function AnalysisView() {
               id="rule"
               value={rule}
               onChange={(e) => setRule(e.target.value)}
-              placeholder="change_13w_pct > 10 AND max_drop_2w_pct < 15"
+              placeholder="change_pct_13w > 10 AND max_drop_pct_2w < 15"
               className="flex min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
               rows={2}
               onKeyDown={(e) => {

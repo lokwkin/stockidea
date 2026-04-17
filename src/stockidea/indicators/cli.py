@@ -145,7 +145,7 @@ def compute(date: str | None, date_start: str | None, date_end: str | None, inde
     "-r",
     type=str,
     required=True,
-    help="Rule expression string (e.g., 'change_13w_pct > 10 AND max_drop_2w_pct > 15')",
+    help="Rule expression string (e.g., 'change_pct_13w > 10 AND max_drop_pct_2w > 15')",
 )
 @click.option(
     "--max-stocks",

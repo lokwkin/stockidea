@@ -8,7 +8,7 @@ from simpleeval import SimpleEval  # type: ignore
 from stockidea.types import StockIndicators
 
 
-DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+DEFAULT_RANKING = "change_pct_13w / return_std_52w"
 
 
 class RuleEngine:
@@ -29,14 +29,14 @@ class RuleEngine:
         Compile a string rule into a callable function.
 
         Args:
-            rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
+            rule_string: String expression like "change_pct_13w > 1 AND max_drop_pct_2w > 15"
 
         Returns:
             A callable function that takes StockIndicators and returns bool
 
         Examples:
             >>> engine = RuleEngine()
-            >>> rule = engine.compile("change_13w_pct > 1 AND linear_r_squared > 0.8")
+            >>> rule = engine.compile("change_pct_13w > 1 AND r_squared_52w > 0.8")
             >>> result = rule(analysis)
         """
         # Normalize the rule string (handle case-insensitive AND/OR)
@@ -99,16 +99,16 @@ class RuleEngine:
         Extract the StockIndicators keys that are referenced in the rule string.
 
         Args:
-            rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
+            rule_string: String expression like "change_pct_13w > 1 AND max_drop_pct_2w > 15"
 
         Returns:
             List of StockIndicators field names that are used in the rule
 
         Examples:
             >>> engine = RuleEngine()
-            >>> keys = engine.extract_involved_keys("change_13w_pct > 1 AND linear_r_squared > 0.8")
+            >>> keys = engine.extract_involved_keys("change_pct_13w > 1 AND r_squared_52w > 0.8")
             >>> print(keys)
-            ['change_13w_pct', 'linear_r_squared']
+            ['change_pct_13w', 'r_squared_52w']
         """
         # Dynamically get all valid StockIndicators field names
         valid_keys = self._get_trend_analysis_field_names()
@@ -145,13 +145,13 @@ def compile_ranking(ranking_expr: str) -> Callable[[StockIndicators], float]:
     receive -inf.
 
     Args:
-        ranking_expr: Arithmetic expression like "change_13w_pct / weekly_return_std"
+        ranking_expr: Arithmetic expression like "change_pct_13w / return_std_52w"
 
     Returns:
         A callable that takes StockIndicators and returns a float score.
 
     Examples:
-        >>> rank = compile_ranking("change_13w_pct / weekly_return_std")
+        >>> rank = compile_ranking("change_pct_13w / return_std_52w")
         >>> score = rank(indicators)
     """
     field_names = set(StockIndicators.model_fields.keys())
@@ -173,13 +173,13 @@ def compile_rule(rule_string: str) -> Callable[[StockIndicators], bool]:
     Convenience function to compile a rule string.
 
     Args:
-        rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
+        rule_string: String expression like "change_pct_13w > 1 AND max_drop_pct_2w > 15"
 
     Returns:
         A callable function that takes StockIndicators and returns bool
 
     Examples:
-        >>> rule = compile_rule("change_13w_pct > 1 AND linear_r_squared > 0.8")
+        >>> rule = compile_rule("change_pct_13w > 1 AND r_squared_52w > 0.8")
         >>> result = rule(analysis)
     """
     engine = RuleEngine()
@@ -191,15 +191,15 @@ def extract_involved_keys(rule_string: str) -> list[str]:
     Convenience function to extract StockIndicators keys from a rule string.
 
     Args:
-        rule_string: String expression like "change_13w_pct > 1 AND max_drop_2w_pct > 15"
+        rule_string: String expression like "change_pct_13w > 1 AND max_drop_pct_2w > 15"
 
     Returns:
         List of StockIndicators field names that are used in the rule
 
     Examples:
-        >>> keys = extract_involved_keys("change_13w_pct > 1 AND linear_r_squared > 0.8")
+        >>> keys = extract_involved_keys("change_pct_13w > 1 AND r_squared_52w > 0.8")
         >>> print(keys)
-        ['change_13w_pct', 'linear_r_squared']
+        ['change_pct_13w', 'r_squared_52w']
     """
     engine = RuleEngine()
     return engine.extract_involved_keys(rule_string)

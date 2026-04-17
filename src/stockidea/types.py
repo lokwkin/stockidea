@@ -49,39 +49,54 @@ class StockIndicators(BaseModel):
     symbol: str
     date: date
     total_weeks: int
-    # Trend metrics (regression-based)
-    linear_slope_pct: float
-    linear_r_squared: float
-    log_slope: float
-    log_r_squared: float
-    # Return metrics (point-to-point changes)
-    change_1w_pct: float
-    change_2w_pct: float
-    change_4w_pct: float
-    change_13w_pct: float
-    change_26w_pct: float
-    change_1y_pct: float
-    # Volatility metrics (max swings)
-    max_jump_1w_pct: float
-    max_drop_1w_pct: float
-    max_jump_2w_pct: float
-    max_drop_2w_pct: float
-    max_jump_4w_pct: float
-    max_drop_4w_pct: float
-    # Volatility metrics (statistical)
-    weekly_return_std: float  # std dev of weekly % returns
-    downside_std: float  # std dev of negative weekly returns only
-    # Stability metrics
-    max_drawdown_pct: float  # positive value: e.g. 18.5 means fell 18.5% from peak
-    pct_weeks_positive: float  # 0.0–1.0 fraction of up-weeks
-    slope_13w_pct: float  # linear slope over last 13 weeks (% per week)
-    r_squared_13w: float  # R² of 13-week regression
-    r_squared_4w: float  # R² of 4-week regression (short-term trend consistency)
-    slope_26w_pct: float  # linear slope over last 26 weeks (% per week)
-    r_squared_26w: float  # R² of 26-week regression
+    # Linear regression slope (% of starting price per week) per window
+    slope_pct_13w: float
+    slope_pct_26w: float
+    slope_pct_52w: float
+    # Linear regression R² per window
+    r_squared_4w: float
+    r_squared_13w: float
+    r_squared_26w: float
+    r_squared_52w: float
+    # Log regression slope and R² per window
+    log_slope_13w: float
+    log_r_squared_13w: float
+    log_slope_26w: float
+    log_r_squared_26w: float
+    log_slope_52w: float
+    log_r_squared_52w: float
+    # Point-to-point percentage change per window
+    change_pct_1w: float
+    change_pct_2w: float
+    change_pct_4w: float
+    change_pct_13w: float
+    change_pct_26w: float
+    change_pct_52w: float
+    # Max single-period jump / drop (%)
+    max_jump_pct_1w: float
+    max_drop_pct_1w: float
+    max_jump_pct_2w: float
+    max_drop_pct_2w: float
+    max_jump_pct_4w: float
+    max_drop_pct_4w: float
+    # Weekly return std-dev (full series, 52w)
+    return_std_52w: float
+    downside_std_52w: float
+    # Max peak-to-trough drawdown (positive %) per window
+    max_drawdown_pct_4w: float
+    max_drawdown_pct_13w: float
+    max_drawdown_pct_26w: float
+    max_drawdown_pct_52w: float
+    # Fraction of up-weeks (0.0–1.0) per window
+    pct_weeks_positive_4w: float
+    pct_weeks_positive_13w: float
+    pct_weeks_positive_26w: float
+    pct_weeks_positive_52w: float
     # Momentum shape
-    acceleration_13w: float  # recent-half slope minus earlier-half slope over 13w
-    pct_from_4w_high: float  # distance from 4-week high (always <= 0)
+    acceleration_pct_13w: (
+        float  # recent-half slope minus earlier-half slope over 13w (% per week)
+    )
+    from_high_pct_4w: float  # distance from 4-week high (always <= 0)
 
 
 # =============================================================================
@@ -132,7 +147,7 @@ class BacktestConfig(BaseModel):
     date_start: datetime
     date_end: datetime
     rule: str
-    ranking: str = "change_13w_pct / weekly_return_std"
+    ranking: str = "change_pct_13w / return_std_52w"
     index: StockIndex
     involved_keys: list[str] = []
 

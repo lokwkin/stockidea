@@ -55,9 +55,7 @@ async def get_stock_profile(symbol: str) -> dict:
         peers = []
 
     if profile is None and not peers:
-        raise HTTPException(
-            status_code=404, detail=f"No profile data found for {sym}"
-        )
+        raise HTTPException(status_code=404, detail=f"No profile data found for {sym}")
 
     return {"symbol": sym, "profile": profile, "peers": peers}
 
@@ -68,9 +66,7 @@ async def get_stock_prices(
     from_date: str = Query(
         default=None, alias="from", description="Start date YYYY-MM-DD"
     ),
-    to_date: str = Query(
-        default=None, alias="to", description="End date YYYY-MM-DD"
-    ),
+    to_date: str = Query(default=None, alias="to", description="End date YYYY-MM-DD"),
 ) -> list[StockPrice]:
     """Return daily price history for a stock symbol."""
     to_dt = (

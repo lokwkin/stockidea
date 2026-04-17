@@ -3,39 +3,52 @@ export interface StockIndicators {
   symbol: string;
   date: string;
   total_weeks: number;
-  // Trend indicators (regression-based)
-  linear_slope_pct: number;
-  linear_r_squared: number;
-  log_slope: number;
-  log_r_squared: number;
-  // Return indicators (point-to-point changes)
-  change_1w_pct: number;
-  change_2w_pct: number;
-  change_4w_pct: number;
-  change_13w_pct: number;
-  change_26w_pct: number;
-  change_1y_pct: number;
-  // Volatility indicators (max swings)
-  max_jump_1w_pct: number;
-  max_drop_1w_pct: number;
-  max_jump_2w_pct: number;
-  max_drop_2w_pct: number;
-  max_jump_4w_pct: number;
-  max_drop_4w_pct: number;
-  // Volatility indicators (statistical)
-  weekly_return_std: number;
-  downside_std: number;
-  // Stability indicators
-  max_drawdown_pct: number;
-  pct_weeks_positive: number;
-  slope_13w_pct: number;
-  r_squared_13w: number;
+  // Linear regression slope (% per week)
+  slope_pct_13w: number;
+  slope_pct_26w: number;
+  slope_pct_52w: number;
+  // Linear regression R²
   r_squared_4w: number;
-  slope_26w_pct: number;
+  r_squared_13w: number;
   r_squared_26w: number;
+  r_squared_52w: number;
+  // Log regression slope and R²
+  log_slope_13w: number;
+  log_r_squared_13w: number;
+  log_slope_26w: number;
+  log_r_squared_26w: number;
+  log_slope_52w: number;
+  log_r_squared_52w: number;
+  // Point-to-point change
+  change_pct_1w: number;
+  change_pct_2w: number;
+  change_pct_4w: number;
+  change_pct_13w: number;
+  change_pct_26w: number;
+  change_pct_52w: number;
+  // Max single-period swing
+  max_jump_pct_1w: number;
+  max_drop_pct_1w: number;
+  max_jump_pct_2w: number;
+  max_drop_pct_2w: number;
+  max_jump_pct_4w: number;
+  max_drop_pct_4w: number;
+  // Weekly return std-dev
+  return_std_52w: number;
+  downside_std_52w: number;
+  // Max drawdown per window
+  max_drawdown_pct_4w: number;
+  max_drawdown_pct_13w: number;
+  max_drawdown_pct_26w: number;
+  max_drawdown_pct_52w: number;
+  // Fraction of up-weeks per window
+  pct_weeks_positive_4w: number;
+  pct_weeks_positive_13w: number;
+  pct_weeks_positive_26w: number;
+  pct_weeks_positive_52w: number;
   // Momentum shape
-  acceleration_13w: number;
-  pct_from_4w_high: number;
+  acceleration_pct_13w: number;
+  from_high_pct_4w: number;
 }
 
 // API response type

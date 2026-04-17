@@ -68,9 +68,9 @@ stock trading strategies by writing filter rules and backtesting them.
 Rules are boolean expressions using StockIndicators field names with comparison operators and AND/OR logic.
 
 Examples:
-- `change_13w_pct > 10 AND max_drop_2w_pct < 15`
-- `linear_r_squared > 0.7 AND change_26w_pct > 20 AND max_drawdown_pct < 25`
-- `slope_13w_pct > 0.5 AND pct_weeks_positive > 0.55 OR change_1y_pct > 50`
+- `change_pct_13w > 10 AND max_drop_pct_2w < 15`
+- `r_squared_52w > 0.7 AND change_pct_26w > 20 AND max_drawdown_pct_52w < 25`
+- `slope_pct_13w > 0.5 AND pct_weeks_positive_52w > 0.55 OR change_pct_52w > 50`
 
 ## Ranking expression
 
@@ -78,14 +78,14 @@ After filtering, stocks are ranked by a **ranking expression** — a numeric for
 StockIndicators fields. Higher score = higher priority for selection. You can customize this \
 per backtest via the `ranking` parameter.
 
-Default ranking: `change_13w_pct / weekly_return_std` (risk-adjusted momentum — return per unit of volatility).
+Default ranking: `change_pct_13w / return_std_52w` (risk-adjusted momentum — return per unit of volatility).
 
 Examples:
-- `change_13w_pct / weekly_return_std` — risk-adjusted momentum (default)
-- `linear_slope_pct * linear_r_squared` — trend quality (strong + consistent)
-- `change_26w_pct / max_drawdown_pct` — return per unit of drawdown
-- `slope_13w_pct * r_squared_13w + 0.5 * change_4w_pct` — composite: mid-term trend quality + short-term momentum
-- `change_13w_pct / downside_std` — upside-to-downside ratio
+- `change_pct_13w / return_std_52w` — risk-adjusted momentum (default)
+- `slope_pct_52w * r_squared_52w` — trend quality (strong + consistent)
+- `change_pct_26w / max_drawdown_pct_52w` — return per unit of drawdown
+- `slope_pct_13w * r_squared_13w + 0.5 * change_pct_4w` — composite: mid-term trend quality + short-term momentum
+- `change_pct_13w / downside_std_52w` — upside-to-downside ratio
 
 Ranking matters because it determines which stocks get selected when more pass the filter \
 than `max_stocks` allows. Experiment with different rankings alongside rule changes.
@@ -133,7 +133,7 @@ max_stocks values, and rebalance intervals to find the optimal combination.
 the best-performing configuration (rule, ranking, max_stocks, rebalance_interval_weeks), \
 key performance metrics, and any insights or trade-offs worth noting \
 (e.g. "loosening drawdown improved returns but increased volatility", \
-"ranking by downside_std outperformed the default momentum ranking"). \
+"ranking by downside_std_52w outperformed the default momentum ranking"). \
 Then stop and wait for the user's follow-up instruction — they may ask you to explore a \
 different direction, tighten specific constraints, or run another round of iterations based \
 on what they see in the results.
