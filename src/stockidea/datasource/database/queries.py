@@ -331,6 +331,7 @@ async def save_backtest_result(
         max_stocks=result.backtest_config.max_stocks,
         rebalance_interval_weeks=result.backtest_config.rebalance_interval_weeks,
         rule=result.backtest_config.rule,
+        ranking=result.backtest_config.ranking,
         index=result.backtest_config.index.value,
         scores_json=result.scores.model_dump_json() if result.scores else None,
     )
@@ -477,6 +478,9 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
             date_start=db_backtest.date_start,
             date_end=db_backtest.date_end,
             rule=db_backtest.rule,
+            ranking=db_backtest.ranking
+            if db_backtest.ranking
+            else BacktestConfig.model_fields["ranking"].default,
             index=StockIndex(db_backtest.index),
             involved_keys=extract_involved_keys(db_backtest.rule),
         ),
@@ -630,6 +634,7 @@ async def get_strategy_by_id(
         StrategyBacktestSummary(
             id=bt.id,
             rule=bt.rule,
+            ranking=bt.ranking,
             profit_pct=bt.profit_pct,
             baseline_profit_pct=bt.baseline_profit_pct,
             max_stocks=bt.max_stocks,

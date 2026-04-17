@@ -294,7 +294,12 @@ function BacktestComparisonTable({ backtests }: { backtests: StrategyBacktestSum
               <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.rule}</code>
             </div>
 
-            {/* Ranking is not persisted per backtest yet — TODO: surface it once a `ranking` column is added to DBBacktest. */}
+            {bt.ranking && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Ranking: </span>
+                <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.ranking}</code>
+              </div>
+            )}
 
             <div className="grid grid-cols-5 gap-2 text-xs pt-1">
               <div>

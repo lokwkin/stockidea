@@ -21,12 +21,15 @@ import { dateFormat } from "@/lib/utils"
 
 type StockIndex = "SP500" | "NASDAQ"
 
+const DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+
 interface BacktestRequest {
   max_stocks: number
   rebalance_interval_weeks: number
   date_start: string // ISO datetime string
   date_end: string // ISO datetime string
   rule: string
+  ranking: string
   index: StockIndex
 }
 
@@ -43,14 +46,16 @@ export function CreateBacktestView() {
     const dateStart = searchParams.get("date_start") || ""
     const dateEnd = searchParams.get("date_end") || ""
     const rule = searchParams.get("rule") || ""
+    const ranking = searchParams.get("ranking") || DEFAULT_RANKING
     const index = (searchParams.get("index") as StockIndex) || "SP500"
-    
+
     return {
       max_stocks: maxStocks ? parseInt(maxStocks) : 3,
       rebalance_interval_weeks: rebalanceInterval ? parseInt(rebalanceInterval) : 2,
       date_start: dateStart ? dateStart.replace(/\//g, "-") : "", // Convert yyyy/mm/dd to yyyy-mm-dd
       date_end: dateEnd ? dateEnd.replace(/\//g, "-") : "",
       rule: rule,
+      ranking: ranking,
       index: index,
     }
   }
@@ -111,9 +116,10 @@ export function CreateBacktestView() {
         throw new Error("Rebalance interval must be greater than 0")
       }
 
-      // Convert date strings to ISO datetime strings
-      const dateStart = new Date(formData.date_start + "T00:00:00").toISOString()
-      const dateEnd = new Date(formData.date_end + "T23:59:59").toISOString()
+      // Send naive midnight datetimes (no timezone marker) so backend parses
+      // them identically to CLI `datetime.strptime(..., "%Y-%m-%d")`.
+      const dateStart = `${formData.date_start}T00:00:00`
+      const dateEnd = `${formData.date_end}T00:00:00`
 
       const response = await fetch("/api/backtest", {
         method: "POST",
@@ -393,6 +399,25 @@ export function CreateBacktestView() {
               />
               <p className="text-xs text-muted-foreground">Backtest end date (yyyy/mm/dd)</p>
             </div>
+          </div>
+
+          {/* Ranking */}
+          <div className="space-y-2">
+            <label htmlFor="ranking" className="text-sm font-medium">
+              Ranking Expression
+            </label>
+            <Input
+              id="ranking"
+              type="text"
+              value={formData.ranking}
+              onChange={(e) => handleChange("ranking", e.target.value)}
+              required
+              className="font-mono"
+              placeholder={DEFAULT_RANKING}
+            />
+            <p className="text-xs text-muted-foreground">
+              Expression used to rank stocks that pass the rule. Higher value = higher priority.
+            </p>
           </div>
 
           {/* Rule */}

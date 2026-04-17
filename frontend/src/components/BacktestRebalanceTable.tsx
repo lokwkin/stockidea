@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { Link } from "react-router-dom"
 import type { BacktestRebalance } from "@/types/backtest"
 import {
@@ -23,9 +24,17 @@ export function BacktestRebalanceTable({
   formatCurrency,
   formatPercent,
 }: BacktestRebalanceTableProps) {
+  const sortedRebalances = useMemo(
+    () =>
+      [...rebalanceHistory].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      ),
+    [rebalanceHistory]
+  )
+
   return (
     <div className="mt-4 space-y-6">
-      {rebalanceHistory.map((rebalance, rebalanceIdx) => (
+      {sortedRebalances.map((rebalance, rebalanceIdx) => (
         <div key={rebalanceIdx} className="border rounded-lg p-4">
           <div className="mb-4 pb-3 border-b">
             <div className="flex flex-wrap items-center gap-4 text-sm">

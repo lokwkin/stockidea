@@ -195,6 +195,7 @@ class DBBacktest(Base):
     max_stocks: Mapped[int] = mapped_column(Integer, nullable=False)
     rebalance_interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     rule: Mapped[str] = mapped_column(Text, nullable=False)
+    ranking: Mapped[str | None] = mapped_column(Text, nullable=True)
     index: Mapped[str] = mapped_column(String, nullable=False)
     # Scores stored inline
     scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)

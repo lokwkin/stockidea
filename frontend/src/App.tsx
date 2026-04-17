@@ -282,7 +282,7 @@ function Sidebar() {
           </Link>
         </div>
 
-        {/* Stock Chart Section */}
+        {/* Stocks Section */}
         <div className="mt-3 pt-3 border-t border-sidebar-border">
           <Link
             to="/chart"
@@ -294,7 +294,7 @@ function Sidebar() {
             )}
           >
             <BarChart3 className="h-4 w-4 mr-2" />
-            Stock Chart
+            Stocks
           </Link>
         </div>
       </nav>

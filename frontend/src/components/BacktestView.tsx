@@ -34,6 +34,7 @@ export function BacktestView() {
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [ruleCopied, setRuleCopied] = useState(false)
+  const [rankingCopied, setRankingCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
@@ -153,7 +154,7 @@ export function BacktestView() {
 
   const handleCopyRule = useCallback(async () => {
     if (!backtestData?.rule_ref) return
-    
+
     try {
       await navigator.clipboard.writeText(backtestData.rule_ref)
       setRuleCopied(true)
@@ -162,6 +163,19 @@ export function BacktestView() {
       console.error("Failed to copy rule:", err)
     }
   }, [backtestData?.rule_ref])
+
+  const handleCopyRanking = useCallback(async () => {
+    const ranking = backtestData?.backtest_config?.ranking
+    if (!ranking) return
+
+    try {
+      await navigator.clipboard.writeText(ranking)
+      setRankingCopied(true)
+      setTimeout(() => setRankingCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy ranking:", err)
+    }
+  }, [backtestData?.backtest_config?.ranking])
 
   // Flatten all investments from all rebalances
   const allBacktestInvestments = useMemo(() => {
@@ -302,6 +316,9 @@ export function BacktestView() {
                         rule: config.rule,
                         index: config.index,
                       })
+                      if (config.ranking) {
+                        params.set("ranking", config.ranking)
+                      }
 
                       navigate(`/backtest/create?${params.toString()}`)
                     }}
@@ -347,6 +364,32 @@ export function BacktestView() {
                         title="Copy rule to clipboard"
                       >
                         {ruleCopied ? (
+                          <Check className="h-4 w-4 text-positive" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ranking */}
+                {backtestData.backtest_config?.ranking && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ranking Expression</p>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono">
+                        {backtestData.backtest_config.ranking}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCopyRanking}
+                        className="shrink-0"
+                        title="Copy ranking to clipboard"
+                      >
+                        {rankingCopied ? (
                           <Check className="h-4 w-4 text-positive" />
                         ) : (
                           <Copy className="h-4 w-4" />

@@ -26,6 +26,7 @@ export interface BacktestConfig {
   date_start: string
   date_end: string
   rule: string
+  ranking?: string
   index: string
   involved_keys?: string[]
 }

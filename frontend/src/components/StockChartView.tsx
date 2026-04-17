@@ -359,7 +359,7 @@ export function StockChartView() {
         <header className="flex-shrink-0 px-6 pt-8 pb-6 border-b">
           <div className="mb-6">
             <h1 className="mb-2 text-3xl font-semibold tracking-tight text-foreground">
-              Stock Chart
+              Stocks
             </h1>
             <p className="text-muted-foreground">
               Weekly price history with click-to-inspect indicator analysis
@@ -436,104 +436,9 @@ export function StockChartView() {
 
           {!loading && !error && weeklyData.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">
-                {weeklyData.length} weeks &middot; {formatDate(weeklyData[0].weekEnding)} to{" "}
-                {formatDate(weeklyData[weeklyData.length - 1].weekEnding)}
-                {selectedDate && (
-                  <span className="ml-2">
-                    &middot; Selected: <span className="font-medium text-foreground">{formatDate(selectedDate)}</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Price chart */}
-              <div className="h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart
-                    data={weeklyData}
-                    onClick={handleChartClick}
-                    margin={{ top: 5, right: 20, bottom: 5, left: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="weekEnding"
-                      tickFormatter={(v) => v.slice(5)} // MM-DD
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      interval="preserveStartEnd"
-                      minTickGap={60}
-                    />
-                    <YAxis
-                      domain={priceDomain}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      tickFormatter={(v) => `$${v}`}
-                      width={60}
-                    />
-                    <Tooltip content={<ChartTooltip />} />
-
-                    {selectedDate && (
-                      <ReferenceLine
-                        x={selectedDate}
-                        stroke="hsl(var(--primary))"
-                        strokeDasharray="4 4"
-                        strokeWidth={1.5}
-                      />
-                    )}
-
-                    <Line
-                      type="monotone"
-                      dataKey="close"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Volume chart */}
-              <div className="h-[120px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart
-                    data={weeklyData}
-                    onClick={handleChartClick}
-                    margin={{ top: 5, right: 20, bottom: 5, left: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      dataKey="weekEnding"
-                      tickFormatter={(v) => v.slice(5)}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      interval="preserveStartEnd"
-                      minTickGap={60}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      tickFormatter={formatVolume}
-                      width={60}
-                    />
-
-                    {selectedDate && (
-                      <ReferenceLine
-                        x={selectedDate}
-                        stroke="hsl(var(--primary))"
-                        strokeDasharray="4 4"
-                        strokeWidth={1.5}
-                      />
-                    )}
-
-                    <Bar
-                      dataKey="volume"
-                      fill="hsl(var(--muted-foreground))"
-                      opacity={0.3}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Company profile + peers */}
+              {/* Company profile + peers — shown above the chart */}
               {(loadingProfile || profileData) && (
-                <div className="rounded-lg border bg-card p-5 space-y-4 mt-4">
+                <div className="rounded-lg border bg-card p-5 space-y-4 mb-4">
                   {loadingProfile && !profileData && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -666,6 +571,102 @@ export function StockChartView() {
                   )}
                 </div>
               )}
+
+              <div className="text-xs text-muted-foreground">
+                {weeklyData.length} weeks &middot; {formatDate(weeklyData[0].weekEnding)} to{" "}
+                {formatDate(weeklyData[weeklyData.length - 1].weekEnding)}
+                {selectedDate && (
+                  <span className="ml-2">
+                    &middot; Selected: <span className="font-medium text-foreground">{formatDate(selectedDate)}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Price chart */}
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    data={weeklyData}
+                    onClick={handleChartClick}
+                    margin={{ top: 5, right: 20, bottom: 5, left: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="weekEnding"
+                      tickFormatter={(v) => v.slice(5)} // MM-DD
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                    />
+                    <YAxis
+                      domain={priceDomain}
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      tickFormatter={(v) => `$${v}`}
+                      width={60}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+
+                    {selectedDate && (
+                      <ReferenceLine
+                        x={selectedDate}
+                        stroke="hsl(var(--primary))"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                      />
+                    )}
+
+                    <Line
+                      type="monotone"
+                      dataKey="close"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Volume chart */}
+              <div className="h-[120px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    data={weeklyData}
+                    onClick={handleChartClick}
+                    margin={{ top: 5, right: 20, bottom: 5, left: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="weekEnding"
+                      tickFormatter={(v) => v.slice(5)}
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      tickFormatter={formatVolume}
+                      width={60}
+                    />
+
+                    {selectedDate && (
+                      <ReferenceLine
+                        x={selectedDate}
+                        stroke="hsl(var(--primary))"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                      />
+                    )}
+
+                    <Bar
+                      dataKey="volume"
+                      fill="hsl(var(--muted-foreground))"
+                      opacity={0.3}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
             </div>
           )}
         </div>

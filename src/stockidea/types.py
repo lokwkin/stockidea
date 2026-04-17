@@ -186,6 +186,7 @@ class StrategySummary(BaseModel):
 class StrategyBacktestSummary(BaseModel):
     id: _uuid.UUID
     rule: str
+    ranking: str | None = None
     profit_pct: float
     baseline_profit_pct: float
     max_stocks: int

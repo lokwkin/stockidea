@@ -29,8 +29,8 @@ export function BacktestInvestmentTable({
   formatPercent,
 }: BacktestInvestmentTableProps) {
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({
-    column: null,
-    direction: null,
+    column: "buy_date",
+    direction: "desc",
   })
 
   const handleSort = useCallback((column: SortColumn) => {
