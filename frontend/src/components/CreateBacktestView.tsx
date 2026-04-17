@@ -21,7 +21,48 @@ import { dateFormat } from "@/lib/utils"
 
 type StockIndex = "SP500" | "NASDAQ"
 
-const DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+const DEFAULT_RANKING = "change_pct_13w / return_std_52w"
+
+const RULE_VARIABLES: { name: string; type: string; description: string }[] = [
+  { name: "max_jump_pct_1w", type: "float", description: "Maximum 1-week percentage increase" },
+  { name: "max_drop_pct_1w", type: "float", description: "Maximum 1-week percentage decrease" },
+  { name: "max_jump_pct_2w", type: "float", description: "Maximum 2-week percentage increase" },
+  { name: "max_drop_pct_2w", type: "float", description: "Maximum 2-week percentage decrease" },
+  { name: "max_jump_pct_4w", type: "float", description: "Maximum 4-week percentage increase" },
+  { name: "max_drop_pct_4w", type: "float", description: "Maximum 4-week percentage decrease" },
+  { name: "change_pct_52w", type: "float", description: "Percentage change over 52 weeks (1 year)" },
+  { name: "change_pct_26w", type: "float", description: "Percentage change over 26 weeks" },
+  { name: "change_pct_13w", type: "float", description: "Percentage change over 13 weeks" },
+  { name: "change_pct_4w", type: "float", description: "Percentage change over 4 weeks" },
+  { name: "change_pct_2w", type: "float", description: "Percentage change over 2 weeks" },
+  { name: "change_pct_1w", type: "float", description: "Percentage change over 1 week" },
+  { name: "total_weeks", type: "int", description: "Total number of weeks analyzed" },
+  { name: "slope_pct_13w", type: "float", description: "Linear trend slope over last 13 weeks, % of starting price per week" },
+  { name: "slope_pct_26w", type: "float", description: "Linear trend slope over last 26 weeks, % of starting price per week" },
+  { name: "slope_pct_52w", type: "float", description: "Linear trend slope over last 52 weeks, % of starting price per week" },
+  { name: "r_squared_4w", type: "float", description: "R² of 4-week regression (0-1, higher = more consistent very-short-term trend)" },
+  { name: "r_squared_13w", type: "float", description: "R² of 13-week regression (0-1, higher = more consistent short-term trend)" },
+  { name: "r_squared_26w", type: "float", description: "R² of 26-week regression (0-1, higher = more consistent medium-term trend)" },
+  { name: "r_squared_52w", type: "float", description: "R² of 52-week regression (0-1, higher = more consistent long-term trend)" },
+  { name: "log_slope_13w", type: "float", description: "Log-regression slope over last 13 weeks (compounded growth rate per week)" },
+  { name: "log_r_squared_13w", type: "float", description: "R² of 13-week log regression (consistency of compounded growth)" },
+  { name: "log_slope_26w", type: "float", description: "Log-regression slope over last 26 weeks (compounded growth rate per week)" },
+  { name: "log_r_squared_26w", type: "float", description: "R² of 26-week log regression (consistency of compounded growth)" },
+  { name: "log_slope_52w", type: "float", description: "Log-regression slope over last 52 weeks (compounded growth rate per week)" },
+  { name: "log_r_squared_52w", type: "float", description: "R² of 52-week log regression (consistency of compounded growth)" },
+  { name: "return_std_52w", type: "float", description: "Standard deviation of weekly returns over 52 weeks (volatility)" },
+  { name: "downside_std_52w", type: "float", description: "Standard deviation of negative weekly returns over 52 weeks (downside volatility)" },
+  { name: "max_drawdown_pct_4w", type: "float", description: "Max peak-to-trough decline over last 4 weeks (positive %)" },
+  { name: "max_drawdown_pct_13w", type: "float", description: "Max peak-to-trough decline over last 13 weeks (positive %)" },
+  { name: "max_drawdown_pct_26w", type: "float", description: "Max peak-to-trough decline over last 26 weeks (positive %)" },
+  { name: "max_drawdown_pct_52w", type: "float", description: "Max peak-to-trough decline over last 52 weeks (positive %). Use < to filter." },
+  { name: "pct_weeks_positive_4w", type: "float", description: "Fraction of up-weeks over last 4 weeks (0.0–1.0)" },
+  { name: "pct_weeks_positive_13w", type: "float", description: "Fraction of up-weeks over last 13 weeks (0.0–1.0)" },
+  { name: "pct_weeks_positive_26w", type: "float", description: "Fraction of up-weeks over last 26 weeks (0.0–1.0)" },
+  { name: "pct_weeks_positive_52w", type: "float", description: "Fraction of up-weeks over last 52 weeks (0.0–1.0). Use > 0.55 for stable risers." },
+  { name: "acceleration_pct_13w", type: "float", description: "Slope of 4-week change over last 13 weeks (momentum acceleration)" },
+  { name: "from_high_pct_4w", type: "float", description: "Distance below 4-week high (negative %); closer to 0 = near recent high" },
+]
 
 interface BacktestRequest {
   max_stocks: number
@@ -433,7 +474,7 @@ export function CreateBacktestView() {
               required
               rows={8}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono"
-              placeholder="change_13w_pct > 10 AND max_drawdown_pct < 20 AND pct_weeks_positive > 0.55"
+              placeholder="change_pct_13w > 10 AND max_drawdown_pct_52w < 20 AND pct_weeks_positive_52w > 0.55"
             />
             <div className="text-xs text-muted-foreground space-y-2">
               <p>
@@ -449,305 +490,21 @@ export function CreateBacktestView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_jump_1w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_jump_1w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 1-week percentage increase</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_drop_1w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_drop_1w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 1-week percentage decrease</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_jump_2w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_jump_2w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 2-week percentage increase</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_drop_2w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_drop_2w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 2-week percentage decrease</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_jump_4w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_jump_4w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 4-week percentage increase</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_drop_4w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_drop_4w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Maximum 4-week percentage decrease</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_1y_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_1y_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 1 year (52 weeks)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_26w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_26w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 26 weeks</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_13w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_13w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 13 weeks</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_1w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_1w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 1 week</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_2w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_2w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 2 weeks</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("change_4w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          change_4w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Percentage change over 4 weeks</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("total_weeks")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          total_weeks
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">int</TableCell>
-                      <TableCell className="text-xs">Total number of weeks analyzed</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("linear_slope_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          linear_slope_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Linear trend slope as percentage of starting price per week</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("linear_r_squared")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          linear_r_squared
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("log_slope")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          log_slope
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Annualized trend slope</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("log_r_squared")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          log_r_squared
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("slope_13w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          slope_13w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Linear trend slope over last 13 weeks, % of starting price per week</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("r_squared_13w")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          r_squared_13w
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">R² of 13-week regression (0-1, higher = more consistent short-term trend)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("slope_26w_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          slope_26w_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Linear trend slope over last 26 weeks, % of starting price per week</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("r_squared_26w")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          r_squared_26w
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">R² of 26-week regression (0-1, higher = more consistent medium-term trend)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("max_drawdown_pct")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          max_drawdown_pct
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Max peak-to-trough decline over 52 weeks (positive: e.g. 18.5 = fell 18.5% from peak). Use &lt; to filter.</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => insertVariableAtCursor("pct_weeks_positive")}
-                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                        >
-                          pct_weeks_positive
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs">float</TableCell>
-                      <TableCell className="text-xs">Fraction of weeks that closed higher than prior week (0.0–1.0). Use &gt; 0.55 for stable risers.</TableCell>
-                    </TableRow>
+                    {RULE_VARIABLES.map((v) => (
+                      <TableRow key={v.name}>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => insertVariableAtCursor(v.name)}
+                            className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                          >
+                            {v.name}
+                          </button>
+                        </TableCell>
+                        <TableCell className="text-xs">{v.type}</TableCell>
+                        <TableCell className="text-xs">{v.description}</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </div>

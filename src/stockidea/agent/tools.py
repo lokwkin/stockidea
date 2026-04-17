@@ -38,7 +38,7 @@ _BACKTEST_PARAMS = {
             "description": (
                 "Filter rule expression using StockIndicators fields. "
                 "Supports AND/OR operators and comparisons. "
-                "Example: 'change_13w_pct > 10 AND max_drop_2w_pct < 15 AND linear_r_squared > 0.7'"
+                "Example: 'change_pct_13w > 10 AND max_drop_pct_2w < 15 AND r_squared_52w > 0.7'"
             ),
         },
         "date_start": {
@@ -71,9 +71,9 @@ _BACKTEST_PARAMS = {
                 "Ranking expression to sort filtered stocks. Uses StockIndicators fields "
                 "and returns a numeric score (higher = better). "
                 f"Default: '{DEFAULT_RANKING}'. "
-                "Examples: 'linear_slope_pct * linear_r_squared', "
-                "'change_26w_pct / max_drawdown_pct', "
-                "'slope_13w_pct * r_squared_13w + 0.5 * change_4w_pct'"
+                "Examples: 'slope_pct_52w * r_squared_52w', "
+                "'change_pct_26w / max_drawdown_pct_52w', "
+                "'slope_pct_13w * r_squared_13w + 0.5 * change_pct_4w'"
             ),
         },
     },
@@ -230,47 +230,60 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "symbol": "Stock ticker symbol (string, not usable in rules)",
     "date": "Indicator computation date (not usable in rules)",
     "total_weeks": "Number of weeks of data available (integer)",
-    # Trend metrics
-    "linear_slope_pct": "Weekly linear regression slope as % of starting price. Positive = uptrend. Typical range: -2 to +3",
-    "linear_r_squared": "R² of linear regression (0-1). Higher = more consistent trend. >0.7 is strong",
-    "log_slope": "Log-scale regression slope. Positive = uptrend",
-    "log_r_squared": "R² of log regression (0-1)",
-    # Return metrics
-    "change_1w_pct": "1-week price change in %. Typical range: -10 to +10",
-    "change_2w_pct": "2-week price change in %. Typical range: -15 to +15",
-    "change_4w_pct": "4-week price change in %. Typical range: -20 to +20",
-    "change_13w_pct": "13-week (quarterly) price change in %. Typical range: -30 to +40",
-    "change_26w_pct": "26-week (half-year) price change in %. Typical range: -40 to +60",
-    "change_1y_pct": "52-week (yearly) price change in %. Typical range: -50 to +100",
-    # Volatility metrics
-    "max_jump_1w_pct": "Largest 1-week positive move in %. Always positive. Typical: 2-15",
-    "max_drop_1w_pct": "Largest 1-week negative move in % (stored as positive). Typical: 2-15",
-    "max_jump_2w_pct": "Largest 2-week positive move in %. Typical: 3-20",
-    "max_drop_2w_pct": "Largest 2-week negative move in % (stored as positive). Typical: 3-20",
-    "max_jump_4w_pct": "Largest 4-week positive move in %. Typical: 5-25",
-    "max_drop_4w_pct": "Largest 4-week negative move in % (stored as positive). Typical: 5-25",
-    # Volatility metrics (statistical)
-    "weekly_return_std": "Standard deviation of weekly % returns. Measures typical weekly variability. Typical: 1-8. Lower = smoother",
-    "downside_std": "Standard deviation of negative weekly returns only. Measures downside risk. Typical: 1-6. Lower = less downside volatility",
-    # Stability metrics
-    "max_drawdown_pct": "Maximum peak-to-trough decline in % (stored as positive). Typical: 5-40. Lower is better",
-    "pct_weeks_positive": "Fraction of weeks with positive return (0.0-1.0). >0.55 is good",
-    "slope_13w_pct": "Linear slope over last 13 weeks as % of starting price per week",
-    "r_squared_13w": "R² of 13-week regression (0-1)",
+    # Linear regression slope (% per week)
+    "slope_pct_13w": "Linear slope over last 13 weeks as % of starting price per week",
+    "slope_pct_26w": "Linear slope over last 26 weeks as % of starting price per week",
+    "slope_pct_52w": "Linear slope over the full 52-week series as % of starting price per week. Positive = uptrend. Typical range: -2 to +3",
+    # Linear regression R²
     "r_squared_4w": "R² of 4-week regression (0-1). Short-term trend consistency. >0.7 means clean recent trend",
-    "slope_26w_pct": "Linear slope over last 26 weeks as % of starting price per week",
+    "r_squared_13w": "R² of 13-week regression (0-1)",
     "r_squared_26w": "R² of 26-week regression (0-1)",
+    "r_squared_52w": "R² of full-series linear regression (0-1). Higher = more consistent trend. >0.7 is strong",
+    # Log regression slope and R²
+    "log_slope_13w": "Log-scale regression slope over last 13 weeks. Positive = uptrend",
+    "log_r_squared_13w": "R² of 13-week log regression (0-1)",
+    "log_slope_26w": "Log-scale regression slope over last 26 weeks. Positive = uptrend",
+    "log_r_squared_26w": "R² of 26-week log regression (0-1)",
+    "log_slope_52w": "Log-scale regression slope over full series. Positive = uptrend",
+    "log_r_squared_52w": "R² of full-series log regression (0-1)",
+    # Point-to-point change
+    "change_pct_1w": "1-week price change in %. Typical range: -10 to +10",
+    "change_pct_2w": "2-week price change in %. Typical range: -15 to +15",
+    "change_pct_4w": "4-week price change in %. Typical range: -20 to +20",
+    "change_pct_13w": "13-week (quarterly) price change in %. Typical range: -30 to +40",
+    "change_pct_26w": "26-week (half-year) price change in %. Typical range: -40 to +60",
+    "change_pct_52w": "52-week (yearly) price change in %. Typical range: -50 to +100",
+    # Max single-period swing
+    "max_jump_pct_1w": "Largest 1-week positive move in %. Always positive. Typical: 2-15",
+    "max_drop_pct_1w": "Largest 1-week negative move in % (stored as positive). Typical: 2-15",
+    "max_jump_pct_2w": "Largest 2-week positive move in %. Typical: 3-20",
+    "max_drop_pct_2w": "Largest 2-week negative move in % (stored as positive). Typical: 3-20",
+    "max_jump_pct_4w": "Largest 4-week positive move in %. Typical: 5-25",
+    "max_drop_pct_4w": "Largest 4-week negative move in % (stored as positive). Typical: 5-25",
+    # Weekly return std-dev
+    "return_std_52w": "Standard deviation of weekly % returns over full series. Measures typical weekly variability. Typical: 1-8. Lower = smoother",
+    "downside_std_52w": "Standard deviation of negative weekly returns only over full series. Measures downside risk. Typical: 1-6. Lower = less downside volatility",
+    # Max drawdown per window
+    "max_drawdown_pct_4w": "Maximum peak-to-trough decline over last 4 weeks (positive %)",
+    "max_drawdown_pct_13w": "Maximum peak-to-trough decline over last 13 weeks (positive %)",
+    "max_drawdown_pct_26w": "Maximum peak-to-trough decline over last 26 weeks (positive %)",
+    "max_drawdown_pct_52w": "Maximum peak-to-trough decline over the full series (positive %). Typical: 5-40. Lower is better",
+    # Fraction of up-weeks per window
+    "pct_weeks_positive_4w": "Fraction of weeks with positive return over last 4 weeks (0.0-1.0)",
+    "pct_weeks_positive_13w": "Fraction of weeks with positive return over last 13 weeks (0.0-1.0)",
+    "pct_weeks_positive_26w": "Fraction of weeks with positive return over last 26 weeks (0.0-1.0)",
+    "pct_weeks_positive_52w": "Fraction of weeks with positive return over full series (0.0-1.0). >0.55 is good",
     # Momentum shape
-    "acceleration_13w": "Momentum acceleration over 13 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = speeding up, negative = slowing down. Typical: -1 to +1",
-    "pct_from_4w_high": "Distance from 4-week high in %. Always <= 0. Typical: -10 to 0. Closer to 0 = near recent high",
+    "acceleration_pct_13w": "Momentum acceleration over 13 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = speeding up, negative = slowing down. Typical: -1 to +1",
+    "from_high_pct_4w": "Distance from 4-week high in %. Always <= 0. Typical: -10 to 0. Closer to 0 = near recent high",
 }
 
 # Fields always included in preview_filter sample output
 _ALWAYS_INCLUDE_FIELDS = {
     "symbol",
-    "change_13w_pct",
-    "linear_r_squared",
-    "max_drawdown_pct",
+    "change_pct_13w",
+    "r_squared_52w",
+    "max_drawdown_pct_52w",
 }
 
 

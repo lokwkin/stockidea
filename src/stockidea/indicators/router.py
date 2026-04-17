@@ -36,7 +36,10 @@ async def get_latest_indicators_for_symbol(symbol: str) -> dict:
                 db_session, symbol.upper(), dt.date()
             )
             if indicators:
-                return {"date": dt.strftime("%Y-%m-%d"), "data": indicators.model_dump()}
+                return {
+                    "date": dt.strftime("%Y-%m-%d"),
+                    "data": indicators.model_dump(),
+                }
 
         return {"data": None}
 

@@ -31,8 +31,8 @@ uv run python -m stockidea.cli fetch-prices --index SP500
 
 # Backend — Analysis & Backtest
 uv run python -m stockidea.cli compute -d 2026-01-20
-uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
-uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_13w_pct > 10'
+uv run python -m stockidea.cli pick -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15'
+uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_pct_13w > 10'
 
 # Backend — AI Agent (creates a strategy in DB, runs 5-10 backtest iterations)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
@@ -76,7 +76,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
-- `rule_engine.py` — Compiles user-written filter strings (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`) into callables using `simpleeval`
+- `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`
 
 **Component modules** — each has `service.py` (business logic), `router.py` (API routes), and `cli.py` (CLI commands):
 

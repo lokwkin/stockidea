@@ -97,18 +97,18 @@ function formatMarketCap(v: number) {
 
 /** Indicator fields to show */
 const INDICATOR_DISPLAY_KEYS = [
-  "change_1w_pct",
-  "change_4w_pct",
-  "change_13w_pct",
-  "change_26w_pct",
-  "change_1y_pct",
-  "linear_slope_pct",
-  "linear_r_squared",
-  "weekly_return_std",
-  "max_drawdown_pct",
-  "pct_from_4w_high",
+  "change_pct_1w",
+  "change_pct_4w",
+  "change_pct_13w",
+  "change_pct_26w",
+  "change_pct_52w",
+  "slope_pct_52w",
+  "r_squared_52w",
+  "return_std_52w",
+  "max_drawdown_pct_52w",
+  "from_high_pct_4w",
   "r_squared_13w",
-  "acceleration_13w",
+  "acceleration_pct_13w",
 ]
 
 function formatIndicatorValue(key: string, val: number): { formatted: string; colorClass: string } {

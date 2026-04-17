@@ -45,26 +45,26 @@ uv run python -m stockidea.cli fetch-prices --index SP500
 
 Computes per-stock performance indicators from raw price data. Daily prices are aggregated into Friday-close weekly series, then indicators are calculated across four categories:
 
-- **Returns** -- Point-to-point percentage changes at various horizons (1w, 2w, 4w, 13w, 26w, 1y)
-- **Trend** -- Linear and log regression slopes with R² values, both full-period and windowed (13w, 26w)
-- **Volatility** -- Maximum upward/downward swings at 1w, 2w, and 4w windows
-- **Stability** -- Maximum drawdown, fraction of positive weeks
+- **Returns** -- Point-to-point percentage changes at various horizons (1w, 2w, 4w, 13w, 26w, 52w)
+- **Trend** -- Linear and log regression slopes with R² values across windowed horizons (13w, 26w, 52w)
+- **Volatility** -- Maximum upward/downward swings at 1w, 2w, and 4w windows; weekly-return standard deviation (incl. downside-only)
+- **Stability** -- Maximum drawdown across windows (4w, 13w, 26w, 52w), fraction of positive weeks across windows
 
-Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_13w_pct > 10 AND max_drop_2w_pct < 15`). Rules support comparison operators and `AND`/`OR` logic.
+Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`). Rules support comparison operators and `AND`/`OR` logic.
 
-After filtering, the remaining stocks are sorted by a **ranking expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_13w_pct / weekly_return_std` (risk-adjusted momentum). Pass `--ranking` to override it: e.g. `--ranking 'linear_slope_pct * linear_r_squared'` for trend quality, or `--ranking 'change_26w_pct / max_drawdown_pct'` for return per unit of drawdown. Ranking matters whenever more stocks pass the filter than `--max-stocks` allows.
+After filtering, the remaining stocks are sorted by a **ranking expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_pct_13w / return_std_52w` (risk-adjusted momentum). Pass `--ranking` to override it: e.g. `--ranking 'slope_pct_52w * r_squared_52w'` for trend quality, or `--ranking 'change_pct_26w / max_drawdown_pct_52w'` for return per unit of drawdown. Ranking matters whenever more stocks pass the filter than `--max-stocks` allows.
 
 ```bash
 # Compute indicators for all SP500 constituents at a given date
 uv run python -m stockidea.cli compute -d 2026-01-20
 
 # Compute indicators and filter by a rule (uses the default ranking)
-uv run python -m stockidea.cli pick -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15'
+uv run python -m stockidea.cli pick -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15'
 
 # Filter and rank with a custom ranking expression
 uv run python -m stockidea.cli pick \
-  -r 'change_13w_pct > 10 AND max_drop_2w_pct < 15' \
-  --ranking 'linear_slope_pct * linear_r_squared' \
+  -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15' \
+  --ranking 'slope_pct_52w * r_squared_52w' \
   --max-stocks 5
 ```
 
@@ -87,7 +87,7 @@ Backtests submitted through the web dashboard run synchronously inside the `POST
 uv run python -m stockidea.cli backtest \
   --date-start=2022-01-01 \
   --date-end=2026-01-20 \
-  --rule='change_13w_pct > 10 AND max_drop_2w_pct < 15'
+  --rule='change_pct_13w > 10 AND max_drop_pct_2w < 15'
 ```
 
 ### Agent
@@ -145,42 +145,56 @@ cd frontend && npm run dev
 
 ### Available Indicator Fields
 
+All indicator fields follow a `<metric>_<unit>_<window>` naming convention so you can read the field and immediately know what it measures, in what units, over what horizon.
+
 | Field | Description |
 |-------|-------------|
 | **Return indicators** | |
-| `change_1w_pct` | Percentage change over 1 week |
-| `change_2w_pct` | Percentage change over 2 weeks |
-| `change_4w_pct` | Percentage change over 4 weeks |
-| `change_13w_pct` | Percentage change over 13 weeks (~3 months) |
-| `change_26w_pct` | Percentage change over 26 weeks (~6 months) |
-| `change_1y_pct` | Percentage change over 1 year (52 weeks) |
-| **Trend indicators** | |
-| `linear_slope_pct` | Linear trend slope as % of starting price per week |
-| `linear_r_squared` | R² of the linear trend fit (0--1, higher = more consistent) |
-| `log_slope` | Annualized log trend slope |
-| `log_r_squared` | R² of the log trend fit (0--1) |
-| `slope_13w_pct` | Linear slope over last 13 weeks (% per week) |
+| `change_pct_1w` | Percentage change over 1 week |
+| `change_pct_2w` | Percentage change over 2 weeks |
+| `change_pct_4w` | Percentage change over 4 weeks |
+| `change_pct_13w` | Percentage change over 13 weeks (~3 months) |
+| `change_pct_26w` | Percentage change over 26 weeks (~6 months) |
+| `change_pct_52w` | Percentage change over 52 weeks (~1 year) |
+| **Trend indicators (linear regression)** | |
+| `slope_pct_13w` | Linear slope over last 13 weeks (% per week) |
+| `slope_pct_26w` | Linear slope over last 26 weeks (% per week) |
+| `slope_pct_52w` | Linear slope over last 52 weeks (% per week) |
+| `r_squared_4w` | R² of 4-week regression (very short-term trend consistency) |
 | `r_squared_13w` | R² of 13-week regression |
-| `r_squared_4w` | R² of 4-week regression (short-term trend consistency) |
-| `slope_26w_pct` | Linear slope over last 26 weeks (% per week) |
 | `r_squared_26w` | R² of 26-week regression |
+| `r_squared_52w` | R² of 52-week regression |
+| **Trend indicators (log regression)** | |
+| `log_slope_13w` | Log-regression slope over last 13 weeks (compounded growth rate per week) |
+| `log_r_squared_13w` | R² of 13-week log regression |
+| `log_slope_26w` | Log-regression slope over last 26 weeks |
+| `log_r_squared_26w` | R² of 26-week log regression |
+| `log_slope_52w` | Log-regression slope over last 52 weeks |
+| `log_r_squared_52w` | R² of 52-week log regression |
 | **Volatility indicators (max swings)** | |
-| `max_jump_1w_pct` | Maximum 1-week percentage increase |
-| `max_drop_1w_pct` | Maximum 1-week percentage decrease |
-| `max_jump_2w_pct` | Maximum 2-week percentage increase |
-| `max_drop_2w_pct` | Maximum 2-week percentage decrease |
-| `max_jump_4w_pct` | Maximum 4-week percentage increase |
-| `max_drop_4w_pct` | Maximum 4-week percentage decrease |
+| `max_jump_pct_1w` | Maximum 1-week percentage increase |
+| `max_drop_pct_1w` | Maximum 1-week percentage decrease |
+| `max_jump_pct_2w` | Maximum 2-week percentage increase |
+| `max_drop_pct_2w` | Maximum 2-week percentage decrease |
+| `max_jump_pct_4w` | Maximum 4-week percentage increase |
+| `max_drop_pct_4w` | Maximum 4-week percentage decrease |
 | **Volatility indicators (statistical)** | |
-| `weekly_return_std` | Standard deviation of weekly returns (typical weekly variability) |
-| `downside_std` | Standard deviation of negative weekly returns only (downside risk) |
-| **Stability indicators** | |
-| `max_drawdown_pct` | Maximum peak-to-trough drawdown (e.g. 18.5 = fell 18.5% from peak) |
-| `pct_weeks_positive` | Fraction of weeks with positive returns (0.0--1.0) |
+| `return_std_52w` | Standard deviation of weekly returns over 52 weeks (typical weekly variability) |
+| `downside_std_52w` | Standard deviation of negative weekly returns only over 52 weeks (downside risk) |
+| **Stability indicators (drawdown)** | |
+| `max_drawdown_pct_4w` | Maximum peak-to-trough drawdown over last 4 weeks (positive %) |
+| `max_drawdown_pct_13w` | Maximum peak-to-trough drawdown over last 13 weeks (positive %) |
+| `max_drawdown_pct_26w` | Maximum peak-to-trough drawdown over last 26 weeks (positive %) |
+| `max_drawdown_pct_52w` | Maximum peak-to-trough drawdown over last 52 weeks (e.g. 18.5 = fell 18.5% from peak) |
+| **Stability indicators (% up-weeks)** | |
+| `pct_weeks_positive_4w` | Fraction of up-weeks over last 4 weeks (0.0--1.0) |
+| `pct_weeks_positive_13w` | Fraction of up-weeks over last 13 weeks (0.0--1.0) |
+| `pct_weeks_positive_26w` | Fraction of up-weeks over last 26 weeks (0.0--1.0) |
+| `pct_weeks_positive_52w` | Fraction of up-weeks over last 52 weeks (0.0--1.0) |
 | `total_weeks` | Total number of weeks analyzed |
 | **Momentum shape** | |
-| `acceleration_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
-| `pct_from_4w_high` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
+| `acceleration_pct_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
+| `from_high_pct_4w` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
 
 ## Backtest Scores
 
