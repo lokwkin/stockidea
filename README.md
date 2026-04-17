@@ -81,7 +81,7 @@ The backtest engine that evaluates a strategy over a historical date range. At e
 
 The engine tracks portfolio value over time against a baseline index (S&P 500) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
 
-Backtests submitted through the web dashboard are processed asynchronously via a job queue -- the request is enqueued and a background worker picks it up, so long-running backtests don't block the API.
+Backtests submitted through the web dashboard run synchronously inside the `POST /backtest` request -- the engine executes the full date range and returns the result in the response.
 
 ```bash
 uv run python -m stockidea.cli backtest \

@@ -68,10 +68,10 @@ The ultimate goal is an **AI-driven strategy design and optimization platform**:
 
 ### Backend (`src/stockidea/`)
 
-FastAPI app with an **in-process async worker loop** for long-running backtests. CLI and API routes are distributed across component modules — the root `api.py` and `cli.py` are thin assemblers that wire components together.
+FastAPI app where backtests execute synchronously inside the request that triggers them. CLI and API routes are distributed across component modules — the root `api.py` and `cli.py` are thin assemblers that wire components together.
 
 **Shared modules:**
-- `api.py` — Assembles FastAPI app: lifespan (startup data refresh + backtest worker), CORS, includes component routers
+- `api.py` — Assembles FastAPI app: lifespan (startup data refresh), CORS, includes component routers
 - `cli.py` — Assembles Click CLI: flattens component subcommands into top-level commands
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
@@ -81,43 +81,45 @@ FastAPI app with an **in-process async worker loop** for long-running backtests.
 **Component modules** — each has `service.py` (business logic), `router.py` (API routes), and `cli.py` (CLI commands):
 
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
-  - `router.py` — `GET /snp500`
+  - `router.py` — `GET /snp500`, `GET /stocks/{symbol}/profile`, `GET /stocks/{symbol}/prices`
   - `cli.py` — `fetch-data`, `fetch-prices`, `fetch-index`, `fetch-constituents`
   - `service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
   - `fmp.py` — FMP API client; API key checked at call time (not import time)
   - `database/` — SQLAlchemy models (`models.py`), queries (`queries.py`), connection pool (`conn.py`)
 - `indicators/` — Pre-computed stock indicators for strategy evaluation
-  - `router.py` — `GET /indicators`, `GET /indicators/{date}/`
+  - `router.py` — `GET /indicators`, `GET /indicators/{date}/`, `GET /indicators/symbol/{symbol}/latest`, `GET /indicators/symbol/{symbol}/{date}`
   - `cli.py` — `compute`, `pick`
   - `service.py` — Fetches/computes indicator batches, applies rules
   - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields, ranks by stability score
 - `backtest/` — Core backtest engine
-  - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}`, `GET /jobs`, `GET /jobs/{id}`, `worker_loop()`
+  - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}` (synchronous — the POST runs the full backtest before returning)
   - `cli.py` — `backtest`
   - `backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
   - `scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
-  - `router.py` — `GET/POST/DELETE /strategies`, `POST /strategies/{id}/messages`
+  - `router.py` — `GET/POST/DELETE /strategies`, `GET /strategies/{id}/notes`, `POST /strategies/{id}/messages`
   - `cli.py` — `agent`
   - `agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
   - `tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
 
 **Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
 
-**Job queue flow**: `POST /backtest` saves a "pending" `backtest_job` row and returns a `job_id`. The `worker_loop()` in `backtest/router.py` polls the DB, claims pending jobs, runs `Backtester.backtest()`, and writes the result back. No external queue.
+**Backtest flow**: `POST /backtest` runs `Backtester.backtest()` synchronously inside the request handler, persists the result via `queries.save_backtest_result()`, and returns the full `BacktestResult`. There is no job queue or background worker.
 
 **Strategy flow**: `POST /strategies` creates a `DBStrategy`, saves the user message as `DBStrategyMessage`, runs the agent (SSE stream), and persists agent events + LLM history on completion. `POST /strategies/{id}/messages` loads prior LLM history and resumes the agent for multi-turn conversation.
 
-**Database models** use a `DB{Entity}` naming prefix (`DBBacktest`, `DBBacktestJob`, `DBStrategy`, `DBStrategyMessage`, etc.).
+**Database models** use a `DB{Entity}` naming prefix (`DBBacktest`, `DBStrategy`, `DBStrategyMessage`, etc.).
 
 ### Frontend (`frontend/src/`)
 
 React 19 + TypeScript SPA with React Router v7:
 
 - Views (`*View.tsx`) are full-page route components; reusable pieces live in `components/`
-- `App.tsx` owns routing and the `Sidebar` with strategy list (status indicators), jobs, backtests, and trend data sections
+- `App.tsx` owns routing and the `Sidebar` with sections for Strategies (status indicators), Create Backtest, Backtests, Indicators, and Stocks
 - `CreateStrategyView.tsx` — Strategy creation form (instruction, model selector, date range)
+- `CreateBacktestView.tsx` — Manual backtest form (rule, ranking expression, date range, index); sends naive midnight datetimes to match CLI behavior
 - `StrategyView.tsx` — Multi-turn chat UI with SSE streaming, backtest comparison table, follow-up input
+- `StockChartView.tsx` — Per-symbol page (`/chart/:symbol`) showing FMP company profile + peers above the price/volume charts
 - API calls always use relative `/api/...` paths — Vite proxies them to the backend in dev
 - No external state management; all state is local React hooks
 
