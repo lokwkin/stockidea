@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import type { Simulation } from "@/types/simulation"
+import type { Backtest } from "@/types/backtest"
 
 interface ChartDataPoint {
   date: string
@@ -12,7 +12,7 @@ interface ChartDataPoint {
 }
 
 interface BalanceChartProps {
-  simulationData: Simulation
+  backtestData: Backtest
   selectedRebalanceIndex: number | null
   onRebalanceSelect: (index: number | null) => void
   formatDate: (dateStr: string) => string
@@ -48,7 +48,7 @@ function CustomTooltip(props: any) {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-3 shadow-lg">
+    <div className="rounded-lg border bg-card p-3 shadow-sm">
       <p className="font-semibold mb-2 text-sm">{label}</p>
       <p className="text-sm mb-2">
         Portfolio Balance: <span className="font-medium">{formatCurrency(data.balance)}</span>
@@ -67,7 +67,7 @@ function CustomTooltip(props: any) {
                 <div className="pl-2 space-y-0.5 text-muted-foreground">
                   <div>BUY {inv.position.toFixed(0)}@{inv.buy_price.toFixed(2)}</div>
                   <div>SELL {inv.position.toFixed(0)}@{inv.sell_price.toFixed(2)}</div>
-                  <div className={inv.profit_pct >= 0 ? "text-green-600" : "text-red-600"}>
+                  <div className={inv.profit_pct >= 0 ? "text-positive" : "text-negative"}>
                     Profit {formatCurrency(inv.profit)} ({formatPercent(inv.profit_pct)})
                   </div>
                 </div>
@@ -81,13 +81,13 @@ function CustomTooltip(props: any) {
 }
 
 export function BalanceChart({
-  simulationData,
+  backtestData,
   selectedRebalanceIndex,
   onRebalanceSelect,
   formatDate,
 }: BalanceChartProps) {
   const chartData = useMemo(() => {
-    return simulationData.rebalance_history.map((rebalance, index) => {
+    return backtestData.backtest_rebalance.map((rebalance, index) => {
       return {
         date: formatDate(rebalance.date),
         dateRaw: rebalance.date,
@@ -97,7 +97,7 @@ export function BalanceChart({
         rebalanceIndex: index,
       }
     })
-  }, [simulationData, formatDate])
+  }, [backtestData, formatDate])
 
   // Check if we have any valid baseline balance data
   const hasBaselineData = useMemo(() => {
@@ -211,11 +211,11 @@ export function BalanceChart({
             <Line
               type="monotone"
               dataKey="baselineBalance"
-              stroke="#8884d8"
+              stroke="#a5a5a3"
               strokeWidth={2}
               strokeDasharray="5 5"
               dot={false}
-              name={simulationData.baseline_index || "Baseline"}
+              name={backtestData.baseline_index || "Baseline"}
             />
           )}
         </LineChart>

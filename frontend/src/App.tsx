@@ -1,280 +1,302 @@
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, BarChart3, Bot, User } from "lucide-react"
+import dayjs from "dayjs"
 import { AnalysisView } from "@/components/AnalysisView"
-import { SimulationView } from "@/components/SimulationView"
-import { CreateSimulationView } from "@/components/CreateSimulationView"
-import { SimulationJobView } from "@/components/SimulationJobView"
-import { SimulationJob, SimulationSummary } from "@/types/simulation"
+import { BacktestView } from "@/components/BacktestView"
+import { CreateBacktestView } from "@/components/CreateBacktestView"
+import { CreateStrategyView } from "@/components/CreateStrategyView"
+import { StrategyView } from "@/components/StrategyView"
+import { StockChartView } from "@/components/StockChartView"
+import { BacktestSummary } from "@/types/backtest"
+import { StrategySummary } from "@/types/strategy"
 import { cn, dateFormat } from "@/lib/utils"
 
-const JOB_STATUS_COLORS: Record<SimulationJob["status"], string> = {
-  pending: "bg-yellow-400",
-  running: "bg-blue-400",
-  completed: "bg-green-400",
-  failed: "bg-red-400",
+const STRATEGY_STATUS_COLORS: Record<string, string> = {
+  idle: "bg-positive",
+  running: "bg-info",
+  failed: "bg-negative",
 }
 
-function JobStatusDot({ status, animate }: { status: SimulationJob["status"]; animate?: boolean }) {
+function StatusDot({ color, animate }: { color: string; animate?: boolean }) {
   return (
     <span className="relative inline-flex h-2 w-2 flex-shrink-0">
       {animate && (
-        <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", JOB_STATUS_COLORS[status])} />
+        <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", color)} />
       )}
-      <span className={cn("relative inline-flex h-2 w-2 rounded-full", JOB_STATUS_COLORS[status])} />
+      <span className={cn("relative inline-flex h-2 w-2 rounded-full", color)} />
     </span>
   )
 }
 
+function formatMonthYear(dateStr: string): string {
+  const d = dayjs(dateStr)
+  return d.isValid() ? d.format("MMMYY") : ""
+}
+
 function Sidebar() {
   const location = useLocation()
-  const [simulations, setSimulations] = useState<SimulationSummary[]>([])
-  const [jobs, setJobs] = useState<SimulationJob[]>([])
-  const [manuallyExpanded, setManuallyExpanded] = useState(false)
-  const [jobsExpanded, setJobsExpanded] = useState(true)
-  const [loadingSimulations, setLoadingSimulations] = useState(true)
-  const [isHovered, setIsHovered] = useState(false)
+  const [strategies, setStrategies] = useState<StrategySummary[]>([])
+  const [backtests, setBacktests] = useState<BacktestSummary[]>([])
+  const [strategiesExpanded, setStrategiesExpanded] = useState(true)
+  const [backtestsExpanded, setBacktestsExpanded] = useState(true)
+  const [loadingBacktests, setLoadingBacktests] = useState(true)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isSimulationPath = location.pathname.startsWith("/simulation") && location.pathname !== "/simulation/create"
-  const isCreatePath = location.pathname === "/simulation/create"
+  const isBacktestPath = location.pathname.startsWith("/backtest") && location.pathname !== "/backtest/create"
+  const isCreatePath = location.pathname === "/backtest/create"
+  const isStrategyPath = location.pathname.startsWith("/strategy")
+  const isCreateStrategyPath = location.pathname === "/strategy/create"
 
-  const currentSimulationId = isSimulationPath
-    ? location.pathname.replace("/simulation/", "").split("/")[0] || null
+  const currentBacktestId = isBacktestPath
+    ? location.pathname.replace("/backtest/", "").split("/")[0] || null
     : null
 
-  const isSimulationExpanded = isSimulationPath || manuallyExpanded
+  const currentStrategyId = isStrategyPath && !isCreateStrategyPath
+    ? location.pathname.replace("/strategy/", "").split("/")[0] || null
+    : null
 
-  const fetchSimulations = useCallback(() => {
-    fetch("/api/simulations")
+  const fetchStrategies = useCallback(() => {
+    fetch("/api/strategies")
       .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((sims: SimulationSummary[]) => {
-        setSimulations(sims)
-        setLoadingSimulations(false)
-      })
-      .catch(() => setLoadingSimulations(false))
+      .then((data: StrategySummary[]) => setStrategies(data))
+      .catch(() => {})
   }, [])
 
-  const jobsRef = useRef<SimulationJob[]>(jobs)
-  useEffect(() => { jobsRef.current = jobs }, [jobs])
-
-  const fetchJobs = useCallback(() => {
-    fetch("/api/jobs")
+  const fetchBacktests = useCallback(() => {
+    fetch("/api/backtests")
       .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((data: SimulationJob[]) => {
-        const hadActive = jobsRef.current.some((j) => j.status === "pending" || j.status === "running")
-        const nowActive = data.some((j) => j.status === "pending" || j.status === "running")
-        setJobs(data)
-        // Refresh simulations list when a job just completed
-        if (hadActive && !nowActive) fetchSimulations()
+      .then((sims: BacktestSummary[]) => {
+        setBacktests(sims)
+        setLoadingBacktests(false)
+      })
+      .catch(() => setLoadingBacktests(false))
+  }, [])
+
+  const strategiesRef = useRef<StrategySummary[]>(strategies)
+  useEffect(() => { strategiesRef.current = strategies }, [strategies])
+
+  const refreshStrategies = useCallback(() => {
+    fetch("/api/strategies")
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data: StrategySummary[]) => {
+        const hadRunning = strategiesRef.current.some((s) => s.status === "running")
+        const nowRunning = data.some((s) => s.status === "running")
+        setStrategies(data)
+        // Refresh backtests when a running strategy finishes (it may have created new ones).
+        if (hadRunning && !nowRunning) fetchBacktests()
       })
       .catch(() => {})
-  }, [fetchSimulations])
+  }, [fetchBacktests])
 
   // Initial load
   useEffect(() => {
-    fetchSimulations()
+    fetchStrategies()
+    fetchBacktests()
   }, [])
 
-  // Adaptive polling: fast when jobs are active, slow otherwise
+  // Adaptive polling for strategies (faster while one is running).
   useEffect(() => {
-    const hasActive = jobs.some((j) => j.status === "pending" || j.status === "running")
-    const interval = hasActive ? 3000 : 15000
-    pollRef.current = setTimeout(fetchJobs, interval)
+    const hasRunningStrategy = strategies.some((s) => s.status === "running")
+    const interval = hasRunningStrategy ? 3000 : 15000
+    pollRef.current = setTimeout(() => {
+      refreshStrategies()
+    }, interval)
     return () => { if (pollRef.current) clearTimeout(pollRef.current) }
-  }, [jobs])
+  }, [strategies, refreshStrategies])
 
-  // Kick off first jobs fetch immediately
-  useEffect(() => {
-    fetchJobs()
-  }, [])
+  const strategyNameById = new Map<string, string>()
+  for (const s of strategies) strategyNameById.set(String(s.id), s.name)
 
-  const activeJobs = jobs.filter((j) => j.status === "pending" || j.status === "running")
-  const recentJobs = jobs.slice(0, 8)
-  const hasActiveJobs = activeJobs.length > 0
+  const renderBacktestLink = (sim: BacktestSummary) => {
+    const profit = sim.profit_pct
+    const profitStr = `${profit >= 0 ? "+" : ""}${profit.toFixed(2)}%`
+    const period = `${formatMonthYear(sim.date_start)} → ${formatMonthYear(sim.date_end)}`
+    const indexLabel = sim.index === "NASDAQ" ? "NASDAQ" : sim.index === "SP500" ? "S&P500" : sim.index
+    const isAi = !!sim.strategy_id
+    const owner = isAi ? strategyNameById.get(String(sim.strategy_id)) ?? "AI Strategy" : "User Triggered"
+    const fullTitle = `${dateFormat(sim.date_start)} - ${dateFormat(sim.date_end)} (${indexLabel}) — ${owner}`
+    return (
+      <Link
+        key={sim.id}
+        to={`/backtest/${sim.id}`}
+        className={cn(
+          "flex items-center gap-2 w-full px-3 py-1 rounded-md text-xs transition-colors",
+          currentBacktestId === String(sim.id)
+            ? "bg-accent text-foreground font-medium border-l-2 border-primary"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+        )}
+        title={fullTitle}
+      >
+        <span className="flex-shrink-0 text-muted-foreground" title={owner}>
+          {isAi ? <Bot className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
+        </span>
+        <span
+          className={cn(
+            "font-mono tabular-nums flex-shrink-0",
+            profit > 0 ? "text-positive" : profit < 0 ? "text-negative" : ""
+          )}
+        >
+          [{profitStr}]
+        </span>
+        <span className="font-mono tabular-nums flex-shrink-0 text-muted-foreground">{period}</span>
+        <span className="flex-shrink-0 text-muted-foreground">({indexLabel})</span>
+      </Link>
+    )
+  }
 
   return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 h-screen border-r flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out z-50",
-        isHovered ? "w-80 bg-card shadow-xl" : "w-16 bg-card/50 shadow-lg"
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className={cn("border-b transition-all duration-300", isHovered ? "p-6" : "p-4")}>
-        <h1 className={cn(
-          "bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text font-bold tracking-tight text-transparent transition-all duration-300",
-          isHovered ? "text-2xl" : "text-lg truncate"
-        )}>
-          {isHovered ? "StockPick" : "SP"}
+    <aside className="fixed left-0 top-0 h-screen w-[360px] border-r bg-sidebar flex-shrink-0 flex flex-col z-50">
+      <div className="border-b px-5 py-5">
+        <h1 className="text-base font-semibold text-foreground tracking-tight">
+          StockIdea
         </h1>
       </div>
-      <nav className="flex-1 p-2 overflow-y-auto">
-        {/* Create Simulation */}
-        <Link
-          to="/simulation/create"
-          className={cn(
-            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
-            isHovered ? "text-base" : "text-sm justify-center",
-            isCreatePath
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-          )}
-          title={!isHovered ? "Create Simulations" : undefined}
-        >
-          {isHovered ? "Create Simulations" : <Plus className="h-5 w-5" />}
-        </Link>
-
-        {/* Jobs Section */}
-        <div className="mt-1">
-          <button
-            onClick={() => setJobsExpanded(!jobsExpanded)}
-            className={cn(
-              "flex w-full items-center px-3 py-2 rounded-md font-medium transition-all",
-              isHovered ? "text-base justify-between" : "text-sm justify-center",
-              "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-            title={!isHovered ? "Jobs" : undefined}
-          >
-            {isHovered ? (
-              <>
-                <span className="flex items-center gap-2">
-                  Jobs
-                  {hasActiveJobs && (
-                    <span className="flex items-center gap-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {activeJobs.length}
-                    </span>
-                  )}
-                </span>
-                {jobsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </>
-            ) : (
-              <span className="relative">
-                <Loader2 className={cn("h-5 w-5", hasActiveJobs && "animate-spin text-blue-400")} />
-                {hasActiveJobs && (
-                  <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-400" />
-                  </span>
+      <nav className="flex-1 px-3 py-3 overflow-y-auto text-sm">
+        {/* Strategies Section */}
+        <div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setStrategiesExpanded(!strategiesExpanded)}
+              className={cn(
+                "flex flex-1 items-center justify-between px-3 py-1.5 rounded-md font-medium transition-colors",
+                isStrategyPath && !isCreateStrategyPath
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                Strategies
+                {strategies.length > 0 && (
+                  <span className="text-xs text-muted-foreground/60">{strategies.length}</span>
                 )}
               </span>
-            )}
-          </button>
+              {strategiesExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+            <Link
+              to="/strategy/create"
+              className={cn(
+                "flex items-center justify-center h-7 w-7 rounded-md transition-colors",
+                isCreateStrategyPath
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+              title="New Strategy"
+            >
+              <Plus className="h-4 w-4" />
+            </Link>
+          </div>
 
-          {jobsExpanded && isHovered && (
-            <div className="ml-4 mt-1 space-y-1">
-              {recentJobs.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground">No jobs yet</div>
+          {strategiesExpanded && (
+            <div className="ml-4 mt-0.5 space-y-1">
+              {strategies.length === 0 ? (
+                <div className="px-3 py-1.5 text-xs text-muted-foreground">No strategies yet</div>
               ) : (
-                recentJobs.map((job) => {
-                  const isActive = job.status === "pending" || job.status === "running"
-                  const href = job.status === "completed" && job.simulation_id
-                    ? `/simulation/${job.simulation_id}`
-                    : `/simulation/job/${job.id}`
-                  const label = job.status === "completed" && job.simulation_id
-                    ? "View result"
-                    : job.status === "failed"
-                    ? "Failed"
-                    : job.status === "running"
-                    ? "Running…"
-                    : "Queued"
-                  return (
-                    <Link
-                      key={job.id}
-                      to={href}
-                      className={cn(
-                        "flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium transition-all",
-                        "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      )}
-                      title={`Job ${job.id}`}
-                    >
-                      <JobStatusDot status={job.status} animate={isActive} />
-                      <span className="truncate flex-1">{label}</span>
-                      <span className="text-xs text-muted-foreground/60 flex-shrink-0">
-                        {new Date(job.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </Link>
-                  )
-                })
+                strategies.map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/strategy/${s.id}`}
+                    className={cn(
+                      "flex items-center gap-2 w-full rounded-md py-1.5 px-3 transition-colors",
+                      currentStrategyId === s.id
+                        ? "bg-accent text-foreground font-medium border-l-2 border-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    )}
+                    title={s.instruction}
+                  >
+                    <StatusDot
+                      color={STRATEGY_STATUS_COLORS[s.status] || "bg-gray-400"}
+                      animate={s.status === "running"}
+                    />
+                    <span className="truncate flex-1 text-sm">{s.name}</span>
+                  </Link>
+                ))
               )}
             </div>
           )}
         </div>
 
-        {/* Simulation Results Section */}
-        <div className="mt-1">
-          <button
-            onClick={() => setManuallyExpanded(!manuallyExpanded)}
-            className={cn(
-              "flex w-full items-center justify-between px-3 py-2 rounded-md font-medium transition-all",
-              isHovered ? "text-base" : "text-sm justify-center",
-              isSimulationPath
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-            title={!isHovered ? "Simulation" : undefined}
-          >
-            {isHovered ? (
-              <>
-                <span>Simulations</span>
-                {isSimulationExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
+        {/* Backtests Section (flat list of all) */}
+        <div className="mt-3 pt-3 border-t border-sidebar-border">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setBacktestsExpanded(!backtestsExpanded)}
+              className={cn(
+                "flex flex-1 items-center justify-between px-3 py-1.5 rounded-md font-medium transition-colors",
+                isBacktestPath
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <FolderTree className="h-4 w-4" />
+                Backtests
+                {backtests.length > 0 && (
+                  <span className="text-xs text-muted-foreground/60">{backtests.length}</span>
                 )}
-              </>
-            ) : (
-              <FolderTree className="h-5 w-5" />
-            )}
-          </button>
-          {isSimulationExpanded && isHovered && (
-            <div className="ml-4 mt-1 space-y-1">
-              {loadingSimulations ? (
-                <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-              ) : simulations.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-muted-foreground">No simulations</div>
+              </span>
+              {backtestsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+            <Link
+              to="/backtest/create"
+              className={cn(
+                "flex items-center justify-center h-7 w-7 rounded-md transition-colors",
+                isCreatePath
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+              title="New Backtest"
+            >
+              <Plus className="h-4 w-4" />
+            </Link>
+          </div>
+          {backtestsExpanded && (
+            <div className="ml-4 mt-0.5 space-y-0.5">
+              {loadingBacktests ? (
+                <div className="px-3 py-1 text-xs text-muted-foreground">Loading...</div>
+              ) : backtests.length === 0 ? (
+                <div className="px-3 py-1 text-xs text-muted-foreground">No backtests</div>
               ) : (
-                simulations.map((sim) => {
-                  const dateStart = dateFormat(sim.date_start)
-                  const dateEnd = dateFormat(sim.date_end)
-                  const displayName = `${dateStart} - ${dateEnd} (${(sim.profit_pct * 100).toFixed(1)}%)`
-                  return (
-                    <Link
-                      key={sim.id}
-                      to={`/simulation/${sim.id}`}
-                      className={cn(
-                        "block w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-all truncate",
-                        currentSimulationId === String(sim.id)
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      )}
-                      title={displayName}
-                    >
-                      {displayName}
-                    </Link>
-                  )
-                })
+                [...backtests]
+                  .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf())
+                  .map(renderBacktestLink)
               )}
             </div>
           )}
         </div>
 
-        {/* Trend Data Section */}
-        <Link
-          to="/analysis"
-          className={cn(
-            "flex items-center w-full text-left px-3 py-2 rounded-md font-medium transition-all mt-1",
-            isHovered ? "text-base" : "text-sm justify-center",
-            location.pathname.startsWith("/analysis")
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-          )}
-          title={!isHovered ? "Trend Data" : undefined}
-        >
-          {isHovered ? "Trend Data" : <TrendingUp className="h-5 w-5" />}
-        </Link>
+        {/* Indicators Section */}
+        <div className="mt-3 pt-3 border-t border-sidebar-border">
+          <Link
+            to="/analysis"
+            className={cn(
+              "flex items-center w-full text-left px-3 py-1.5 rounded-md font-medium transition-colors",
+              location.pathname.startsWith("/analysis")
+                ? "bg-accent text-foreground border-l-2 border-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Indicators
+          </Link>
+        </div>
+
+        {/* Stocks Section */}
+        <div className="mt-3 pt-3 border-t border-sidebar-border">
+          <Link
+            to="/chart"
+            className={cn(
+              "flex items-center w-full text-left px-3 py-1.5 rounded-md font-medium transition-colors",
+              location.pathname.startsWith("/chart")
+                ? "bg-accent text-foreground border-l-2 border-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Stocks
+          </Link>
+        </div>
       </nav>
     </aside>
   )
@@ -283,21 +305,22 @@ function Sidebar() {
 function App() {
   return (
     <div className="min-h-screen bg-background">
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
-
       <div className="flex h-screen">
         <Sidebar />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto ml-16">
+        <main className="flex-1 overflow-auto ml-[360px]">
           <Routes>
-            <Route path="/" element={<Navigate to="/analysis" replace />} />
+            <Route path="/" element={<Navigate to="/strategy/create" replace />} />
+            <Route path="/strategy/create" element={<CreateStrategyView />} />
+            <Route path="/strategy/:id" element={<StrategyView />} />
             <Route path="/analysis" element={<AnalysisView />} />
             <Route path="/analysis/:date" element={<AnalysisView />} />
-            <Route path="/simulation" element={<SimulationView />} />
-            <Route path="/simulation/create" element={<CreateSimulationView />} />
-            <Route path="/simulation/job/:jobId" element={<SimulationJobView />} />
-            <Route path="/simulation/:id" element={<SimulationView />} />
+            <Route path="/chart" element={<StockChartView />} />
+            <Route path="/chart/:symbol" element={<StockChartView />} />
+            <Route path="/backtest" element={<BacktestView />} />
+            <Route path="/backtest/create" element={<CreateBacktestView />} />
+            <Route path="/backtest/:id" element={<BacktestView />} />
           </Routes>
         </main>
       </div>

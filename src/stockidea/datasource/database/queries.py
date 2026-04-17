@@ -1,7 +1,6 @@
 """PostgreSQL database implementation for storing price data using SQLAlchemy."""
 
 from datetime import date, datetime, timedelta
-import json
 import logging
 from uuid import UUID
 
@@ -10,156 +9,315 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from stockidea.datasource.database.models import (
     DBStockPrice,
     DBStockPriceMetadata,
-    DBSimulation,
-    DBRebalanceHistory,
-    DBInvestment,
-    DBStockMetrics,
-    DBSimulationJob,
+    DBConstituentChange,
+    DBConstituentMetadata,
+    DBBacktest,
+    DBBacktestRebalance,
+    DBBacktestInvestment,
+    DBStockIndicators,
+    DBStrategy,
+    DBStrategyMessage,
 )
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
+    ConstituentChange,
     FMPAdjustedStockPrice,
     FMPLightPrice,
     StockIndex,
     StockPrice,
-    SimulationResult,
-    Investment,
-    RebalanceHistory,
-    SimulationConfig,
-    StockMetrics,
-    SimulationJob,
+    BacktestResult,
+    BacktestInvestment,
+    BacktestRebalance,
+    BacktestConfig,
+    BacktestScores,
+    StockIndicators,
+    StrategyCreate,
+    StrategySummary,
+    StrategyDetail,
+    StrategyMessage,
+    StrategyBacktestSummary,
 )
 
 logger = logging.getLogger(__name__)
 
 
-async def save_index_prices(db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]) -> None:
-    logger.info(f"Saving index prices for {index.value}")
-    # Delete existing entries for this index
-    delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == index.value)
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == index.value)
-    await db_session.execute(delete_prices_stmt)
-    await db_session.execute(delete_metadata_stmt)
-    await db_session.commit()
+async def save_index_prices(
+    db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]
+) -> None:
+    now = datetime.now()
+    logger.info(f"Saving {len(prices)} index prices for {index.value}")
 
-    # Insert new entries
-    for price in prices:
-        price_record = DBStockPrice(
-            symbol=index.value, date=date.fromisoformat(price.date), adj_close=price.price, close=price.price, volume=price.volume)
-        db_session.add(price_record)
-
-    # Update metadata for this index
-    metadata = DBStockPriceMetadata(symbol=index.value, fetched_at=datetime.now())
-    db_session.add(metadata)
-    await db_session.commit()
-
-
-async def save_stock_prices(db_session: AsyncSession, symbol: str, prices: list[FMPAdjustedStockPrice]) -> None:
-
-    # Delete existing entries for this symbol
-    delete_prices_stmt = delete(DBStockPrice).where(DBStockPrice.symbol == symbol.upper())
-    delete_metadata_stmt = delete(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == symbol.upper())
-    await db_session.execute(delete_prices_stmt)
-    await db_session.execute(delete_metadata_stmt)
-    await db_session.commit()
-
-    # Insert new entries
-    for price_data in prices:
-        price_record = DBStockPrice(
-            symbol=symbol.upper(),
-            date=date.fromisoformat(price_data.date),
-            open=price_data.adjOpen,
-            high=price_data.adjHigh,
-            low=price_data.adjLow,
-            close=price_data.adjClose,
-            adj_close=price_data.adjClose,
-            volume=price_data.volume,
-            created_at=datetime.now(),
+    for p in prices:
+        stmt = pg_insert(DBStockPrice).values(
+            symbol=index.value,
+            date=date.fromisoformat(p.date),
+            adj_close=p.price,
+            close=p.price,
+            volume=p.volume,
+            created_at=now,
         )
-        db_session.add(price_record)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        await db_session.execute(stmt)
 
-    # Update metadata for this symbol
-    metadata = DBStockPriceMetadata(
-        symbol=symbol.upper(),
-        fetched_at=datetime.now(),
+    # Upsert metadata
+    meta_stmt = pg_insert(DBStockPriceMetadata).values(
+        symbol=index.value, fetched_at=now
     )
-    db_session.add(metadata)
+    meta_stmt = meta_stmt.on_conflict_do_update(
+        index_elements=["symbol"],
+        set_={"fetched_at": meta_stmt.excluded.fetched_at},
+    )
+    await db_session.execute(meta_stmt)
 
     await db_session.commit()
+
+
+async def save_stock_prices(
+    db_session: AsyncSession, symbol: str, prices: list[FMPAdjustedStockPrice]
+) -> None:
+    upper_symbol = symbol.upper()
+    now = datetime.now()
+    logger.info(f"Saving {len(prices)} prices for {upper_symbol}")
+
+    for p in prices:
+        stmt = pg_insert(DBStockPrice).values(
+            symbol=upper_symbol,
+            date=date.fromisoformat(p.date),
+            open=p.adjOpen,
+            high=p.adjHigh,
+            low=p.adjLow,
+            close=p.adjClose,
+            adj_close=p.adjClose,
+            volume=p.volume,
+            created_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
+                "close": stmt.excluded.close,
+                "adj_close": stmt.excluded.adj_close,
+                "volume": stmt.excluded.volume,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        await db_session.execute(stmt)
+
+    # Upsert metadata
+    meta_stmt = pg_insert(DBStockPriceMetadata).values(
+        symbol=upper_symbol, fetched_at=now
+    )
+    meta_stmt = meta_stmt.on_conflict_do_update(
+        index_elements=["symbol"],
+        set_={"fetched_at": meta_stmt.excluded.fetched_at},
+    )
+    await db_session.execute(meta_stmt)
+
+    await db_session.commit()
+
+
+async def get_last_fetched_at(db_session: AsyncSession, symbol: str) -> datetime | None:
+    """Get the last fetched_at timestamp for a symbol, or None if never fetched."""
+    stmt = select(DBStockPriceMetadata.fetched_at).where(
+        DBStockPriceMetadata.symbol == symbol.upper()
+    )
+    result = await db_session.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
-    stmt = select(DBStockPriceMetadata).where(DBStockPriceMetadata.symbol == symbol.upper())
+    fetched_at = await get_last_fetched_at(db_session, symbol)
+    if fetched_at is None:
+        return False
+    return fetched_at > datetime.now() - timedelta(days=1)
+
+
+# =============================================================================
+# Constituent Change Queries
+# =============================================================================
+
+
+async def save_constituent_changes(
+    db_session: AsyncSession,
+    index: StockIndex,
+    changes: list[ConstituentChange],
+) -> None:
+    """Replace all constituent changes for an index and update metadata."""
+    # Delete existing
+    await db_session.execute(
+        delete(DBConstituentChange).where(DBConstituentChange.index == index.value)
+    )
+    await db_session.execute(
+        delete(DBConstituentMetadata).where(DBConstituentMetadata.index == index.value)
+    )
+    await db_session.flush()
+
+    # Insert new
+    for change in changes:
+        db_session.add(
+            DBConstituentChange(
+                index=index.value,
+                date=change.date,
+                added_symbol=change.added_symbol,
+                removed_symbol=change.removed_symbol,
+            )
+        )
+
+    db_session.add(DBConstituentMetadata(index=index.value, fetched_at=datetime.now()))
+    await db_session.commit()
+
+
+async def load_constituent_changes(
+    db_session: AsyncSession,
+    index: StockIndex,
+) -> list[ConstituentChange] | None:
+    """Load constituent changes for an index. Returns None if stale or missing."""
+    # Check freshness
+    meta_stmt = select(DBConstituentMetadata).where(
+        DBConstituentMetadata.index == index.value
+    )
+    meta_result = await db_session.execute(meta_stmt)
+    metadata = meta_result.scalar_one_or_none()
+    if metadata is None or metadata.fetched_at < datetime.now() - timedelta(days=1):
+        return None
+
+    # Load changes
+    changes_stmt = (
+        select(DBConstituentChange)
+        .where(DBConstituentChange.index == index.value)
+        .order_by(DBConstituentChange.date)
+    )
+    changes_result = await db_session.execute(changes_stmt)
+    rows = changes_result.scalars().all()
+
+    return [
+        ConstituentChange(
+            date=row.date,
+            added_symbol=row.added_symbol,
+            removed_symbol=row.removed_symbol,
+        )
+        for row in rows
+    ]
+
+
+async def is_constituent_data_fresh(
+    db_session: AsyncSession, index: StockIndex
+) -> bool:
+    """Check if constituent data for an index was fetched today."""
+    stmt = select(DBConstituentMetadata).where(
+        DBConstituentMetadata.index == index.value
+    )
     result = await db_session.execute(stmt)
     metadata = result.scalar_one_or_none()
-    # if the symbol prices are last fetched more than 1 day ago, return False
     if metadata is None:
         return False
-
     return metadata.fetched_at > datetime.now() - timedelta(days=1)
 
 
-async def get_prices_by_date_range(db_session: AsyncSession, symbol: str, from_date: date, to_date: date) -> list[StockPrice]:
+async def get_prices_by_date_range(
+    db_session: AsyncSession, symbol: str, from_date: date, to_date: date
+) -> list[StockPrice]:
     """
     Get the stock prices for a given symbol and date range.
     """
-    stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-        DBStockPrice.date >= from_date).where(DBStockPrice.date <= to_date).order_by(DBStockPrice.date.desc())
+    stmt = (
+        select(
+            DBStockPrice.symbol,
+            DBStockPrice.date,
+            DBStockPrice.adj_close,
+            DBStockPrice.volume,
+        )
+        .where(DBStockPrice.symbol == symbol.upper())
+        .where(DBStockPrice.date >= from_date)
+        .where(DBStockPrice.date <= to_date)
+        .order_by(DBStockPrice.date.desc())
+    )
     result = await db_session.execute(stmt)
-    prices = result.all()  # Returns Row objects when selecting multiple columns
-    return [StockPrice(
-        symbol=price.symbol,
-        date=price.date,
-        adj_close=price.adj_close
-    ) for price in prices]
+    prices = result.all()
+    return [
+        StockPrice(
+            symbol=price.symbol,
+            date=price.date,
+            adj_close=price.adj_close,
+            volume=price.volume,
+        )
+        for price in prices
+    ]
 
 
-async def get_price_by_date(db_session: AsyncSession, symbol: str, target_date: date, nearest: bool = False) -> StockPrice:
+async def get_price_by_date(
+    db_session: AsyncSession, symbol: str, target_date: date, nearest: bool = False
+) -> StockPrice:
     """
     Get the stock price for a given symbol and date.
     If nearest is True, and the price is not found for the given date, return the price for the nearest date before the given date.
     """
-    stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-        DBStockPrice.date == target_date).order_by(DBStockPrice.date.desc())
+    stmt = (
+        select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+        .where(DBStockPrice.symbol == symbol.upper())
+        .where(DBStockPrice.date == target_date)
+        .order_by(DBStockPrice.date.desc())
+    )
     result = await db_session.execute(stmt)
     price = result.first()  # Returns Row object or None when selecting multiple columns
     if price is not None:
         return StockPrice(
-            symbol=price.symbol,
-            date=price.date,
-            adj_close=price.adj_close
+            symbol=price.symbol, date=price.date, adj_close=price.adj_close
         )
     if nearest:
         # Find the price of nearest date we have before the target date
-        stmt = select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close).where(DBStockPrice.symbol == symbol.upper()).where(
-            DBStockPrice.date < target_date).order_by(DBStockPrice.date.desc()).limit(1)
+        stmt = (
+            select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+            .where(DBStockPrice.symbol == symbol.upper())
+            .where(DBStockPrice.date < target_date)
+            .order_by(DBStockPrice.date.desc())
+            .limit(1)
+        )
         result = await db_session.execute(stmt)
-        price = result.first()  # Returns Row object or None when selecting multiple columns
+        price = (
+            result.first()
+        )  # Returns Row object or None when selecting multiple columns
         if price is not None:
             return StockPrice(
-                symbol=price.symbol,
-                date=price.date,
-                adj_close=price.adj_close
+                symbol=price.symbol, date=price.date, adj_close=price.adj_close
             )
 
-    raise ValueError(f"No price data available for symbol: {symbol} on date: {target_date}")
+    raise ValueError(
+        f"No price data available for symbol: {symbol} on date: {target_date}"
+    )
 
 
-async def save_simulation_result(db_session: AsyncSession, result: SimulationResult) -> UUID:
+async def save_backtest_result(
+    db_session: AsyncSession,
+    result: BacktestResult,
+    strategy_id: UUID | None = None,
+) -> UUID:
     """
-    Save a simulation result to the database.
-    Returns the simulation ID.
+    Save a backtest result to the database.
+    Returns the backtest ID.
     """
-    logger.info("Saving simulation result to database")
+    logger.info("Saving backtest result to database")
 
-    # Create simulation record
-    simulation = DBSimulation(
+    # Create backtest record
+    backtest = DBBacktest(
+        strategy_id=strategy_id,
         initial_balance=result.initial_balance,
         final_balance=result.final_balance,
         date_start=result.date_start,
@@ -170,19 +328,21 @@ async def save_simulation_result(db_session: AsyncSession, result: SimulationRes
         baseline_profit_pct=result.baseline_profit_pct,
         baseline_profit=result.baseline_profit,
         baseline_balance=result.baseline_balance,
-        max_stocks=result.simulation_config.max_stocks,
-        rebalance_interval_weeks=result.simulation_config.rebalance_interval_weeks,
-        rule=result.simulation_config.rule,
-        index=result.simulation_config.index.value,
+        max_stocks=result.backtest_config.max_stocks,
+        rebalance_interval_weeks=result.backtest_config.rebalance_interval_weeks,
+        rule=result.backtest_config.rule,
+        ranking=result.backtest_config.ranking,
+        index=result.backtest_config.index.value,
+        scores_json=result.scores.model_dump_json() if result.scores else None,
     )
-    db_session.add(simulation)
-    await db_session.flush()  # Flush to get the simulation ID
-    simulation_id = simulation.id  # Store ID before commit to avoid greenlet issues
+    db_session.add(backtest)
+    await db_session.flush()  # Flush to get the backtest ID
+    backtest_id = backtest.id  # Store ID before commit to avoid greenlet issues
 
     # Create rebalance history records
-    for rebalance in result.rebalance_history:
-        rebalance_history = DBRebalanceHistory(
-            simulation_id=simulation_id,
+    for rebalance in result.backtest_rebalance:
+        backtest_rebalance = DBBacktestRebalance(
+            backtest_id=backtest_id,
             date=rebalance.date,
             balance=rebalance.balance,
             profit_pct=rebalance.profit_pct,
@@ -191,13 +351,13 @@ async def save_simulation_result(db_session: AsyncSession, result: SimulationRes
             baseline_profit=rebalance.baseline_profit,
             baseline_balance=rebalance.baseline_balance,
         )
-        db_session.add(rebalance_history)
-        await db_session.flush()  # Flush to get the rebalance_history ID
+        db_session.add(backtest_rebalance)
+        await db_session.flush()  # Flush to get the backtest_rebalance ID
 
         # Create investment records
         for investment in rebalance.investments:
-            investment_record = DBInvestment(
-                rebalance_history_id=rebalance_history.id,
+            investment_record = DBBacktestInvestment(
+                backtest_rebalance_id=backtest_rebalance.id,
                 symbol=investment.symbol,
                 position=investment.position,
                 buy_price=investment.buy_price,
@@ -210,64 +370,72 @@ async def save_simulation_result(db_session: AsyncSession, result: SimulationRes
             db_session.add(investment_record)
 
     await db_session.commit()
-    logger.info(f"✓ Simulation result saved to database with ID: {simulation_id}")
-    return simulation_id
+    logger.info(f"✓ Backtest result saved to database with ID: {backtest_id}")
+    return backtest_id
 
 
-async def get_simulation_by_id(db_session: AsyncSession, simulation_id: UUID) -> SimulationResult | None:
+async def get_backtest_by_id(
+    db_session: AsyncSession, backtest_id: UUID
+) -> BacktestResult | None:
     """
-    Get a simulation result by ID from the database.
+    Get a backtest result by ID from the database.
     """
     stmt = (
-        select(DBSimulation)
-        .where(DBSimulation.id == simulation_id)
+        select(DBBacktest)
+        .where(DBBacktest.id == backtest_id)
         .options(
-            selectinload(DBSimulation.rebalance_histories).selectinload(DBRebalanceHistory.investments)
+            selectinload(DBBacktest.backtest_rebalances).selectinload(
+                DBBacktestRebalance.backtest_investments
+            )
         )
     )
     result = await db_session.execute(stmt)
-    simulation = result.scalar_one_or_none()
+    backtest = result.scalar_one_or_none()
 
-    if simulation is None:
+    if backtest is None:
         return None
 
-    return _db_simulation_to_result(simulation)
+    return _db_backtest_to_result(backtest)
 
 
-async def list_simulations(db_session: AsyncSession, limit: int = 100, offset: int = 0) -> list[dict]:
+async def list_backtests(
+    db_session: AsyncSession, limit: int = 100, offset: int = 0
+) -> list[dict]:
     """
-    List simulations from the database.
-    Returns a list of simulation summaries (id, date_start, date_end, profit_pct, created_at).
+    List backtests from the database.
+    Returns a list of backtest summaries (id, date_start, date_end, profit_pct, created_at).
     """
     stmt = (
-        select(DBSimulation)
-        .order_by(DBSimulation.created_at.desc())
+        select(DBBacktest)
+        .order_by(DBBacktest.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
     result = await db_session.execute(stmt)
-    simulations = result.scalars().all()
+    backtests = result.scalars().all()
 
     return [
         {
             "id": sim.id,
+            "strategy_id": sim.strategy_id,
             "date_start": sim.date_start.isoformat(),
             "date_end": sim.date_end.isoformat(),
             "profit_pct": sim.profit_pct,
             "profit": sim.profit,
             "baseline_profit_pct": sim.baseline_profit_pct,
+            "index": sim.index,
             "created_at": sim.created_at.isoformat(),
         }
-        for sim in simulations
+        for sim in backtests
     ]
 
 
-def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
-    """Convert a DBSimulation database object to a SimulationResult Pydantic model."""
-    rebalance_histories = []
-    for db_rebalance in db_simulation.rebalance_histories:
+def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
+    """Convert a DBBacktest database object to a BacktestResult Pydantic model."""
+    backtest_rebalances = []
+    for db_rebalance in db_backtest.backtest_rebalances:
         investments = [
-            Investment(
+            BacktestInvestment(
                 symbol=inv.symbol,
                 position=inv.position,
                 buy_price=inv.buy_price,
@@ -277,10 +445,10 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
                 profit_pct=inv.profit_pct,
                 profit=inv.profit,
             )
-            for inv in db_rebalance.investments
+            for inv in db_rebalance.backtest_investments
         ]
-        rebalance_histories.append(
-            RebalanceHistory(
+        backtest_rebalances.append(
+            BacktestRebalance(
                 date=db_rebalance.date,
                 balance=db_rebalance.balance,
                 investments=investments,
@@ -292,70 +460,76 @@ def _db_simulation_to_result(db_simulation: DBSimulation) -> SimulationResult:
             )
         )
 
-    return SimulationResult(
-        initial_balance=db_simulation.initial_balance,
-        final_balance=db_simulation.final_balance,
-        date_start=db_simulation.date_start,
-        date_end=db_simulation.date_end,
-        rebalance_history=rebalance_histories,
-        profit_pct=db_simulation.profit_pct,
-        profit=db_simulation.profit,
-        baseline_index=StockIndex(db_simulation.baseline_index),
-        baseline_profit_pct=db_simulation.baseline_profit_pct,
-        baseline_profit=db_simulation.baseline_profit,
-        baseline_balance=db_simulation.baseline_balance,
-        simulation_config=SimulationConfig(
-            max_stocks=db_simulation.max_stocks,
-            rebalance_interval_weeks=db_simulation.rebalance_interval_weeks,
-            date_start=db_simulation.date_start,
-            date_end=db_simulation.date_end,
-            rule=db_simulation.rule,
-            index=StockIndex(db_simulation.index),
-            involved_keys=extract_involved_keys(db_simulation.rule),
+    return BacktestResult(
+        initial_balance=db_backtest.initial_balance,
+        final_balance=db_backtest.final_balance,
+        date_start=db_backtest.date_start,
+        date_end=db_backtest.date_end,
+        backtest_rebalance=backtest_rebalances,
+        profit_pct=db_backtest.profit_pct,
+        profit=db_backtest.profit,
+        baseline_index=StockIndex(db_backtest.baseline_index),
+        baseline_profit_pct=db_backtest.baseline_profit_pct,
+        baseline_profit=db_backtest.baseline_profit,
+        baseline_balance=db_backtest.baseline_balance,
+        backtest_config=BacktestConfig(
+            max_stocks=db_backtest.max_stocks,
+            rebalance_interval_weeks=db_backtest.rebalance_interval_weeks,
+            date_start=db_backtest.date_start,
+            date_end=db_backtest.date_end,
+            rule=db_backtest.rule,
+            ranking=db_backtest.ranking
+            if db_backtest.ranking
+            else BacktestConfig.model_fields["ranking"].default,
+            index=StockIndex(db_backtest.index),
+            involved_keys=extract_involved_keys(db_backtest.rule),
         ),
+        scores=BacktestScores.model_validate_json(db_backtest.scores_json)
+        if db_backtest.scores_json
+        else None,
     )
 
 
 # =============================================================================
-# Stock Metrics Queries
+# Stock Indicator Queries
 # =============================================================================
 
 
-async def save_stock_metrics(
+async def save_stock_indicators(
     db_session: AsyncSession,
-    stock_metrics: StockMetrics,
-    metrics_date: date,
+    stock_indicators: StockIndicators,
+    indicators_date: date,
 ) -> None:
-    """
-    Save stock metrics to the database for a specific date.
-    """
-    logger.info(f"Saving metrics for {stock_metrics.symbol} on {metrics_date}")
+    """Save stock indicators to the database for a specific date."""
+    logger.info(f"Saving indicators for {stock_indicators.symbol} on {indicators_date}")
 
-    # Upsert stock metrics (single flat record)
-    record = DBStockMetrics(**stock_metrics.model_dump())
+    record = DBStockIndicators(**stock_indicators.model_dump())
     await db_session.merge(record)
 
     await db_session.commit()
 
 
-async def load_stock_metrics(
+async def load_stock_indicators(
     db_session: AsyncSession,
     symbol: str,
-    metrics_date: date,
-) -> StockMetrics | None:
+    indicators_date: date,
+) -> StockIndicators | None:
+    """Load stock indicators for a specific date from the database.
+
+    Returns a StockIndicators object, or None if no data found.
     """
-    Load stock metrics for a specific date from the database.
-    Returns a StockMetrics object, or None if no data found.
-    """
-    stmt = select(DBStockMetrics).where(DBStockMetrics.symbol ==
-                                        symbol.upper()).where(DBStockMetrics.date == metrics_date)
+    stmt = (
+        select(DBStockIndicators)
+        .where(DBStockIndicators.symbol == symbol.upper())
+        .where(DBStockIndicators.date == indicators_date)
+    )
     result = await db_session.execute(stmt)
     record = result.scalar_one_or_none()
 
     if record is None:
         return None
 
-    return StockMetrics(
+    return StockIndicators(
         symbol=record.symbol,
         date=record.date,
         total_weeks=record.total_weeks,
@@ -375,109 +549,220 @@ async def load_stock_metrics(
         max_drop_2w_pct=record.max_drop_2w_pct,
         max_jump_4w_pct=record.max_jump_4w_pct,
         max_drop_4w_pct=record.max_drop_4w_pct,
+        weekly_return_std=record.weekly_return_std,
+        downside_std=record.downside_std,
         max_drawdown_pct=record.max_drawdown_pct,
         pct_weeks_positive=record.pct_weeks_positive,
         slope_13w_pct=record.slope_13w_pct,
         r_squared_13w=record.r_squared_13w,
+        r_squared_4w=record.r_squared_4w,
         slope_26w_pct=record.slope_26w_pct,
         r_squared_26w=record.r_squared_26w,
+        acceleration_13w=record.acceleration_13w,
+        pct_from_4w_high=record.pct_from_4w_high,
     )
 
 
-async def list_metrics_dates(db_session: AsyncSession) -> list[datetime]:
-    stmt = select(DBStockMetrics.date).distinct().order_by(DBStockMetrics.date.desc())
+async def list_indicator_dates(db_session: AsyncSession) -> list[datetime]:
+    stmt = (
+        select(DBStockIndicators.date)
+        .distinct()
+        .order_by(DBStockIndicators.date.desc())
+    )
     result = await db_session.execute(stmt)
     return [datetime.fromisoformat(date.isoformat()) for date in result.scalars().all()]
 
 
 # =============================================================================
-# Simulation Job Queue Queries
+# Strategy Queries
 # =============================================================================
 
 
-async def create_simulation_job(db_session: AsyncSession, config: SimulationConfig) -> UUID:
-    """Enqueue a new simulation job. Returns the job ID."""
-    job = DBSimulationJob(
-        status="pending",
-        config_json=config.model_dump_json(),
+async def create_strategy(
+    db_session: AsyncSession,
+    strategy_create: StrategyCreate,
+    name: str,
+    date_start: date,
+    date_end: date,
+) -> UUID:
+    """Create a new strategy and return its ID."""
+    strategy = DBStrategy(
+        name=name,
+        instruction=strategy_create.instruction,
+        model=strategy_create.model,
+        date_start=date_start,
+        date_end=date_end,
+        status="idle",
     )
-    db_session.add(job)
+    db_session.add(strategy)
     await db_session.flush()
-    job_id = job.id
+    strategy_id = strategy.id
     await db_session.commit()
-    logger.info(f"Simulation job enqueued: {job_id}")
-    return job_id
+    logger.info(f"Strategy created: {strategy_id}")
+    return strategy_id
 
 
-async def get_job_by_id(db_session: AsyncSession, job_id: UUID) -> SimulationJob | None:
-    """Return SimulationJob or None if not found."""
-    stmt = select(DBSimulationJob).where(DBSimulationJob.id == job_id)
-    result = await db_session.execute(stmt)
-    job = result.scalar_one_or_none()
-    if job is None:
-        return None
-    return _job_to_model(job)
-
-
-async def list_recent_jobs(db_session: AsyncSession, limit: int = 50) -> list[SimulationJob]:
-    """List recent simulation jobs ordered by creation time descending."""
-    stmt = select(DBSimulationJob).order_by(DBSimulationJob.created_at.desc()).limit(limit)
-    result = await db_session.execute(stmt)
-    return [_job_to_model(job) for job in result.scalars().all()]
-
-
-async def claim_next_pending_job(db_session: AsyncSession) -> DBSimulationJob | None:
-    """
-    Atomically claim the oldest pending job by setting its status to 'running'.
-    Uses SKIP LOCKED so concurrent workers don't double-claim.
-    Returns the claimed job row, or None if no pending jobs exist.
-    """
+async def get_strategy_by_id(
+    db_session: AsyncSession, strategy_id: UUID
+) -> StrategyDetail | None:
+    """Get a strategy with its messages and linked backtests."""
     stmt = (
-        select(DBSimulationJob)
-        .where(DBSimulationJob.status == "pending")
-        .order_by(DBSimulationJob.created_at)
+        select(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .options(
+            selectinload(DBStrategy.messages),
+            selectinload(DBStrategy.backtests),
+        )
+    )
+    result = await db_session.execute(stmt)
+    strategy = result.scalar_one_or_none()
+    if strategy is None:
+        return None
+
+    messages = [
+        StrategyMessage(
+            id=msg.id,
+            role=msg.role,
+            content_json=msg.content_json,
+            created_at=msg.created_at,
+            sequence=msg.sequence,
+        )
+        for msg in strategy.messages
+    ]
+
+    backtests = [
+        StrategyBacktestSummary(
+            id=bt.id,
+            rule=bt.rule,
+            ranking=bt.ranking,
+            profit_pct=bt.profit_pct,
+            baseline_profit_pct=bt.baseline_profit_pct,
+            max_stocks=bt.max_stocks,
+            rebalance_interval_weeks=bt.rebalance_interval_weeks,
+            index=bt.index,
+            scores=BacktestScores.model_validate_json(bt.scores_json)
+            if bt.scores_json
+            else None,
+            created_at=bt.created_at,
+        )
+        for bt in sorted(strategy.backtests, key=lambda b: b.created_at)
+    ]
+
+    return StrategyDetail(
+        id=strategy.id,
+        name=strategy.name,
+        instruction=strategy.instruction,
+        model=strategy.model,
+        date_start=strategy.date_start,
+        date_end=strategy.date_end,
+        status=strategy.status,
+        created_at=strategy.created_at,
+        updated_at=strategy.updated_at,
+        messages=messages,
+        backtests=backtests,
+        llm_history_json=strategy.llm_history_json,
+    )
+
+
+async def list_strategies(
+    db_session: AsyncSession, limit: int = 50
+) -> list[StrategySummary]:
+    """List strategies ordered by updated_at descending."""
+    stmt = select(DBStrategy).order_by(DBStrategy.updated_at.desc()).limit(limit)
+    result = await db_session.execute(stmt)
+    strategies = result.scalars().all()
+    return [
+        StrategySummary(
+            id=s.id,
+            name=s.name,
+            instruction=s.instruction,
+            model=s.model,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in strategies
+    ]
+
+
+async def update_strategy_status(
+    db_session: AsyncSession, strategy_id: UUID, status: str
+) -> None:
+    """Update the status of a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(status=status, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def update_strategy_llm_history(
+    db_session: AsyncSession, strategy_id: UUID, llm_history_json: str
+) -> None:
+    """Update the LLM conversation history for a strategy."""
+    stmt = (
+        update(DBStrategy)
+        .where(DBStrategy.id == strategy_id)
+        .values(llm_history_json=llm_history_json, updated_at=datetime.now())
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def add_strategy_message(
+    db_session: AsyncSession,
+    strategy_id: UUID,
+    role: str,
+    content_json: str,
+) -> UUID:
+    """Add a message to a strategy conversation and return its ID."""
+    # Get next sequence number
+    stmt = (
+        select(DBStrategyMessage.sequence)
+        .where(DBStrategyMessage.strategy_id == strategy_id)
+        .order_by(DBStrategyMessage.sequence.desc())
         .limit(1)
-        .with_for_update(skip_locked=True)
     )
     result = await db_session.execute(stmt)
-    job = result.scalar_one_or_none()
-    if job is None:
-        return None
+    last_seq = result.scalar_one_or_none()
+    next_seq = (last_seq or 0) + 1
 
-    job.status = "running"
-    job.started_at = datetime.now()
-    await db_session.commit()
-    await db_session.refresh(job)
-    return job
-
-
-async def mark_job_completed(db_session: AsyncSession, job_id: UUID, simulation_id: UUID) -> None:
-    stmt = (
-        update(DBSimulationJob)
-        .where(DBSimulationJob.id == job_id)
-        .values(status="completed", simulation_id=simulation_id, completed_at=datetime.now())
+    msg = DBStrategyMessage(
+        strategy_id=strategy_id,
+        role=role,
+        content_json=content_json,
+        sequence=next_seq,
     )
-    await db_session.execute(stmt)
+    db_session.add(msg)
+    await db_session.flush()
+    msg_id = msg.id
     await db_session.commit()
+    return msg_id
 
 
-async def mark_job_failed(db_session: AsyncSession, job_id: UUID, error_message: str) -> None:
-    stmt = (
-        update(DBSimulationJob)
-        .where(DBSimulationJob.id == job_id)
-        .values(status="failed", error_message=error_message, completed_at=datetime.now())
-    )
-    await db_session.execute(stmt)
+async def delete_strategy(db_session: AsyncSession, strategy_id: UUID) -> bool:
+    """Delete a strategy and all its messages. Returns True if found and deleted."""
+    stmt = select(DBStrategy).where(DBStrategy.id == strategy_id)
+    result = await db_session.execute(stmt)
+    strategy = result.scalar_one_or_none()
+    if strategy is None:
+        return False
+    await db_session.delete(strategy)
     await db_session.commit()
+    return True
 
 
-def _job_to_model(job: DBSimulationJob) -> SimulationJob:
-    return SimulationJob(
-        id=job.id,
-        status=job.status,
-        simulation_id=job.simulation_id,
-        error_message=job.error_message,
-        created_at=job.created_at,
-        started_at=job.started_at,
-        completed_at=job.completed_at,
+async def get_strategy_llm_history(
+    db_session: AsyncSession, strategy_id: UUID
+) -> tuple[str | None, str | None]:
+    """Get the LLM history and model for a strategy. Returns (llm_history_json, model)."""
+    stmt = select(DBStrategy.llm_history_json, DBStrategy.model).where(
+        DBStrategy.id == strategy_id
     )
+    result = await db_session.execute(stmt)
+    row = result.first()
+    if row is None:
+        return None, None
+    return row.llm_history_json, row.model

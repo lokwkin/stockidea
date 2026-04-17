@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Stock price analysis and reporting tool"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.42.0",
     "asyncpg>=0.29.0",
+    "openai>=1.60.0",
     "click>=8.1.0",
     "fastapi>=0.115.0",
     "greenlet>=3.0.0",
@@ -17,6 +19,8 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "types-requests>=2.32.4.20260107",
     "uvicorn>=0.34.0",
+    "alembic>=1.18.4",
+    "bs4>=0.0.2",
 ]
 
 [project.scripts]
@@ -28,3 +32,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/stockidea"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.1",
+    "ruff>=0.15.10",
+]

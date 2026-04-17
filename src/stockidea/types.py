@@ -1,14 +1,12 @@
-
-
 from datetime import datetime, date
 import enum
+import uuid as _uuid
 
 from pydantic import BaseModel
 
 
 class StockIndex(enum.Enum):
     SP500 = "SP500"
-    DOWJONES = "DOWJONES"
     NASDAQ = "NASDAQ"
 
 
@@ -35,6 +33,7 @@ class StockPrice(BaseModel):
     symbol: str
     date: date
     adj_close: float
+    volume: int | None = None
 
 
 class ConstituentChange(BaseModel):
@@ -44,9 +43,9 @@ class ConstituentChange(BaseModel):
 
 
 # =============================================================================
-# Stock Metrics Model
+# Stock Indicators Model
 # =============================================================================
-class StockMetrics(BaseModel):
+class StockIndicators(BaseModel):
     symbol: str
     date: date
     total_weeks: int
@@ -69,20 +68,28 @@ class StockMetrics(BaseModel):
     max_drop_2w_pct: float
     max_jump_4w_pct: float
     max_drop_4w_pct: float
+    # Volatility metrics (statistical)
+    weekly_return_std: float  # std dev of weekly % returns
+    downside_std: float  # std dev of negative weekly returns only
     # Stability metrics
-    max_drawdown_pct: float      # positive value: e.g. 18.5 means fell 18.5% from peak
-    pct_weeks_positive: float    # 0.0–1.0 fraction of up-weeks
-    slope_13w_pct: float         # linear slope over last 13 weeks (% per week)
-    r_squared_13w: float         # R² of 13-week regression
-    slope_26w_pct: float         # linear slope over last 26 weeks (% per week)
-    r_squared_26w: float         # R² of 26-week regression
+    max_drawdown_pct: float  # positive value: e.g. 18.5 means fell 18.5% from peak
+    pct_weeks_positive: float  # 0.0–1.0 fraction of up-weeks
+    slope_13w_pct: float  # linear slope over last 13 weeks (% per week)
+    r_squared_13w: float  # R² of 13-week regression
+    r_squared_4w: float  # R² of 4-week regression (short-term trend consistency)
+    slope_26w_pct: float  # linear slope over last 26 weeks (% per week)
+    r_squared_26w: float  # R² of 26-week regression
+    # Momentum shape
+    acceleration_13w: float  # recent-half slope minus earlier-half slope over 13w
+    pct_from_4w_high: float  # distance from 4-week high (always <= 0)
+
 
 # =============================================================================
-# Simulation Models
+# Backtest Models
 # =============================================================================
 
 
-class Investment(BaseModel):
+class BacktestInvestment(BaseModel):
     symbol: str
     position: float
     buy_price: float
@@ -93,10 +100,10 @@ class Investment(BaseModel):
     profit: float
 
 
-class RebalanceHistory(BaseModel):
+class BacktestRebalance(BaseModel):
     date: datetime
     balance: float
-    investments: list[Investment]
+    investments: list[BacktestInvestment]
     profit_pct: float
     profit: float
 
@@ -105,48 +112,100 @@ class RebalanceHistory(BaseModel):
     baseline_balance: float
 
 
-class SimulationConfig(BaseModel):
+class BacktestScores(BaseModel):
+    """Objective scores computed from backtest results."""
+
+    sharpe_ratio: float
+    sortino_ratio: float
+    calmar_ratio: float
+    max_drawdown_pct: float
+    max_drawdown_duration_weeks: int
+    win_rate: float
+    avg_win_pct: float
+    avg_loss_pct: float
+    total_rebalances: int
+
+
+class BacktestConfig(BaseModel):
     max_stocks: int
     rebalance_interval_weeks: int
     date_start: datetime
     date_end: datetime
     rule: str
+    ranking: str = "change_13w_pct / weekly_return_std"
     index: StockIndex
     involved_keys: list[str] = []
 
 
-class SimulationResult(BaseModel):
+class BacktestResult(BaseModel):
     initial_balance: float
     final_balance: float
     date_start: datetime
     date_end: datetime
-    rebalance_history: list[RebalanceHistory]
+    backtest_rebalance: list[BacktestRebalance]
     profit_pct: float
     profit: float
     baseline_index: StockIndex
     baseline_profit_pct: float
     baseline_profit: float
     baseline_balance: float
-    simulation_config: SimulationConfig
+    backtest_config: BacktestConfig
+    scores: BacktestScores | None = None
 
 
 # =============================================================================
-# Job Queue Models
+# Strategy Models
 # =============================================================================
 
-import uuid as _uuid
+
+class StrategyCreate(BaseModel):
+    instruction: str
+    model: str = "claude-sonnet-4-20250514"
+    date_start: date | None = None
+    date_end: date | None = None
 
 
-class SimulationJob(BaseModel):
+class StrategyMessage(BaseModel):
     id: _uuid.UUID
-    status: str  # pending | running | completed | failed
-    simulation_id: _uuid.UUID | None = None
-    error_message: str | None = None
+    role: str  # "user" | "assistant"
+    content_json: str  # JSON string
     created_at: datetime
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
+    sequence: int
 
 
-class EnqueuedJob(BaseModel):
-    job_id: _uuid.UUID
+class StrategySummary(BaseModel):
+    id: _uuid.UUID
+    name: str
+    instruction: str
+    model: str
     status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class StrategyBacktestSummary(BaseModel):
+    id: _uuid.UUID
+    rule: str
+    ranking: str | None = None
+    profit_pct: float
+    baseline_profit_pct: float
+    max_stocks: int
+    rebalance_interval_weeks: int
+    index: str
+    scores: BacktestScores | None = None
+    created_at: datetime
+
+
+class StrategyDetail(BaseModel):
+    id: _uuid.UUID
+    name: str
+    instruction: str
+    model: str
+    date_start: date
+    date_end: date
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[StrategyMessage] = []
+    backtests: list[StrategyBacktestSummary] = []
+    llm_history_json: str | None = None

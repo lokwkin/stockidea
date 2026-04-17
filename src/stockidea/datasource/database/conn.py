@@ -1,9 +1,7 @@
-
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from stockidea.config import DATABASE_URL
-from stockidea.datasource.database.models import Base
+from stockidea.constants import DATABASE_URL
 
 
 _engine = None
@@ -16,12 +14,10 @@ async def _get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             DATABASE_URL,
             echo=False,
-            pool_size=20,  # Allow up to 20 concurrent connections
-            max_overflow=10,  # Allow overflow beyond pool_size
-            pool_pre_ping=True,  # Verify connections before using
+            pool_size=20,
+            max_overflow=10,
+            pool_pre_ping=True,
         )
-        async with _engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
     return _engine
 
 

@@ -1,0 +1,782 @@
+import { useState, useEffect, useRef } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { dateFormat } from "@/lib/utils"
+
+type StockIndex = "SP500" | "NASDAQ"
+
+const DEFAULT_RANKING = "change_13w_pct / weekly_return_std"
+
+interface BacktestRequest {
+  max_stocks: number
+  rebalance_interval_weeks: number
+  date_start: string // ISO datetime string
+  date_end: string // ISO datetime string
+  rule: string
+  ranking: string
+  index: StockIndex
+}
+
+export function CreateBacktestView() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Initialize form data from URL parameters if available, otherwise use defaults
+  const getInitialFormData = (): BacktestRequest => {
+    const maxStocks = searchParams.get("max_stocks")
+    const rebalanceInterval = searchParams.get("rebalance_interval_weeks")
+    const dateStart = searchParams.get("date_start") || ""
+    const dateEnd = searchParams.get("date_end") || ""
+    const rule = searchParams.get("rule") || ""
+    const ranking = searchParams.get("ranking") || DEFAULT_RANKING
+    const index = (searchParams.get("index") as StockIndex) || "SP500"
+
+    return {
+      max_stocks: maxStocks ? parseInt(maxStocks) : 3,
+      rebalance_interval_weeks: rebalanceInterval ? parseInt(rebalanceInterval) : 2,
+      date_start: dateStart ? dateStart.replace(/\//g, "-") : "", // Convert yyyy/mm/dd to yyyy-mm-dd
+      date_end: dateEnd ? dateEnd.replace(/\//g, "-") : "",
+      rule: rule,
+      ranking: ranking,
+      index: index,
+    }
+  }
+  
+  const [formData, setFormData] = useState<BacktestRequest>(getInitialFormData())
+  
+  // Store string values for numeric inputs to allow empty state
+  const [maxStocksInput, setMaxStocksInput] = useState<string>(() => {
+    const val = searchParams.get("max_stocks")
+    return val || formData.max_stocks.toString()
+  })
+  const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>(() => {
+    const val = searchParams.get("rebalance_interval_weeks")
+    return val || formData.rebalance_interval_weeks.toString()
+  })
+  // Store raw string values for date inputs to allow free typing
+  const [dateStartInput, setDateStartInput] = useState<string>(() => {
+    const val = searchParams.get("date_start")
+    return val || ""
+  })
+  const [dateEndInput, setDateEndInput] = useState<string>(() => {
+    const val = searchParams.get("date_end")
+    return val || ""
+  })
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
+  const parseDateInput = (dateStr: string): string => {
+    if (!dateStr) return ""
+    return dateStr.split("/").join("-")
+  }
+  
+  // Validate date format yyyy/mm/dd
+  const isValidDate = (dateStr: string): boolean => {
+    if (!dateStr) return false
+    const datePattern = new RegExp("^\\d{4}/\\d{2}/\\d{2}$")
+    if (!datePattern.test(dateStr)) return false
+    const [year, month, day] = dateStr.split("/").map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    try {
+      // Convert input strings to numbers, using current formData values as fallback
+      const maxStocks = maxStocksInput === "" ? formData.max_stocks : parseInt(maxStocksInput) || 0
+      const rebalanceInterval = rebalanceIntervalInput === "" ? formData.rebalance_interval_weeks : parseInt(rebalanceIntervalInput) || 0
+
+      // Validate numeric inputs
+      if (maxStocks <= 0) {
+        throw new Error("Maximum stocks must be greater than 0")
+      }
+      if (rebalanceInterval <= 0) {
+        throw new Error("Rebalance interval must be greater than 0")
+      }
+
+      // Send naive midnight datetimes (no timezone marker) so backend parses
+      // them identically to CLI `datetime.strptime(..., "%Y-%m-%d")`.
+      const dateStart = `${formData.date_start}T00:00:00`
+      const dateEnd = `${formData.date_end}T00:00:00`
+
+      const response = await fetch("/api/backtest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          max_stocks: maxStocks,
+          rebalance_interval_weeks: rebalanceInterval,
+          date_start: dateStart,
+          date_end: dateEnd,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Failed to create backtest" }))
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      setLoading(false)
+      if (result.backtest_id) {
+        navigate(`/backtest/${result.backtest_id}`)
+        return
+      }
+      navigate("/backtest")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create backtest")
+      setLoading(false)
+    }
+  }
+
+  const handleChange = (field: keyof BacktestRequest, value: string | number) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+  
+  const handleDateChange = (field: "date_start" | "date_end", value: string) => {
+    // Convert yyyy/mm/dd to yyyy-mm-dd for storage
+    const isoDate = parseDateInput(value)
+    handleChange(field, isoDate)
+  }
+  
+  const insertVariableAtCursor = (variable: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = formData.rule
+    const before = text.substring(0, start)
+    const after = text.substring(end)
+    
+    const newText = before + variable + after
+    handleChange("rule", newText)
+    
+    // Restore cursor position after the inserted variable
+    setTimeout(() => {
+      const newCursorPos = start + variable.length
+      textarea.focus()
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 0)
+  }
+
+  // Set default dates on mount
+  useEffect(() => {
+    const getDefaultStartDate = () => {
+      const date = new Date()
+      date.setFullYear(date.getFullYear() - 1)
+      return date.toISOString().split("T")[0]
+    }
+
+    const getDefaultEndDate = () => {
+      return new Date().toISOString().split("T")[0]
+    }
+
+    const defaultStart = getDefaultStartDate()
+    const defaultEnd = getDefaultEndDate()
+    
+    setFormData((prev) => ({
+      ...prev,
+      date_start: prev.date_start || defaultStart,
+      date_end: prev.date_end || defaultEnd,
+    }))
+    
+    // Initialize input strings with formatted dates only if empty
+    setDateStartInput((prev) => prev || dateFormat(defaultStart))
+    setDateEndInput((prev) => prev || dateFormat(defaultEnd))
+  }, [])
+
+  return (
+    <div className="relative mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      <header className="mb-8">
+        <h1 className="mb-2 text-3xl font-semibold tracking-tight text-foreground">
+          Create Backtest
+        </h1>
+        <p className="text-muted-foreground">
+          Configure and run a new investment strategy backtest
+        </p>
+      </header>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <p className="text-sm font-medium text-destructive">{error}</p>
+          </div>
+        )}
+
+        <div className="rounded-lg border bg-card p-6 space-y-6">
+          {/* Stock Index Selection */}
+          <div className="space-y-2">
+            <label htmlFor="index" className="text-sm font-medium">
+              Stock Index
+            </label>
+            <Select
+              value={formData.index}
+              onValueChange={(value) => handleChange("index", value as StockIndex)}
+            >
+              <SelectTrigger id="index">
+                <SelectValue placeholder="Select an index" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SP500">S&P 500</SelectItem>
+                <SelectItem value="NASDAQ">NASDAQ</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              The stock index to use as the universe for stock selection
+            </p>
+          </div>
+
+          {/* Max Stocks */}
+          <div className="space-y-2">
+            <label htmlFor="max_stocks" className="text-sm font-medium">
+              Maximum Stocks
+            </label>
+            <Input
+              id="max_stocks"
+              type="number"
+              min="1"
+              max="100"
+              value={maxStocksInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setMaxStocksInput(value)
+                // Update formData only if value is valid number
+                const numValue = parseInt(value)
+                if (!isNaN(numValue) && numValue > 0) {
+                  handleChange("max_stocks", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                // On blur, ensure we have a valid value or reset to default
+                const value = e.target.value
+                if (value === "" || parseInt(value) <= 0) {
+                  setMaxStocksInput("3")
+                  handleChange("max_stocks", 3)
+                }
+              }}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum number of stocks to hold in the portfolio
+            </p>
+          </div>
+
+          {/* Rebalance Interval */}
+          <div className="space-y-2">
+            <label htmlFor="rebalance_interval_weeks" className="text-sm font-medium">
+              Rebalance Interval (weeks)
+            </label>
+            <Input
+              id="rebalance_interval_weeks"
+              type="number"
+              min="1"
+              max="52"
+              value={rebalanceIntervalInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setRebalanceIntervalInput(value)
+                // Update formData only if value is valid number
+                const numValue = parseInt(value)
+                if (!isNaN(numValue) && numValue > 0) {
+                  handleChange("rebalance_interval_weeks", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                // On blur, ensure we have a valid value or reset to default
+                const value = e.target.value
+                if (value === "" || parseInt(value) <= 0) {
+                  setRebalanceIntervalInput("2")
+                  handleChange("rebalance_interval_weeks", 2)
+                }
+              }}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              How often to rebalance the portfolio (in weeks)
+            </p>
+          </div>
+
+          {/* Date Range */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="date_start" className="text-sm font-medium">
+                Start Date
+              </label>
+              <Input
+                id="date_start"
+                type="text"
+                placeholder="yyyy/mm/dd"
+                value={dateStartInput}
+                onChange={(e) => {
+                  setDateStartInput(e.target.value)
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value
+                  if (value && !isValidDate(value)) {
+                    // Try to fix common issues
+                    const fixed = value.replace(/[^\d/]/g, "")
+                    if (isValidDate(fixed)) {
+                      setDateStartInput(fixed)
+                      handleDateChange("date_start", fixed)
+                    } else {
+                      // Reset to default if invalid
+                      const date = new Date()
+                      date.setFullYear(date.getFullYear() - 1)
+                      const defaultDate = dateFormat(date.toISOString().split("T")[0])
+                      setDateStartInput(defaultDate)
+                      handleDateChange("date_start", defaultDate)
+                    }
+                  } else if (value && isValidDate(value)) {
+                    // Update formData with valid date
+                    handleDateChange("date_start", value)
+                  }
+                }}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Backtest start date (yyyy/mm/dd)</p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="date_end" className="text-sm font-medium">
+                End Date
+              </label>
+              <Input
+                id="date_end"
+                type="text"
+                placeholder="yyyy/mm/dd"
+                value={dateEndInput}
+                onChange={(e) => {
+                  setDateEndInput(e.target.value)
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value
+                  if (value && !isValidDate(value)) {
+                    // Try to fix common issues
+                    const fixed = value.replace(/[^\d/]/g, "")
+                    if (isValidDate(fixed)) {
+                      setDateEndInput(fixed)
+                      handleDateChange("date_end", fixed)
+                    } else {
+                      // Reset to default if invalid
+                      const defaultDate = dateFormat(new Date().toISOString().split("T")[0])
+                      setDateEndInput(defaultDate)
+                      handleDateChange("date_end", defaultDate)
+                    }
+                  } else if (value && isValidDate(value)) {
+                    // Update formData with valid date
+                    handleDateChange("date_end", value)
+                  }
+                }}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Backtest end date (yyyy/mm/dd)</p>
+            </div>
+          </div>
+
+          {/* Ranking */}
+          <div className="space-y-2">
+            <label htmlFor="ranking" className="text-sm font-medium">
+              Ranking Expression
+            </label>
+            <Input
+              id="ranking"
+              type="text"
+              value={formData.ranking}
+              onChange={(e) => handleChange("ranking", e.target.value)}
+              required
+              className="font-mono"
+              placeholder={DEFAULT_RANKING}
+            />
+            <p className="text-xs text-muted-foreground">
+              Expression used to rank stocks that pass the rule. Higher value = higher priority.
+            </p>
+          </div>
+
+          {/* Rule */}
+          <div className="space-y-2">
+            <label htmlFor="rule" className="text-sm font-medium">
+              Selection Rule
+            </label>
+            <textarea
+              ref={textareaRef}
+              id="rule"
+              value={formData.rule}
+              onChange={(e) => handleChange("rule", e.target.value)}
+              required
+              rows={8}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono"
+              placeholder="change_13w_pct > 10 AND max_drawdown_pct < 20 AND pct_weeks_positive > 0.55"
+            />
+            <div className="text-xs text-muted-foreground space-y-2">
+              <p>
+                Python expression that evaluates to True/False for stock selection. Click on a variable name to insert it into the rule:
+              </p>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">Variable</TableHead>
+                      <TableHead className="w-[80px]">Type</TableHead>
+                      <TableHead>Description</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_jump_1w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_jump_1w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 1-week percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_drop_1w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_drop_1w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 1-week percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_jump_2w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_jump_2w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 2-week percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_drop_2w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_drop_2w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 2-week percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_jump_4w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_jump_4w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 4-week percentage increase</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_drop_4w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_drop_4w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Maximum 4-week percentage decrease</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_1y_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_1y_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 1 year (52 weeks)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_26w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_26w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 26 weeks</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_13w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_13w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 13 weeks</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_1w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_1w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 1 week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_2w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_2w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 2 weeks</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("change_4w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          change_4w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Percentage change over 4 weeks</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("total_weeks")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          total_weeks
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">int</TableCell>
+                      <TableCell className="text-xs">Total number of weeks analyzed</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("linear_slope_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          linear_slope_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Linear trend slope as percentage of starting price per week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("linear_r_squared")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          linear_r_squared
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("log_slope")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          log_slope
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Annualized trend slope</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("log_r_squared")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          log_r_squared
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² value (0-1) indicating how well the price data fits the trend line (higher = more consistent trend)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("slope_13w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          slope_13w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Linear trend slope over last 13 weeks, % of starting price per week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("r_squared_13w")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          r_squared_13w
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² of 13-week regression (0-1, higher = more consistent short-term trend)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("slope_26w_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          slope_26w_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Linear trend slope over last 26 weeks, % of starting price per week</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("r_squared_26w")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          r_squared_26w
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">R² of 26-week regression (0-1, higher = more consistent medium-term trend)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("max_drawdown_pct")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          max_drawdown_pct
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Max peak-to-trough decline over 52 weeks (positive: e.g. 18.5 = fell 18.5% from peak). Use &lt; to filter.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => insertVariableAtCursor("pct_weeks_positive")}
+                          className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                        >
+                          pct_weeks_positive
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs">float</TableCell>
+                      <TableCell className="text-xs">Fraction of weeks that closed higher than prior week (0.0–1.0). Use &gt; 0.55 for stable risers.</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Actions */}
+        <div className="flex items-center justify-end gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/backtest")}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? (
+              <>
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Creating...
+              </>
+            ) : (
+              "Create Backtest"
+            )}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}

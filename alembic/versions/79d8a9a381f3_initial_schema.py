@@ -1,0 +1,222 @@
+"""initial schema
+
+Revision ID: 79d8a9a381f3
+Revises:
+Create Date: 2026-04-15 16:27:25.756134
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "79d8a9a381f3"
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Create all tables from scratch."""
+    # -- Standalone tables (no foreign keys) --
+
+    op.create_table(
+        "constituent_changes",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("index", sa.String(), nullable=False),
+        sa.Column("date", sa.Date(), nullable=False),
+        sa.Column("added_symbol", sa.String(), nullable=True),
+        sa.Column("removed_symbol", sa.String(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_constituent_changes_index", "constituent_changes", ["index"])
+
+    op.create_table(
+        "constituent_metadata",
+        sa.Column("index", sa.String(), nullable=False),
+        sa.Column("fetched_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("index"),
+    )
+
+    op.create_table(
+        "stock_prices",
+        sa.Column("symbol", sa.String(), nullable=False),
+        sa.Column("date", sa.Date(), nullable=False),
+        sa.Column("open", sa.Float(), nullable=True),
+        sa.Column("high", sa.Float(), nullable=True),
+        sa.Column("low", sa.Float(), nullable=True),
+        sa.Column("close", sa.Float(), nullable=True),
+        sa.Column("adj_close", sa.Float(), nullable=True),
+        sa.Column("volume", sa.BigInteger(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("symbol", "date"),
+    )
+    op.create_index("ix_stock_prices_symbol", "stock_prices", ["symbol"])
+    op.create_index("ix_stock_prices_date", "stock_prices", ["date"])
+
+    op.create_table(
+        "stock_price_metadata",
+        sa.Column("symbol", sa.String(), nullable=False),
+        sa.Column("fetched_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("symbol"),
+    )
+    op.create_index(
+        "ix_stock_price_metadata_symbol", "stock_price_metadata", ["symbol"]
+    )
+
+    op.create_table(
+        "stock_indicators",
+        sa.Column("symbol", sa.String(), nullable=False),
+        sa.Column("date", sa.Date(), nullable=False),
+        sa.Column("total_weeks", sa.Integer(), nullable=False),
+        # Trend metrics
+        sa.Column("linear_slope_pct", sa.Float(), nullable=False),
+        sa.Column("linear_r_squared", sa.Float(), nullable=False),
+        sa.Column("log_slope", sa.Float(), nullable=False),
+        sa.Column("log_r_squared", sa.Float(), nullable=False),
+        # Return metrics
+        sa.Column("change_1w_pct", sa.Float(), nullable=False),
+        sa.Column("change_2w_pct", sa.Float(), nullable=False),
+        sa.Column("change_4w_pct", sa.Float(), nullable=False),
+        sa.Column("change_13w_pct", sa.Float(), nullable=False),
+        sa.Column("change_26w_pct", sa.Float(), nullable=False),
+        sa.Column("change_1y_pct", sa.Float(), nullable=False),
+        # Volatility metrics
+        sa.Column("max_jump_1w_pct", sa.Float(), nullable=False),
+        sa.Column("max_drop_1w_pct", sa.Float(), nullable=False),
+        sa.Column("max_jump_2w_pct", sa.Float(), nullable=False),
+        sa.Column("max_drop_2w_pct", sa.Float(), nullable=False),
+        sa.Column("max_jump_4w_pct", sa.Float(), nullable=False),
+        sa.Column("max_drop_4w_pct", sa.Float(), nullable=False),
+        # Volatility metrics (statistical)
+        sa.Column("weekly_return_std", sa.Float(), nullable=False),
+        sa.Column("downside_std", sa.Float(), nullable=False),
+        # Stability metrics
+        sa.Column("max_drawdown_pct", sa.Float(), nullable=False),
+        sa.Column("pct_weeks_positive", sa.Float(), nullable=False),
+        sa.Column("slope_13w_pct", sa.Float(), nullable=False),
+        sa.Column("r_squared_13w", sa.Float(), nullable=False),
+        sa.Column("r_squared_4w", sa.Float(), nullable=False),
+        sa.Column("slope_26w_pct", sa.Float(), nullable=False),
+        sa.Column("r_squared_26w", sa.Float(), nullable=False),
+        # Momentum shape
+        sa.Column("acceleration_13w", sa.Float(), nullable=False),
+        sa.Column("pct_from_4w_high", sa.Float(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("symbol", "date"),
+    )
+    op.create_index("ix_stock_indicators_symbol", "stock_indicators", ["symbol"])
+    op.create_index("ix_stock_indicators_date", "stock_indicators", ["date"])
+
+    op.create_table(
+        "backtests",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("initial_balance", sa.Float(), nullable=False),
+        sa.Column("final_balance", sa.Float(), nullable=False),
+        sa.Column("date_start", sa.Date(), nullable=False),
+        sa.Column("date_end", sa.Date(), nullable=False),
+        sa.Column("profit_pct", sa.Float(), nullable=False),
+        sa.Column("profit", sa.Float(), nullable=False),
+        sa.Column("baseline_index", sa.String(), nullable=False),
+        sa.Column("baseline_profit_pct", sa.Float(), nullable=False),
+        sa.Column("baseline_profit", sa.Float(), nullable=False),
+        sa.Column("baseline_balance", sa.Float(), nullable=False),
+        sa.Column("max_stocks", sa.Integer(), nullable=False),
+        sa.Column("rebalance_interval_weeks", sa.Integer(), nullable=False),
+        sa.Column("rule", sa.Text(), nullable=False),
+        sa.Column("index", sa.String(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_backtests_id", "backtests", ["id"])
+    op.create_index("ix_backtests_date_start", "backtests", ["date_start"])
+    op.create_index("ix_backtests_date_end", "backtests", ["date_end"])
+    op.create_index("ix_backtests_created_at", "backtests", ["created_at"])
+
+    # -- Tables with foreign keys --
+
+    op.create_table(
+        "backtest_rebalances",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("backtest_id", sa.UUID(), nullable=False),
+        sa.Column("date", sa.Date(), nullable=False),
+        sa.Column("balance", sa.Float(), nullable=False),
+        sa.Column("profit_pct", sa.Float(), nullable=False),
+        sa.Column("profit", sa.Float(), nullable=False),
+        sa.Column("baseline_profit_pct", sa.Float(), nullable=False),
+        sa.Column("baseline_profit", sa.Float(), nullable=False),
+        sa.Column("baseline_balance", sa.Float(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["backtest_id"], ["backtests.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_backtest_rebalances_id", "backtest_rebalances", ["id"])
+    op.create_index(
+        "ix_backtest_rebalances_backtest_id",
+        "backtest_rebalances",
+        ["backtest_id"],
+    )
+    op.create_index("ix_backtest_rebalances_date", "backtest_rebalances", ["date"])
+
+    op.create_table(
+        "backtest_jobs",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("config_json", sa.Text(), nullable=False),
+        sa.Column("backtest_id", sa.UUID(), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("started_at", sa.DateTime(), nullable=True),
+        sa.Column("completed_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["backtest_id"], ["backtests.id"], ondelete="SET NULL"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_backtest_jobs_id", "backtest_jobs", ["id"])
+    op.create_index("ix_backtest_jobs_status", "backtest_jobs", ["status"])
+    op.create_index("ix_backtest_jobs_created_at", "backtest_jobs", ["created_at"])
+
+    op.create_table(
+        "backtest_investments",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("backtest_rebalance_id", sa.UUID(), nullable=False),
+        sa.Column("symbol", sa.String(), nullable=False),
+        sa.Column("position", sa.Float(), nullable=False),
+        sa.Column("buy_price", sa.Float(), nullable=False),
+        sa.Column("buy_date", sa.Date(), nullable=False),
+        sa.Column("sell_price", sa.Float(), nullable=False),
+        sa.Column("sell_date", sa.Date(), nullable=False),
+        sa.Column("profit_pct", sa.Float(), nullable=False),
+        sa.Column("profit", sa.Float(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["backtest_rebalance_id"],
+            ["backtest_rebalances.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_backtest_investments_id", "backtest_investments", ["id"])
+    op.create_index(
+        "ix_backtest_investments_backtest_rebalance_id",
+        "backtest_investments",
+        ["backtest_rebalance_id"],
+    )
+    op.create_index("ix_backtest_investments_symbol", "backtest_investments", ["symbol"])
+
+
+def downgrade() -> None:
+    """Drop all tables."""
+    op.drop_table("backtest_investments")
+    op.drop_table("backtest_jobs")
+    op.drop_table("backtest_rebalances")
+    op.drop_table("backtests")
+    op.drop_table("stock_indicators")
+    op.drop_table("stock_price_metadata")
+    op.drop_table("stock_prices")
+    op.drop_table("constituent_metadata")
+    op.drop_table("constituent_changes")

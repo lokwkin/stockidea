@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, memo } from "react"
+import { Link } from "react-router-dom"
 import { ArrowUp, ArrowDown } from "lucide-react"
 import {
   Table,
@@ -11,24 +12,25 @@ import {
 import { COLUMNS } from "@/config/columns"
 import { cn } from "@/lib/utils"
 import type {
-  StockMetrics,
+  StockIndicators,
   SortConfig,
   ColumnConfig,
 } from "@/types/stock"
 
 interface StockTableProps {
-  data: StockMetrics[]
+  data: StockIndicators[]
   highlightedSymbol?: string
+  visibleColumns?: Set<string>
 }
 
 function getCellValue(
-  stock: StockMetrics,
+  stock: StockIndicators,
   column: ColumnConfig
 ): number | string {
-  return stock[column.key as keyof StockMetrics]
+  return stock[column.key as keyof StockIndicators]
 }
 
-function getSortValue(stock: StockMetrics, column: ColumnConfig): number | string {
+function getSortValue(stock: StockIndicators, column: ColumnConfig): number | string {
   return getCellValue(stock, column) as number | string
 }
 
@@ -73,7 +75,12 @@ function getValueColor(value: number, type: string, columnKey = ""): string {
   return ""
 }
 
-export const StockTable = memo(function StockTable({ data, highlightedSymbol }: StockTableProps) {
+export const StockTable = memo(function StockTable({ data, highlightedSymbol, visibleColumns }: StockTableProps) {
+  const displayColumns = useMemo(() => {
+    if (!visibleColumns) return COLUMNS
+    return COLUMNS.filter((c) => visibleColumns.has(c.key))
+  }, [visibleColumns])
+
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     column: null,
     direction: null,
@@ -82,10 +89,10 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
   const handleSort = useCallback((columnKey: string) => {
     setSortConfig((prev): SortConfig => {
       if (prev.column === columnKey) {
-        if (prev.direction === "asc") return { column: columnKey as keyof StockMetrics, direction: "desc" }
+        if (prev.direction === "asc") return { column: columnKey as keyof StockIndicators, direction: "desc" }
         if (prev.direction === "desc") return { column: null, direction: null }
       }
-      return { column: columnKey as keyof StockMetrics, direction: "asc" }
+      return { column: columnKey as keyof StockIndicators, direction: "asc" }
     })
   }, [])
 
@@ -94,7 +101,7 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
 
     // Apply sorting
     if (sortConfig.column && sortConfig.direction) {
-      const column = COLUMNS.find((c) => c.key === sortConfig.column)
+      const column = displayColumns.find((c) => c.key === sortConfig.column)
       if (column) {
         result.sort((a, b) => {
           const aVal = getSortValue(a, column)
@@ -115,20 +122,20 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
     }
 
     return result
-  }, [data, sortConfig])
+  }, [data, sortConfig, displayColumns])
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       {/* Table */}
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="border-b-border hover:bg-transparent">
-              {COLUMNS.map((column) => (
+              {displayColumns.map((column) => (
                 <TableHead
                   key={column.key}
                   onClick={() => handleSort(column.key)}
-                  className="cursor-pointer select-none whitespace-nowrap bg-muted/30 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="cursor-pointer select-none whitespace-nowrap bg-muted/50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                 >
                   <div className="flex items-center gap-1">
                     {column.displayName}
@@ -156,7 +163,7 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
                   highlightedSymbol === stock.symbol && "bg-primary/10 ring-2 ring-primary"
                 )}
               >
-                {COLUMNS.map((column) => {
+                {displayColumns.map((column) => {
                   const value = getCellValue(stock, column)
 
                   if (column.type === "string") {
@@ -165,7 +172,12 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
                         key={column.key}
                         className="px-4 py-3 font-semibold text-primary"
                       >
-                        {value as string}
+                        <Link
+                          to={`/chart/${value as string}`}
+                          className="hover:underline"
+                        >
+                          {value as string}
+                        </Link>
                       </TableCell>
                     )
                   }
@@ -175,7 +187,7 @@ export const StockTable = memo(function StockTable({ data, highlightedSymbol }: 
                     <TableCell
                       key={column.key}
                       className={cn(
-                        "px-4 py-3 font-mono text-sm",
+                        "px-4 py-3 font-mono tabular-nums text-sm",
                         getValueColor(numValue, column.type, column.key)
                       )}
                     >
