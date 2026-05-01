@@ -1,8 +1,9 @@
 from datetime import datetime, date
 import enum
+from typing import Literal
 import uuid as _uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class StockIndex(enum.Enum):
@@ -33,6 +34,7 @@ class StockPrice(BaseModel):
     symbol: str
     date: date
     adj_close: float
+    low: float | None = None
     volume: int | None = None
 
 
@@ -170,6 +172,48 @@ class BacktestScores(BaseModel):
     total_rebalances: int
 
 
+SUPPORTED_STOP_LOSS_MA_PERIODS = (20, 50, 100, 200)
+
+
+class StopLossConfig(BaseModel):
+    """Per-position stop loss configuration.
+
+    Stop level is **static at buy time** — computed once when the position is
+    opened and held fixed for the entire holding period.
+
+    Note: An alternative would be a *trailing/rolling* stop where the MA is
+    recomputed every day during the hold so the stop level moves with the MA
+    (acts like a trailing MA stop). Not implemented here.
+    """
+
+    type: Literal["percent", "ma_percent"]
+    # percent:    % below buy price (e.g. 5 ⇒ stop = buy_price * 0.95).
+    # ma_percent: % of MA at buy time (e.g. 95 ⇒ stop = 0.95 * MA{n}_at_buy).
+    value: float
+    # Required for type=="ma_percent"; one of SUPPORTED_STOP_LOSS_MA_PERIODS.
+    ma_period: int | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "StopLossConfig":
+        if self.value <= 0:
+            raise ValueError("stop_loss.value must be > 0")
+        if self.type == "ma_percent":
+            if self.ma_period is None:
+                raise ValueError(
+                    "stop_loss.ma_period is required when type='ma_percent'"
+                )
+            if self.ma_period not in SUPPORTED_STOP_LOSS_MA_PERIODS:
+                raise ValueError(
+                    f"stop_loss.ma_period must be one of {SUPPORTED_STOP_LOSS_MA_PERIODS}"
+                )
+        else:
+            if self.ma_period is not None:
+                raise ValueError(
+                    "stop_loss.ma_period only allowed when type='ma_percent'"
+                )
+        return self
+
+
 class BacktestConfig(BaseModel):
     max_stocks: int
     rebalance_interval_weeks: int
@@ -179,6 +223,7 @@ class BacktestConfig(BaseModel):
     ranking: str = "change_pct_13w / return_std_52w"
     index: StockIndex
     involved_keys: list[str] = []
+    stop_loss: StopLossConfig | None = None
 
 
 class BacktestResult(BaseModel):

@@ -41,6 +41,7 @@ from stockidea.types import (
     BacktestRebalance,
     BacktestConfig,
     BacktestScores,
+    StopLossConfig,
     StockIndicators,
     StrategyCreate,
     StrategySummary,
@@ -445,6 +446,7 @@ async def get_prices_by_date_range(
             DBStockPrice.symbol,
             DBStockPrice.date,
             DBStockPrice.adj_close,
+            DBStockPrice.low,
             DBStockPrice.volume,
         )
         .where(DBStockPrice.symbol == symbol.upper())
@@ -459,6 +461,7 @@ async def get_prices_by_date_range(
             symbol=price.symbol,
             date=price.date,
             adj_close=price.adj_close,
+            low=price.low,
             volume=price.volume,
         )
         for price in prices
@@ -536,6 +539,9 @@ async def save_backtest_result(
         rule=result.backtest_config.rule,
         ranking=result.backtest_config.ranking,
         index=result.backtest_config.index.value,
+        stop_loss_json=result.backtest_config.stop_loss.model_dump_json()
+        if result.backtest_config.stop_loss
+        else None,
         scores_json=result.scores.model_dump_json() if result.scores else None,
     )
     db_session.add(backtest)
@@ -686,6 +692,9 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
             else BacktestConfig.model_fields["ranking"].default,
             index=StockIndex(db_backtest.index),
             involved_keys=extract_involved_keys(db_backtest.rule),
+            stop_loss=StopLossConfig.model_validate_json(db_backtest.stop_loss_json)
+            if db_backtest.stop_loss_json
+            else None,
         ),
         scores=BacktestScores.model_validate_json(db_backtest.scores_json)
         if db_backtest.scores_json

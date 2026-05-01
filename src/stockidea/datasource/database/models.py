@@ -249,6 +249,8 @@ class DBBacktest(Base):
     rule: Mapped[str] = mapped_column(Text, nullable=False)
     ranking: Mapped[str | None] = mapped_column(Text, nullable=True)
     index: Mapped[str] = mapped_column(String, nullable=False)
+    # Per-position stop loss config (JSON-serialized StopLossConfig); NULL = no stop loss
+    stop_loss_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Scores stored inline
     scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

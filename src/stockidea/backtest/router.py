@@ -64,6 +64,7 @@ async def create_backtest(backtest_config: BacktestConfig) -> dict:
             baseline_index=StockIndex.SP500,
             ranking_func=ranking_func,
             ranking_raw=backtest_config.ranking,
+            stop_loss=backtest_config.stop_loss,
         )
         result = await backtester.backtest()
         backtest_id = await queries.save_backtest_result(db_session, result)

@@ -110,7 +110,10 @@ optional `ranking` parameter. Use this to calibrate thresholds before running a 
 If too few stocks match (<5), loosen constraints; if too many (>50), tighten them.
 - `run_backtest` — Run a full backtest with a rule and optional `ranking` expression. \
 Returns scores AND diagnostics: worst/best periods, cash periods (where no stocks matched), \
-stock selection stats (unique stocks, top-held symbols).
+stock selection stats (unique stocks, top-held symbols). \
+Optionally pass `stop_loss` to set a per-position stop fixed at buy time: \
+`{"type": "percent", "value": 5}` exits 5%% below buy price; \
+`{"type": "ma_percent", "value": 95, "ma_period": 50}` exits below 95%% of MA50 at buy.
 - `write_strategy_notes` — Save your reasoning, iteration history, and observations as markdown. \
 Use this to track what you've tried and what worked.
 - `read_strategy_notes` — Read back previous strategy notes or list all saved strategies.
