@@ -53,6 +53,23 @@ export const COLUMN_NAMES: Record<string, string> = {
   // Momentum shape
   acceleration_pct_13w: "Accel 13W",
   from_high_pct_4w: "From 4W High",
+  // Moving average structure
+  price_vs_ma20_pct: "Px vs MA20",
+  price_vs_ma50_pct: "Px vs MA50",
+  price_vs_ma100_pct: "Px vs MA100",
+  price_vs_ma200_pct: "Px vs MA200",
+  ma50_vs_ma200_pct: "MA50/MA200",
+  // Relative strength vs benchmark
+  rs_pct_4w: "RS 4W",
+  rs_pct_13w: "RS 13W",
+  rs_pct_26w: "RS 26W",
+  rs_pct_52w: "RS 52W",
+  // Market regime
+  mkt_index_above_ma50: "Idx>MA50",
+  mkt_index_above_ma200: "Idx>MA200",
+  mkt_index_drawdown_pct_52w: "Idx DD 52W",
+  mkt_breadth_pct_above_ma50: "Bredth>MA50",
+  mkt_breadth_pct_above_ma200: "Bredth>MA200",
 
   // BacktestInvestment columns
   position: "Position",

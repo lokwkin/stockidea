@@ -43,12 +43,15 @@ uv run python -m stockidea.cli fetch-prices --index SP500
 
 ### Indicators
 
-Computes per-stock performance indicators from raw price data. Daily prices are aggregated into Friday-close weekly series, then indicators are calculated across four categories:
+Computes per-stock performance indicators from raw price data. Daily prices are aggregated into Friday-close weekly series, then indicators are calculated across multiple categories:
 
 - **Returns** -- Point-to-point percentage changes at various horizons (1w, 2w, 4w, 13w, 26w, 52w)
 - **Trend** -- Linear and log regression slopes with R² values across windowed horizons (13w, 26w, 52w)
 - **Volatility** -- Maximum upward/downward swings at 1w, 2w, and 4w windows; weekly-return standard deviation (incl. downside-only)
 - **Stability** -- Maximum drawdown across windows (4w, 13w, 26w, 52w), fraction of positive weeks across windows
+- **Moving average structure** -- Price vs 20/50/100/200-day SMAs and the 50/200 cross ratio (golden/death cross territory)
+- **Relative strength** -- Stock return minus benchmark index return across 4w/13w/26w/52w windows
+- **Market regime** -- Benchmark index position vs 50d/200d MA, index 52w drawdown, and constituent breadth above 50d/200d MA (one regime per `(index, date)`, merged onto each stock)
 
 Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`). Rules support comparison operators and `AND`/`OR` logic.
 
@@ -195,6 +198,28 @@ All indicator fields follow a `<metric>_<unit>_<window>` naming convention so yo
 | **Momentum shape** | |
 | `acceleration_pct_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
 | `from_high_pct_4w` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
+| **Moving average structure** | |
+| `price_vs_ma20_pct` | Current price vs 20-day SMA in % (positive = above MA) |
+| `price_vs_ma50_pct` | Current price vs 50-day SMA in % |
+| `price_vs_ma100_pct` | Current price vs 100-day SMA in % |
+| `price_vs_ma200_pct` | Current price vs 200-day SMA in % |
+| `ma50_vs_ma200_pct` | 50-day SMA vs 200-day SMA in % (positive = golden-cross territory) |
+| **Relative strength vs benchmark index** | |
+| `rs_pct_4w` | 4-week return minus benchmark index 4-week return (% point difference) |
+| `rs_pct_13w` | 13-week return minus benchmark index 13-week return |
+| `rs_pct_26w` | 26-week return minus benchmark index 26-week return |
+| `rs_pct_52w` | 52-week return minus benchmark index 52-week return |
+| **Market regime (per benchmark index, merged onto each stock)** | |
+| `mkt_index_above_ma50` | 1 if benchmark index is above its 50-day SMA, else 0 |
+| `mkt_index_above_ma200` | 1 if benchmark index is above its 200-day SMA, else 0 (classic bull/bear gate) |
+| `mkt_index_drawdown_pct_52w` | Benchmark index current drawdown from its 52-week peak (positive %) |
+| `mkt_breadth_pct_above_ma50` | Fraction of index constituents above their 50-day SMA (0.0--1.0) |
+| `mkt_breadth_pct_above_ma200` | Fraction of index constituents above their 200-day SMA (0.0--1.0) |
+
+Example regime-aware rule:
+```
+mkt_index_above_ma200 == 1 AND price_vs_ma50_pct > 0 AND rs_pct_13w > 5
+```
 
 ## Backtest Scores
 

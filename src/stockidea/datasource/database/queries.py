@@ -16,6 +16,9 @@ from sqlalchemy.orm import selectinload
 from stockidea.datasource.database.models import (
     DBStockPrice,
     DBStockPriceMetadata,
+    DBStockSma,
+    DBStockSmaMetadata,
+    DBMarketRegime,
     DBConstituentChange,
     DBConstituentMetadata,
     DBBacktest,
@@ -30,6 +33,7 @@ from stockidea.types import (
     ConstituentChange,
     FMPAdjustedStockPrice,
     FMPLightPrice,
+    MarketRegime,
     StockIndex,
     StockPrice,
     BacktestResult,
@@ -147,6 +151,205 @@ async def is_data_fresh(db_session: AsyncSession, symbol: str) -> bool:
     if fetched_at is None:
         return False
     return fetched_at > datetime.now() - timedelta(days=1)
+
+
+# =============================================================================
+# Stock SMA Queries
+# =============================================================================
+
+
+async def save_stock_sma(
+    db_session: AsyncSession,
+    symbol: str,
+    period_length: int,
+    rows: list[tuple[date, float]],
+) -> None:
+    """Upsert daily SMA values for a (symbol, period_length)."""
+    upper_symbol = symbol.upper()
+    now = datetime.now()
+    if rows:
+        logger.info(f"Saving {len(rows)} SMA({period_length}) rows for {upper_symbol}")
+
+    for sma_date, sma_value in rows:
+        stmt = pg_insert(DBStockSma).values(
+            symbol=upper_symbol,
+            period_length=period_length,
+            date=sma_date,
+            sma_value=sma_value,
+            created_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "period_length", "date"],
+            set_={
+                "sma_value": stmt.excluded.sma_value,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        await db_session.execute(stmt)
+
+    meta_stmt = pg_insert(DBStockSmaMetadata).values(
+        symbol=upper_symbol, period_length=period_length, fetched_at=now
+    )
+    meta_stmt = meta_stmt.on_conflict_do_update(
+        index_elements=["symbol", "period_length"],
+        set_={"fetched_at": meta_stmt.excluded.fetched_at},
+    )
+    await db_session.execute(meta_stmt)
+    await db_session.commit()
+
+
+async def get_sma_fetched_at(
+    db_session: AsyncSession, symbol: str, period_length: int
+) -> datetime | None:
+    stmt = select(DBStockSmaMetadata.fetched_at).where(
+        DBStockSmaMetadata.symbol == symbol.upper(),
+        DBStockSmaMetadata.period_length == period_length,
+    )
+    result = await db_session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def is_sma_fresh(
+    db_session: AsyncSession, symbol: str, period_length: int
+) -> bool:
+    fetched_at = await get_sma_fetched_at(db_session, symbol, period_length)
+    if fetched_at is None:
+        return False
+    return fetched_at > datetime.now() - timedelta(days=1)
+
+
+async def load_stock_sma(
+    db_session: AsyncSession,
+    symbol: str,
+    period_length: int,
+    from_date: date,
+    to_date: date,
+) -> list[tuple[date, float]]:
+    """Load cached SMA values for a (symbol, period_length) over a date range, ascending."""
+    stmt = (
+        select(DBStockSma.date, DBStockSma.sma_value)
+        .where(DBStockSma.symbol == symbol.upper())
+        .where(DBStockSma.period_length == period_length)
+        .where(DBStockSma.date >= from_date)
+        .where(DBStockSma.date <= to_date)
+        .order_by(DBStockSma.date.asc())
+    )
+    result = await db_session.execute(stmt)
+    return [(row.date, row.sma_value) for row in result.all()]
+
+
+async def get_sma_at_or_before(
+    db_session: AsyncSession,
+    symbol: str,
+    period_length: int,
+    target_date: date,
+) -> float | None:
+    """Return the most recent SMA value on/before target_date (or None if missing)."""
+    stmt = (
+        select(DBStockSma.sma_value)
+        .where(DBStockSma.symbol == symbol.upper())
+        .where(DBStockSma.period_length == period_length)
+        .where(DBStockSma.date <= target_date)
+        .order_by(DBStockSma.date.desc())
+        .limit(1)
+    )
+    result = await db_session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_latest_sma_per_symbol(
+    db_session: AsyncSession,
+    symbols: list[str],
+    period_length: int,
+    target_date: date,
+) -> dict[str, float]:
+    """Batch: for each symbol, return latest SMA value on/before target_date."""
+    if not symbols:
+        return {}
+    upper_symbols = [s.upper() for s in symbols]
+    stmt = (
+        select(DBStockSma.symbol, DBStockSma.sma_value)
+        .distinct(DBStockSma.symbol)
+        .where(DBStockSma.symbol.in_(upper_symbols))
+        .where(DBStockSma.period_length == period_length)
+        .where(DBStockSma.date <= target_date)
+        .order_by(DBStockSma.symbol, DBStockSma.date.desc())
+    )
+    result = await db_session.execute(stmt)
+    return {row.symbol: row.sma_value for row in result.all()}
+
+
+async def get_latest_price_per_symbol(
+    db_session: AsyncSession, symbols: list[str], target_date: date
+) -> dict[str, float]:
+    """Batch: for each symbol, return latest adj_close on/before target_date."""
+    if not symbols:
+        return {}
+    upper_symbols = [s.upper() for s in symbols]
+    stmt = (
+        select(DBStockPrice.symbol, DBStockPrice.adj_close)
+        .distinct(DBStockPrice.symbol)
+        .where(DBStockPrice.symbol.in_(upper_symbols))
+        .where(DBStockPrice.date <= target_date)
+        .order_by(DBStockPrice.symbol, DBStockPrice.date.desc())
+    )
+    result = await db_session.execute(stmt)
+    return {row.symbol: row.adj_close for row in result.all()}
+
+
+# =============================================================================
+# Market Regime Queries
+# =============================================================================
+
+
+async def save_market_regime(db_session: AsyncSession, regime: MarketRegime) -> None:
+    """Upsert a market regime row for an (index, date)."""
+    stmt = pg_insert(DBMarketRegime).values(
+        index=regime.index.value,
+        date=regime.date,
+        index_above_ma50=regime.index_above_ma50,
+        index_above_ma200=regime.index_above_ma200,
+        index_drawdown_pct_52w=regime.index_drawdown_pct_52w,
+        breadth_pct_above_ma50=regime.breadth_pct_above_ma50,
+        breadth_pct_above_ma200=regime.breadth_pct_above_ma200,
+        created_at=datetime.now(),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["index", "date"],
+        set_={
+            "index_above_ma50": stmt.excluded.index_above_ma50,
+            "index_above_ma200": stmt.excluded.index_above_ma200,
+            "index_drawdown_pct_52w": stmt.excluded.index_drawdown_pct_52w,
+            "breadth_pct_above_ma50": stmt.excluded.breadth_pct_above_ma50,
+            "breadth_pct_above_ma200": stmt.excluded.breadth_pct_above_ma200,
+            "created_at": stmt.excluded.created_at,
+        },
+    )
+    await db_session.execute(stmt)
+    await db_session.commit()
+
+
+async def load_market_regime(
+    db_session: AsyncSession, index: StockIndex, target_date: date
+) -> MarketRegime | None:
+    stmt = (
+        select(DBMarketRegime)
+        .where(DBMarketRegime.index == index.value)
+        .where(DBMarketRegime.date == target_date)
+    )
+    result = await db_session.execute(stmt)
+    record = result.scalar_one_or_none()
+    if record is None:
+        return None
+    return MarketRegime(
+        index=StockIndex(record.index),
+        date=record.date,
+        index_above_ma50=record.index_above_ma50,
+        index_above_ma200=record.index_above_ma200,
+        index_drawdown_pct_52w=record.index_drawdown_pct_52w,
+        breadth_pct_above_ma50=record.breadth_pct_above_ma50,
+        breadth_pct_above_ma200=record.breadth_pct_above_ma200,
+    )
 
 
 # =============================================================================
@@ -500,10 +703,19 @@ async def save_stock_indicators(
     stock_indicators: StockIndicators,
     indicators_date: date,
 ) -> None:
-    """Save stock indicators to the database for a specific date."""
+    """Save stock indicators to the database for a specific date.
+
+    Market regime (`mkt_*`) fields are merged at read time and are NOT persisted on
+    the per-stock row — strip them here.
+    """
     logger.info(f"Saving indicators for {stock_indicators.symbol} on {indicators_date}")
 
-    record = DBStockIndicators(**stock_indicators.model_dump())
+    payload = {
+        k: v
+        for k, v in stock_indicators.model_dump().items()
+        if not k.startswith("mkt_")
+    }
+    record = DBStockIndicators(**payload)
     await db_session.merge(record)
 
     await db_session.commit()
@@ -570,6 +782,15 @@ async def load_stock_indicators(
         pct_weeks_positive_52w=record.pct_weeks_positive_52w,
         acceleration_pct_13w=record.acceleration_pct_13w,
         from_high_pct_4w=record.from_high_pct_4w,
+        price_vs_ma20_pct=record.price_vs_ma20_pct,
+        price_vs_ma50_pct=record.price_vs_ma50_pct,
+        price_vs_ma100_pct=record.price_vs_ma100_pct,
+        price_vs_ma200_pct=record.price_vs_ma200_pct,
+        ma50_vs_ma200_pct=record.ma50_vs_ma200_pct,
+        rs_pct_4w=record.rs_pct_4w,
+        rs_pct_13w=record.rs_pct_13w,
+        rs_pct_26w=record.rs_pct_26w,
+        rs_pct_52w=record.rs_pct_52w,
     )
 
 

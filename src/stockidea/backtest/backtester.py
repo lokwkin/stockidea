@@ -73,6 +73,7 @@ class Backtester:
             indicators_date=today,
             back_period_weeks=52,
             compute_if_not_exists=True,
+            from_index=self.from_index,
         )
 
         filtered_stocks = indicators_service.apply_rule(

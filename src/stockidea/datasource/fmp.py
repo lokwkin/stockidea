@@ -64,6 +64,40 @@ async def fetch_stock_prices(
         return sorted(prices, key=lambda x: x.date, reverse=True)
 
 
+async def fetch_sma(
+    symbol: str, period_length: int, from_date: date | None = None
+) -> list[tuple[date, float]]:
+    """Fetch daily SMA series from FMP. Returns list of (date, sma) sorted ascending."""
+    api_key = _require_api_key()
+    from_str = from_date.isoformat() if from_date else "2011-01-01"
+    logger.info(f"Fetching SMA({period_length}) for {symbol.upper()} from {from_str}")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{FMP_BASE_URL}/stable/technical-indicators/sma",
+            params={
+                "symbol": symbol.upper(),
+                "periodLength": period_length,
+                "timeframe": "1day",
+                "apikey": api_key,
+                "from": from_str,
+            },
+        )
+        response.raise_for_status()
+        data: list[dict] = response.json()
+
+    rows: list[tuple[date, float]] = []
+    for item in data:
+        raw_date = item.get("date")
+        raw_sma = item.get("sma")
+        if not raw_date or raw_sma is None:
+            continue
+        # FMP returns timestamps like "2024-01-15 00:00:00" — take the date part
+        date_str = raw_date.split(" ")[0]
+        rows.append((date.fromisoformat(date_str), float(raw_sma)))
+    rows.sort(key=lambda r: r[0])
+    return rows
+
+
 async def fetch_company_profile(symbol: str) -> dict | None:
     """Fetch FMP company profile (description, industry, sector, ceo, etc.). Returns None if unknown."""
     api_key = _require_api_key()

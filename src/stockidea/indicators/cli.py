@@ -26,6 +26,7 @@ async def _compute(date: datetime, index: StockIndex) -> list[StockIndicators]:
             indicators_date=date,
             back_period_weeks=52,
             compute_if_not_exists=True,
+            from_index=index,
         )
         return stock_indicators_batch
 
