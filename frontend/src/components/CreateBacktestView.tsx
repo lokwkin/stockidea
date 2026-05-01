@@ -81,6 +81,17 @@ const RULE_VARIABLES: { name: string; type: string; description: string }[] = [
   { name: "mkt_breadth_pct_above_ma200", type: "float", description: "Fraction of constituents above their 200-day SMA (0.0–1.0)" },
 ]
 
+type StopLossMode = "none" | "percent" | "ma_percent"
+type StopLossMaPeriod = 20 | 50 | 100 | 200
+
+const STOP_LOSS_MA_PERIODS: StopLossMaPeriod[] = [20, 50, 100, 200]
+
+interface StopLossPayload {
+  type: "percent" | "ma_percent"
+  value: number
+  ma_period?: number
+}
+
 interface BacktestRequest {
   max_stocks: number
   rebalance_interval_weeks: number
@@ -89,6 +100,7 @@ interface BacktestRequest {
   rule: string
   ranking: string
   index: StockIndex
+  stop_loss?: StopLossPayload | null
 }
 
 export function CreateBacktestView() {
@@ -138,6 +150,10 @@ export function CreateBacktestView() {
     const val = searchParams.get("date_end")
     return val || ""
   })
+  // Stop-loss state. Stop level is fixed at buy time (static; not trailing).
+  const [stopLossMode, setStopLossMode] = useState<StopLossMode>("none")
+  const [stopLossValueInput, setStopLossValueInput] = useState<string>("")
+  const [stopLossMaPeriod, setStopLossMaPeriod] = useState<StopLossMaPeriod>(50)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage
@@ -179,6 +195,18 @@ export function CreateBacktestView() {
       const dateStart = `${formData.date_start}T00:00:00`
       const dateEnd = `${formData.date_end}T00:00:00`
 
+      let stopLoss: StopLossPayload | null = null
+      if (stopLossMode !== "none") {
+        const value = parseFloat(stopLossValueInput)
+        if (isNaN(value) || value <= 0) {
+          throw new Error("Stop loss value must be a positive number")
+        }
+        stopLoss =
+          stopLossMode === "percent"
+            ? { type: "percent", value }
+            : { type: "ma_percent", value, ma_period: stopLossMaPeriod }
+      }
+
       const response = await fetch("/api/backtest", {
         method: "POST",
         headers: {
@@ -190,6 +218,7 @@ export function CreateBacktestView() {
           rebalance_interval_weeks: rebalanceInterval,
           date_start: dateStart,
           date_end: dateEnd,
+          stop_loss: stopLoss,
         }),
       })
 
@@ -475,6 +504,74 @@ export function CreateBacktestView() {
             />
             <p className="text-xs text-muted-foreground">
               Expression used to rank stocks that pass the rule. Higher value = higher priority.
+            </p>
+          </div>
+
+          {/* Stop Loss */}
+          <div className="space-y-2">
+            <label htmlFor="stop_loss_mode" className="text-sm font-medium">
+              Stop Loss
+            </label>
+            <Select
+              value={stopLossMode}
+              onValueChange={(value) => setStopLossMode(value as StopLossMode)}
+            >
+              <SelectTrigger id="stop_loss_mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="percent">% below buy price</SelectItem>
+                <SelectItem value="ma_percent">% of MA at buy time</SelectItem>
+              </SelectContent>
+            </Select>
+            {stopLossMode !== "none" && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {stopLossMode === "ma_percent" && (
+                  <div className="space-y-1">
+                    <label htmlFor="stop_loss_ma_period" className="text-xs font-medium">
+                      MA period
+                    </label>
+                    <Select
+                      value={stopLossMaPeriod.toString()}
+                      onValueChange={(v) =>
+                        setStopLossMaPeriod(parseInt(v) as StopLossMaPeriod)
+                      }
+                    >
+                      <SelectTrigger id="stop_loss_ma_period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STOP_LOSS_MA_PERIODS.map((p) => (
+                          <SelectItem key={p} value={p.toString()}>
+                            MA{p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label htmlFor="stop_loss_value" className="text-xs font-medium">
+                    {stopLossMode === "percent"
+                      ? "% below buy price"
+                      : "% of MA at buy"}
+                  </label>
+                  <Input
+                    id="stop_loss_value"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={stopLossValueInput}
+                    onChange={(e) => setStopLossValueInput(e.target.value)}
+                    placeholder={stopLossMode === "percent" ? "5" : "95"}
+                  />
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Per-position stop loss, fixed at buy time. Triggers when daily low ≤
+              stop price; sells at the stop price.
             </p>
           </div>
 

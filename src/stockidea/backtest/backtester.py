@@ -17,6 +17,7 @@ from stockidea.types import (
     BacktestResult,
     StockIndex,
     StockIndicators,
+    StopLossConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class Backtester:
     rule_raw: str
     ranking_func: Callable[[StockIndicators], float] | None
     ranking_raw: str
+    stop_loss: StopLossConfig | None
 
     def __init__(
         self,
@@ -47,6 +49,7 @@ class Backtester:
         baseline_index: StockIndex,
         ranking_func: Callable[[StockIndicators], float],
         ranking_raw: str,
+        stop_loss: StopLossConfig | None = None,
     ):
         self.db_session = db_session
         self.initial_balance = 10000
@@ -60,6 +63,7 @@ class Backtester:
         self.baseline_index = baseline_index
         self.ranking_func = ranking_func
         self.ranking_raw = ranking_raw
+        self.stop_loss = stop_loss
 
     async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
         # Get the symbols of the constituent
@@ -89,6 +93,57 @@ class Backtester:
 
         return selected_stocks
 
+    async def _resolve_stop_price(
+        self, symbol: str, buy_date: datetime, buy_price: float
+    ) -> float | None:
+        """Compute the stop-loss price for a position, fixed at buy time.
+
+        Returns None if no stop loss is configured, or if the required MA value is
+        unavailable (in which case the position is held without a stop).
+        """
+        if self.stop_loss is None:
+            return None
+        if self.stop_loss.type == "percent":
+            return buy_price * (1 - self.stop_loss.value / 100)
+        # type == "ma_percent"
+        assert self.stop_loss.ma_period is not None
+        ma_value = await datasource_service.get_sma_at_date(
+            self.db_session, symbol, self.stop_loss.ma_period, buy_date.date()
+        )
+        if ma_value is None or ma_value <= 0:
+            logger.warning(
+                f"SMA({self.stop_loss.ma_period}) unavailable for {symbol} on "
+                f"{buy_date.date()}; skipping stop loss for this position"
+            )
+            return None
+        return ma_value * (self.stop_loss.value / 100)
+
+    async def _find_stop_loss_exit(
+        self,
+        symbol: str,
+        buy_date: datetime,
+        sell_date: datetime,
+        stop_price: float,
+    ) -> tuple[datetime, float] | None:
+        """Scan daily prices between buy and sell. Return (exit_date, exit_price) on
+        the first day whose intra-day low breaches `stop_price`, else None.
+
+        Per assumption: when `low <= stop_price`, the position fills at exactly
+        `stop_price` (no intra-day data, so this is a simplification).
+        """
+        prices = await datasource_service.get_stock_price_history(
+            self.db_session,
+            symbol,
+            from_date=(buy_date + timedelta(days=1)).date(),
+            to_date=sell_date.date(),
+        )
+        # get_stock_price_history returns desc-ordered; iterate ascending.
+        for price in sorted(prices, key=lambda p: p.date):
+            if price.low is not None and price.low <= stop_price:
+                exit_dt = datetime.combine(price.date, buy_date.time())
+                return exit_dt, stop_price
+        return None
+
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> tuple[BacktestInvestment, float]:
@@ -98,11 +153,28 @@ class Backtester:
                 self.db_session, symbol, buy_date.date(), nearest=True
             )
         ).adj_close
+
+        # Default exit: hold to next rebalance.
         sell_stock_price = (
             await datasource_service.get_stock_price_at_date(
                 self.db_session, symbol, sell_date.date(), nearest=True
             )
         ).adj_close
+        actual_sell_date = sell_date
+
+        stop_price = await self._resolve_stop_price(symbol, buy_date, buy_stock_price)
+        if stop_price is not None:
+            exit_info = await self._find_stop_loss_exit(
+                symbol, buy_date, sell_date, stop_price
+            )
+            if exit_info is not None:
+                actual_sell_date, sell_stock_price = exit_info
+                logger.info(
+                    f"Stop loss hit for {symbol}: exit {actual_sell_date.date()} "
+                    f"@ {sell_stock_price:.2f} (stop={stop_price:.2f}, "
+                    f"buy={buy_stock_price:.2f})"
+                )
+
         position = floor(amount / buy_stock_price)
         uninvested = amount - position * buy_stock_price
         profit = (sell_stock_price - buy_stock_price) * position
@@ -114,7 +186,7 @@ class Backtester:
             buy_price=buy_stock_price,
             buy_date=buy_date,
             sell_price=sell_stock_price,
-            sell_date=sell_date,
+            sell_date=actual_sell_date,
             profit_pct=profit_pct,
             profit=profit,
         )
@@ -245,6 +317,7 @@ class Backtester:
                 ranking=self.ranking_raw,
                 index=self.from_index,
                 involved_keys=extract_involved_keys(self.rule_raw),
+                stop_loss=self.stop_loss,
             ),
             scores=scores,
         )

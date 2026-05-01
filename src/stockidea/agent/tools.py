@@ -17,7 +17,13 @@ from stockidea.rule_engine import (
     extract_involved_keys,
 )
 from stockidea.backtest.backtester import Backtester
-from stockidea.types import StockIndex, StockIndicators, BacktestResult
+from stockidea.types import (
+    BacktestResult,
+    StockIndex,
+    StockIndicators,
+    StopLossConfig,
+    SUPPORTED_STOP_LOSS_MA_PERIODS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +81,33 @@ _BACKTEST_PARAMS = {
                 "'change_pct_26w / max_drawdown_pct_52w', "
                 "'slope_pct_13w * r_squared_13w + 0.5 * change_pct_4w'"
             ),
+        },
+        "stop_loss": {
+            "type": "object",
+            "description": (
+                "Optional per-position stop loss, fixed at buy time. Omit for no stop. "
+                "type='percent' exits when price falls value%% below buy price. "
+                "type='ma_percent' exits when price falls below value%% of MA{ma_period} at buy time."
+            ),
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["percent", "ma_percent"],
+                },
+                "value": {
+                    "type": "number",
+                    "description": (
+                        "For 'percent': % below buy price (e.g. 5 = -5%%). "
+                        "For 'ma_percent': % of MA at buy time (e.g. 95 = stop at 0.95*MA)."
+                    ),
+                },
+                "ma_period": {
+                    "type": "integer",
+                    "enum": list(SUPPORTED_STOP_LOSS_MA_PERIODS),
+                    "description": "Required when type='ma_percent'.",
+                },
+            },
+            "required": ["type", "value"],
         },
     },
     "required": ["rule", "date_start", "date_end"],
@@ -380,6 +413,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
     rebalance_interval_weeks = params.get("rebalance_interval_weeks", 2)
     index_str = params.get("index", "SP500")
     ranking_str = params.get("ranking", DEFAULT_RANKING)
+    stop_loss_param = params.get("stop_loss")
 
     try:
         rule_func = compile_rule(rule_str)
@@ -398,6 +432,13 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
         return json.dumps({"error": "Invalid date format. Use YYYY-MM-DD."})
 
     stock_index = StockIndex(index_str)
+
+    stop_loss: StopLossConfig | None = None
+    if stop_loss_param is not None:
+        try:
+            stop_loss = StopLossConfig.model_validate(stop_loss_param)
+        except Exception as e:
+            return json.dumps({"error": f"Invalid stop_loss: {e}"})
 
     try:
         from uuid import UUID as _UUID
@@ -419,6 +460,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
                 baseline_index=StockIndex.SP500,
                 ranking_func=ranking_func,
                 ranking_raw=ranking_str,
+                stop_loss=stop_loss,
             )
             result: BacktestResult = await backtester.backtest()
 
