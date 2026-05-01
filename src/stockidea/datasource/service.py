@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_INDEXES = [StockIndex.SP500, StockIndex.NASDAQ]
 
+# SMA windows tracked per stock and per index for MA structure / regime computation.
+SMA_PERIODS_STOCK = [20, 50, 100, 200]
+SMA_PERIODS_INDEX = [50, 200]
+
 
 # =============================================================================
 # Ensure-fresh helpers
@@ -43,6 +47,58 @@ async def ensure_index_prices_fresh(
         from_date = last_fetched.date() if last_fetched else None
         fmp_prices = await fmp.fetch_index_prices(index, from_date=from_date)
         await queries.save_index_prices(db_session, index, fmp_prices)
+
+
+async def ensure_stock_sma_fresh(
+    db_session: AsyncSession, symbol: str, period_length: int
+) -> None:
+    """Ensure cached SMA data for (symbol, period_length) is fresh.
+
+    `symbol` accepts both stock tickers and FMP index symbols (e.g. "^GSPC").
+    """
+    if not await queries.is_sma_fresh(db_session, symbol, period_length):
+        last_fetched = await queries.get_sma_fetched_at(
+            db_session, symbol, period_length
+        )
+        from_date = last_fetched.date() if last_fetched else None
+        rows = await fmp.fetch_sma(symbol, period_length, from_date=from_date)
+        await queries.save_stock_sma(db_session, symbol, period_length, rows)
+
+
+def index_fmp_symbol(index: StockIndex) -> str:
+    """Return the FMP symbol used to query SMA for a stock index."""
+    match index:
+        case StockIndex.SP500:
+            return "^GSPC"
+        case StockIndex.NASDAQ:
+            return "^IXIC"
+
+
+async def get_sma_series(
+    db_session: AsyncSession,
+    symbol: str,
+    period_length: int,
+    from_date: date,
+    to_date: date,
+) -> list[tuple[date, float]]:
+    """Return cached SMA values for a (symbol, period_length) over a date range."""
+    await ensure_stock_sma_fresh(db_session, symbol, period_length)
+    return await queries.load_stock_sma(
+        db_session, symbol, period_length, from_date, to_date
+    )
+
+
+async def get_sma_at_date(
+    db_session: AsyncSession,
+    symbol: str,
+    period_length: int,
+    target_date: date,
+) -> float | None:
+    """Return SMA value on or just before target_date, or None if not available."""
+    await ensure_stock_sma_fresh(db_session, symbol, period_length)
+    return await queries.get_sma_at_or_before(
+        db_session, symbol, period_length, target_date
+    )
 
 
 async def ensure_constituent_data_fresh(
@@ -155,7 +211,7 @@ async def fetch_stock_prices(
     db_session: AsyncSession,
     index: StockIndex,
 ) -> dict[str, int]:
-    """Fetch stock prices for all current constituents of an index sequentially.
+    """Fetch stock prices and SMA series for all current constituents of an index.
 
     Skips symbols that are already fresh (fetched today).
 
@@ -170,19 +226,23 @@ async def fetch_stock_prices(
 
     for symbol in symbols:
         try:
-            if await queries.is_data_fresh(db_session, symbol):
+            if not await queries.is_data_fresh(db_session, symbol):
+                last_fetched = await queries.get_last_fetched_at(db_session, symbol)
+                from_date = last_fetched.date() if last_fetched else None
+                fmp_prices = await fmp.fetch_stock_prices(symbol, from_date=from_date)
+                await queries.save_stock_prices(db_session, symbol, fmp_prices)
+                results[symbol] = len(fmp_prices)
+                logger.info(f"Fetched {len(fmp_prices)} prices for {symbol}")
+            else:
                 results[symbol] = 0
-                continue
-            last_fetched = await queries.get_last_fetched_at(db_session, symbol)
-            from_date = last_fetched.date() if last_fetched else None
-            fmp_prices = await fmp.fetch_stock_prices(symbol, from_date=from_date)
-            await queries.save_stock_prices(db_session, symbol, fmp_prices)
-            results[symbol] = len(fmp_prices)
-            logger.info(f"Fetched {len(fmp_prices)} prices for {symbol}")
+
+            for period_length in SMA_PERIODS_STOCK:
+                if not await queries.is_sma_fresh(db_session, symbol, period_length):
+                    await ensure_stock_sma_fresh(db_session, symbol, period_length)
         except Exception as e:
-            logger.error(f"Failed to fetch prices for {symbol}: {e}")
+            logger.error(f"Failed to fetch prices/SMA for {symbol}: {e}")
             await db_session.rollback()
-            results[symbol] = 0
+            results.setdefault(symbol, 0)
 
     fetched_count = sum(1 for v in results.values() if v > 0)
     skipped_count = sum(1 for v in results.values() if v == 0)
@@ -215,7 +275,25 @@ async def refresh_all() -> None:
             else:
                 logger.info(f"Index prices for {index.value} are fresh")
 
-            # 3. Refresh stock prices for all constituents
+            # 3. Refresh index SMAs (used for market regime computation)
+            fmp_symbol = index_fmp_symbol(index)
+            for period_length in SMA_PERIODS_INDEX:
+                if not await queries.is_sma_fresh(
+                    db_session, fmp_symbol, period_length
+                ):
+                    logger.info(f"Refreshing SMA({period_length}) for {fmp_symbol}")
+                    try:
+                        await ensure_stock_sma_fresh(
+                            db_session, fmp_symbol, period_length
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to refresh SMA({period_length}) for "
+                            f"{fmp_symbol}: {e}"
+                        )
+                        await db_session.rollback()
+
+            # 4. Refresh stock prices + SMAs for all constituents
             logger.info(f"Checking stock prices for {index.value} constituents...")
             await fetch_stock_prices(db_session, index)
 

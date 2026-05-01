@@ -79,6 +79,58 @@ class DBStockPriceMetadata(Base):
         )
 
 
+class DBStockSma(Base):
+    __tablename__ = "stock_sma"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    period_length: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    sma_value: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<StockSma(symbol={self.symbol}, period={self.period_length}, "
+            f"date={self.date})>"
+        )
+
+
+class DBStockSmaMetadata(Base):
+    __tablename__ = "stock_sma_metadata"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    period_length: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<StockSmaMetadata(symbol={self.symbol}, period={self.period_length}, "
+            f"fetched_at={self.fetched_at})>"
+        )
+
+
+class DBMarketRegime(Base):
+    __tablename__ = "market_regime"
+
+    index: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    index_above_ma50: Mapped[int] = mapped_column(Integer, nullable=False)
+    index_above_ma200: Mapped[int] = mapped_column(Integer, nullable=False)
+    index_drawdown_pct_52w: Mapped[float] = mapped_column(Float, nullable=False)
+    breadth_pct_above_ma50: Mapped[float] = mapped_column(Float, nullable=False)
+    breadth_pct_above_ma200: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.now
+    )
+
+    def __repr__(self) -> str:
+        return f"<MarketRegime(index={self.index}, date={self.date})>"
+
+
 class DBConstituentChange(Base):
     __tablename__ = "constituent_changes"
 
@@ -331,6 +383,27 @@ class DBStockIndicators(Base):
     # Momentum shape
     acceleration_pct_13w: Mapped[float] = mapped_column(Float, nullable=False)
     from_high_pct_4w: Mapped[float] = mapped_column(Float, nullable=False)
+    # Moving average structure (price relative to SMA, %)
+    price_vs_ma20_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    price_vs_ma50_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    price_vs_ma100_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    price_vs_ma200_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    ma50_vs_ma200_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    # Relative strength vs benchmark index (% point difference)
+    rs_pct_4w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
+    rs_pct_13w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
+    rs_pct_26w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
+    rs_pct_52w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now
     )

@@ -27,7 +27,8 @@ function getCellValue(
   stock: StockIndicators,
   column: ColumnConfig
 ): number | string {
-  return stock[column.key as keyof StockIndicators]
+  const value = stock[column.key as keyof StockIndicators]
+  return value ?? 0
 }
 
 function getSortValue(stock: StockIndicators, column: ColumnConfig): number | string {

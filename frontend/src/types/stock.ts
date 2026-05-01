@@ -49,6 +49,23 @@ export interface StockIndicators {
   // Momentum shape
   acceleration_pct_13w: number;
   from_high_pct_4w: number;
+  // Moving average structure (price vs SMA, %)
+  price_vs_ma20_pct?: number;
+  price_vs_ma50_pct?: number;
+  price_vs_ma100_pct?: number;
+  price_vs_ma200_pct?: number;
+  ma50_vs_ma200_pct?: number;
+  // Relative strength vs benchmark index (% point difference)
+  rs_pct_4w?: number;
+  rs_pct_13w?: number;
+  rs_pct_26w?: number;
+  rs_pct_52w?: number;
+  // Market regime (merged at read time, same per index/date)
+  mkt_index_above_ma50?: number;
+  mkt_index_above_ma200?: number;
+  mkt_index_drawdown_pct_52w?: number;
+  mkt_breadth_pct_above_ma50?: number;
+  mkt_breadth_pct_above_ma200?: number;
 }
 
 // API response type

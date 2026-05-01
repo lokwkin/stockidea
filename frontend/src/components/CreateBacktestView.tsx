@@ -62,6 +62,23 @@ const RULE_VARIABLES: { name: string; type: string; description: string }[] = [
   { name: "pct_weeks_positive_52w", type: "float", description: "Fraction of up-weeks over last 52 weeks (0.0–1.0). Use > 0.55 for stable risers." },
   { name: "acceleration_pct_13w", type: "float", description: "Slope of 4-week change over last 13 weeks (momentum acceleration)" },
   { name: "from_high_pct_4w", type: "float", description: "Distance below 4-week high (negative %); closer to 0 = near recent high" },
+  // Moving average structure (price vs SMA, %)
+  { name: "price_vs_ma20_pct", type: "float", description: "Current price vs 20-day SMA in % ((price/MA - 1) * 100). >0 = above MA" },
+  { name: "price_vs_ma50_pct", type: "float", description: "Current price vs 50-day SMA in %. >0 = above MA (medium-term uptrend)" },
+  { name: "price_vs_ma100_pct", type: "float", description: "Current price vs 100-day SMA in %. >0 = above MA" },
+  { name: "price_vs_ma200_pct", type: "float", description: "Current price vs 200-day SMA in %. >0 = above MA (classic long-term uptrend)" },
+  { name: "ma50_vs_ma200_pct", type: "float", description: "50-day SMA vs 200-day SMA in %. >0 = golden-cross territory" },
+  // Relative strength vs benchmark (% point difference)
+  { name: "rs_pct_4w", type: "float", description: "4-week return minus benchmark 4-week return. Positive = outperforming" },
+  { name: "rs_pct_13w", type: "float", description: "13-week return minus benchmark 13-week return. Identifies leaders vs market beta" },
+  { name: "rs_pct_26w", type: "float", description: "26-week return minus benchmark 26-week return" },
+  { name: "rs_pct_52w", type: "float", description: "52-week return minus benchmark 52-week return" },
+  // Market regime (whole-market context, same per index/date)
+  { name: "mkt_index_above_ma50", type: "int", description: "1 if benchmark index is above its 50-day SMA, else 0" },
+  { name: "mkt_index_above_ma200", type: "int", description: "1 if benchmark index is above its 200-day SMA, else 0. Classic bull/bear gate" },
+  { name: "mkt_index_drawdown_pct_52w", type: "float", description: "Current drawdown of benchmark from its 52-week peak (positive %)" },
+  { name: "mkt_breadth_pct_above_ma50", type: "float", description: "Fraction of constituents above their 50-day SMA (0.0–1.0)" },
+  { name: "mkt_breadth_pct_above_ma200", type: "float", description: "Fraction of constituents above their 200-day SMA (0.0–1.0)" },
 ]
 
 interface BacktestRequest {

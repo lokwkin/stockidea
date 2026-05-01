@@ -118,9 +118,23 @@ def _tail(seq: list, n: int) -> list:
 
 
 def compute_stock_indicators(
-    symbol: str, prices: list[StockPrice], from_date: datetime, to_date: datetime
+    symbol: str,
+    prices: list[StockPrice],
+    from_date: datetime,
+    to_date: datetime,
+    sma_lookup: dict[int, float | None] | None = None,
+    benchmark_changes_pct: dict[int, float] | None = None,
 ) -> StockIndicators:
-    """Analyze stock price data and return weekly indicators."""
+    """Analyze stock price data and return weekly indicators.
+
+    Optional inputs:
+        sma_lookup: pre-loaded SMA value at `to_date` for each window
+            (20/50/100/200). Missing/None windows produce 0.0 for the related fields.
+        benchmark_changes_pct: pre-computed `change_pct_Nw` for the benchmark index
+            (windows 4/13/26/52). Missing windows produce 0.0 for the related fields.
+    """
+    sma_lookup = sma_lookup or {}
+    benchmark_changes_pct = benchmark_changes_pct or {}
     if not prices:
         raise ValueError(
             f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
@@ -227,6 +241,35 @@ def compute_stock_indicators(
         float(((current_price - high_4w) / high_4w) * 100) if high_4w != 0 else 0.0
     )
 
+    # Moving average structure: price relative to SMA windows
+    def _price_vs_ma(period: int) -> float:
+        sma_value = sma_lookup.get(period)
+        if sma_value is None or sma_value == 0:
+            return 0.0
+        return float((current_price / sma_value - 1) * 100)
+
+    price_vs_ma20_pct = _price_vs_ma(20)
+    price_vs_ma50_pct = _price_vs_ma(50)
+    price_vs_ma100_pct = _price_vs_ma(100)
+    price_vs_ma200_pct = _price_vs_ma(200)
+
+    sma50 = sma_lookup.get(50)
+    sma200 = sma_lookup.get(200)
+    if sma50 is not None and sma200 is not None and sma200 != 0:
+        ma50_vs_ma200_pct = float((sma50 / sma200 - 1) * 100)
+    else:
+        ma50_vs_ma200_pct = 0.0
+
+    # Relative strength vs benchmark (% point difference of N-week change)
+    stock_change_pct_4w = _pt_change(weekly_data, 4)
+    stock_change_pct_13w = _pt_change(weekly_data, 13)
+    stock_change_pct_26w = _pt_change(weekly_data, 26)
+    stock_change_pct_52w = _pt_change(weekly_data, 52)
+    rs_pct_4w = stock_change_pct_4w - benchmark_changes_pct.get(4, 0.0)
+    rs_pct_13w = stock_change_pct_13w - benchmark_changes_pct.get(13, 0.0)
+    rs_pct_26w = stock_change_pct_26w - benchmark_changes_pct.get(26, 0.0)
+    rs_pct_52w = stock_change_pct_52w - benchmark_changes_pct.get(52, 0.0)
+
     return StockIndicators(
         symbol=symbol,
         date=to_date.date(),
@@ -277,6 +320,17 @@ def compute_stock_indicators(
         # Momentum shape
         acceleration_pct_13w=acceleration_pct_13w,
         from_high_pct_4w=from_high_pct_4w,
+        # MA structure
+        price_vs_ma20_pct=price_vs_ma20_pct,
+        price_vs_ma50_pct=price_vs_ma50_pct,
+        price_vs_ma100_pct=price_vs_ma100_pct,
+        price_vs_ma200_pct=price_vs_ma200_pct,
+        ma50_vs_ma200_pct=ma50_vs_ma200_pct,
+        # Relative strength vs benchmark
+        rs_pct_4w=rs_pct_4w,
+        rs_pct_13w=rs_pct_13w,
+        rs_pct_26w=rs_pct_26w,
+        rs_pct_52w=rs_pct_52w,
     )
 
 
