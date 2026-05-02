@@ -127,16 +127,16 @@ async def get_stock_sma(
         else to_dt - timedelta(weeks=156)
     )
 
+    # Sequential — a single AsyncSession can't service concurrent statements.
+    series_per_period: list[list[tuple]] = []
     async with conn.get_db_session() as db_session:
         try:
-            series_per_period = await asyncio.gather(
-                *[
-                    datasource_service.get_sma_series(
+            for p in period_list:
+                series_per_period.append(
+                    await datasource_service.get_sma_series(
                         db_session, symbol.upper(), p, from_dt, to_dt
                     )
-                    for p in period_list
-                ]
-            )
+                )
         except Exception as e:
             raise HTTPException(
                 status_code=500,
