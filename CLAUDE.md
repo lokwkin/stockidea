@@ -37,7 +37,7 @@ uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-
 
 # Backend — AI Agent (creates a strategy in DB, runs 5-10 backtest iterations)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
-uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI instead of Claude
+uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.5   # use OpenAI instead of Claude
 
 # Backend — Telegram bot (long-running; reads STRATEGY_* + TELEGRAM_* env vars)
 uv run python -m stockidea.cli telegram run-bot

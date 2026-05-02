@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const MODEL_OPTIONS = [
   { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
   { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-  { value: "gpt-5.4", label: "GPT-5.4" },
+  { value: "gpt-5.5", label: "GPT-5.5" },
 ]
 
 export function CreateStrategyView() {
