@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
-from stockidea.helper import next_monday
+from stockidea.helper import next_monday, previous_friday
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.backtest.scoring import compute_scores
 from stockidea.types import (
@@ -66,7 +66,13 @@ class Backtester:
         self.stop_loss = stop_loss
 
     async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
-        # Get the symbols of the constituent
+        # Compute indicators from data through last Friday's close. With the
+        # Monday-open buy convention, the rebalance Monday's prices aren't
+        # known when the picks are made — using `today` would be lookahead
+        # (the weekly aggregator would bucket Monday's close as the latest
+        # observation).
+        cutoff = previous_friday(today)
+
         symbols = await datasource_service.get_constituent_at(
             self.db_session, self.from_index, today.date()
         )
@@ -74,7 +80,7 @@ class Backtester:
         stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
             self.db_session,
             symbols=symbols,
-            indicators_date=today,
+            indicators_date=cutoff,
             back_period_weeks=52,
             compute_if_not_exists=True,
         )
@@ -146,25 +152,35 @@ class Backtester:
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> tuple[BacktestInvestment, float]:
-        """Invest in a stock. Returns (investment, uninvested_cash)."""
-        buy_stock_price = (
-            await datasource_service.get_stock_price_at_date(
-                self.db_session, symbol, buy_date.date(), nearest=True
-            )
-        ).adj_close
+        """Invest in a stock — buy at Monday open, sell at the prior Friday's close.
 
-        # Default exit: hold to next rebalance.
+        `buy_date` is the rebalance Monday; `sell_date` is the next rebalance
+        Monday. Real fill is the open of `buy_date` and the close of
+        previous_friday(sell_date), with the weekend gap before the next buy.
+        Returns (investment, uninvested_cash).
+        """
+        buy_price_data = await datasource_service.get_stock_price_at_date(
+            self.db_session, symbol, buy_date.date(), nearest=True
+        )
+        if buy_price_data.open is None:
+            raise ValueError(
+                f"No open price for {symbol} on/near {buy_date.date()} — "
+                "cannot apply Monday-open buy convention"
+            )
+        buy_stock_price = buy_price_data.open
+
+        friday_sell_date = previous_friday(sell_date)
         sell_stock_price = (
             await datasource_service.get_stock_price_at_date(
-                self.db_session, symbol, sell_date.date(), nearest=True
+                self.db_session, symbol, friday_sell_date.date(), nearest=True
             )
         ).adj_close
-        actual_sell_date = sell_date
+        actual_sell_date = friday_sell_date
 
         stop_price = await self._resolve_stop_price(symbol, buy_date, buy_stock_price)
         if stop_price is not None:
             exit_info = await self._find_stop_loss_exit(
-                symbol, buy_date, sell_date, stop_price
+                symbol, buy_date, friday_sell_date, stop_price
             )
             if exit_info is not None:
                 actual_sell_date, sell_stock_price = exit_info
@@ -195,15 +211,28 @@ class Backtester:
     async def invest_baseline(
         self, buy_date: datetime, sell_date: datetime, amount: float
     ) -> BacktestInvestment:
-        """Invest in the baseline index using fractional shares (benchmark, not real trade)."""
-        baseline_index_price_buy = (
-            await datasource_service.get_index_price_at_date(
-                self.db_session, self.baseline_index, buy_date.date(), nearest=True
+        """Invest in the baseline index using fractional shares.
+
+        Uses the same Monday-open / Friday-close convention as `invest()` for
+        apples-to-apples comparison.
+        """
+        buy_price_data = await datasource_service.get_index_price_at_date(
+            self.db_session, self.baseline_index, buy_date.date(), nearest=True
+        )
+        if buy_price_data.open is None:
+            raise ValueError(
+                f"No open price for {self.baseline_index.value} on/near "
+                f"{buy_date.date()} — cannot apply Monday-open buy convention"
             )
-        ).adj_close
+        baseline_index_price_buy = buy_price_data.open
+
+        friday_sell_date = previous_friday(sell_date)
         baseline_index_price_sell = (
             await datasource_service.get_index_price_at_date(
-                self.db_session, self.baseline_index, sell_date.date(), nearest=True
+                self.db_session,
+                self.baseline_index,
+                friday_sell_date.date(),
+                nearest=True,
             )
         ).adj_close
         # Use fractional shares for baseline — it's a benchmark, not a real trade
@@ -221,7 +250,7 @@ class Backtester:
             buy_price=baseline_index_price_buy,
             buy_date=buy_date,
             sell_price=baseline_index_price_sell,
-            sell_date=sell_date,
+            sell_date=friday_sell_date,
             profit_pct=profit_pct,
             profit=profit,
         )
@@ -240,6 +269,16 @@ class Backtester:
             # Allow partial final period — clamp to date_end
             if end_date > self.date_end:
                 end_date = self.date_end
+
+            # Skip if the (clamped) period is too short to span at least one
+            # Mon-open → Fri-close holding window — previous_friday(end_date)
+            # would land on or before date_iter and produce an invalid sell.
+            if previous_friday(end_date) <= date_iter:
+                logger.info(
+                    f"Skipping final period {date_iter.date()} → {end_date.date()}: "
+                    "too short for a Mon-open / Fri-close holding window"
+                )
+                break
 
             logger.info(
                 f"=========== Rebalance on {date_iter.date()} (Balance: {balance}), hold til: {end_date.date()} ==========="

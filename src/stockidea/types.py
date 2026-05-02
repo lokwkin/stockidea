@@ -11,13 +11,6 @@ class StockIndex(enum.Enum):
     NASDAQ = "NASDAQ"
 
 
-class FMPLightPrice(BaseModel):
-    symbol: str
-    date: str
-    price: float
-    volume: int
-
-
 class FMPAdjustedStockPrice(BaseModel):
     symbol: str
     date: str
@@ -28,12 +21,25 @@ class FMPAdjustedStockPrice(BaseModel):
     volume: int
 
 
+class FMPFullPrice(BaseModel):
+    """Unadjusted OHLCV from FMP /historical-price-eod/full (works for indices)."""
+
+    symbol: str
+    date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
 class StockPrice(BaseModel):
     """Represents a single day's stock price data."""
 
     symbol: str
     date: date
     adj_close: float
+    open: float | None = None
     low: float | None = None
     volume: int | None = None
 

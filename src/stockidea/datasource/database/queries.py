@@ -31,7 +31,7 @@ from stockidea.rule_engine import extract_involved_keys
 from stockidea.types import (
     ConstituentChange,
     FMPAdjustedStockPrice,
-    FMPLightPrice,
+    FMPFullPrice,
     StockIndex,
     StockPrice,
     BacktestResult,
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 async def save_index_prices(
-    db_session: AsyncSession, index: StockIndex, prices: list[FMPLightPrice]
+    db_session: AsyncSession, index: StockIndex, prices: list[FMPFullPrice]
 ) -> None:
     now = datetime.now()
     logger.info(f"Saving {len(prices)} index prices for {index.value}")
@@ -61,14 +61,20 @@ async def save_index_prices(
         stmt = pg_insert(DBStockPrice).values(
             symbol=index.value,
             date=date.fromisoformat(p.date),
-            adj_close=p.price,
-            close=p.price,
+            open=p.open,
+            high=p.high,
+            low=p.low,
+            close=p.close,
+            adj_close=p.close,
             volume=p.volume,
             created_at=now,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["symbol", "date"],
             set_={
+                "open": stmt.excluded.open,
+                "high": stmt.excluded.high,
+                "low": stmt.excluded.low,
                 "close": stmt.excluded.close,
                 "adj_close": stmt.excluded.adj_close,
                 "volume": stmt.excluded.volume,
@@ -278,22 +284,26 @@ async def get_latest_sma_per_symbol(
     return {row.symbol: row.sma_value for row in result.all()}
 
 
-async def get_latest_price_per_symbol(
+async def get_latest_price_date_per_symbol(
     db_session: AsyncSession, symbols: list[str], target_date: date
-) -> dict[str, float]:
-    """Batch: for each symbol, return latest adj_close on/before target_date."""
+) -> dict[str, date]:
+    """Batch: for each symbol, return the latest price date on/before target_date.
+
+    Symbols with no prices on/before the target date are absent from the dict.
+    Used to detect delisted/stale tickers in the constituent list.
+    """
     if not symbols:
         return {}
     upper_symbols = [s.upper() for s in symbols]
     stmt = (
-        select(DBStockPrice.symbol, DBStockPrice.adj_close)
+        select(DBStockPrice.symbol, DBStockPrice.date)
         .distinct(DBStockPrice.symbol)
         .where(DBStockPrice.symbol.in_(upper_symbols))
         .where(DBStockPrice.date <= target_date)
         .order_by(DBStockPrice.symbol, DBStockPrice.date.desc())
     )
     result = await db_session.execute(stmt)
-    return {row.symbol: row.adj_close for row in result.all()}
+    return {row.symbol: row.date for row in result.all()}
 
 
 # =============================================================================
@@ -389,6 +399,7 @@ async def get_prices_by_date_range(
             DBStockPrice.symbol,
             DBStockPrice.date,
             DBStockPrice.adj_close,
+            DBStockPrice.open,
             DBStockPrice.low,
             DBStockPrice.volume,
         )
@@ -404,6 +415,7 @@ async def get_prices_by_date_range(
             symbol=price.symbol,
             date=price.date,
             adj_close=price.adj_close,
+            open=price.open,
             low=price.low,
             volume=price.volume,
         )
@@ -419,7 +431,12 @@ async def get_price_by_date(
     If nearest is True, and the price is not found for the given date, return the price for the nearest date before the given date.
     """
     stmt = (
-        select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+        select(
+            DBStockPrice.symbol,
+            DBStockPrice.date,
+            DBStockPrice.adj_close,
+            DBStockPrice.open,
+        )
         .where(DBStockPrice.symbol == symbol.upper())
         .where(DBStockPrice.date == target_date)
         .order_by(DBStockPrice.date.desc())
@@ -428,12 +445,20 @@ async def get_price_by_date(
     price = result.first()  # Returns Row object or None when selecting multiple columns
     if price is not None:
         return StockPrice(
-            symbol=price.symbol, date=price.date, adj_close=price.adj_close
+            symbol=price.symbol,
+            date=price.date,
+            adj_close=price.adj_close,
+            open=price.open,
         )
     if nearest:
         # Find the price of nearest date we have before the target date
         stmt = (
-            select(DBStockPrice.symbol, DBStockPrice.date, DBStockPrice.adj_close)
+            select(
+                DBStockPrice.symbol,
+                DBStockPrice.date,
+                DBStockPrice.adj_close,
+                DBStockPrice.open,
+            )
             .where(DBStockPrice.symbol == symbol.upper())
             .where(DBStockPrice.date < target_date)
             .order_by(DBStockPrice.date.desc())
@@ -445,7 +470,10 @@ async def get_price_by_date(
         )  # Returns Row object or None when selecting multiple columns
         if price is not None:
             return StockPrice(
-                symbol=price.symbol, date=price.date, adj_close=price.adj_close
+                symbol=price.symbol,
+                date=price.date,
+                adj_close=price.adj_close,
+                open=price.open,
             )
 
     raise ValueError(
