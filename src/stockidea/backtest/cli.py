@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime
+from typing import cast
 
 import click
 
@@ -11,7 +12,14 @@ from stockidea.datasource.database.queries import (
     save_backtest_result as save_backtest_to_db,
 )
 from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
-from stockidea.types import StockIndex, StopLossConfig, SUPPORTED_STOP_LOSS_MA_PERIODS
+from stockidea.types import (
+    SellTiming,
+    StockIndex,
+    StopLossConfig,
+    SUPPORTED_STOP_LOSS_MA_PERIODS,
+)
+
+_SELL_TIMING_CHOICES = ("friday_close", "monday_open")
 
 
 @click.group("backtest")
@@ -82,6 +90,15 @@ def backtest_cli():
     f"(e.g. '50:95' = stop at 95%% of MA50_at_buy). PERIOD must be one of "
     f"{list(SUPPORTED_STOP_LOSS_MA_PERIODS)}. Mutually exclusive with --stop-loss-pct.",
 )
+@click.option(
+    "--sell-timing",
+    type=click.Choice(list(_SELL_TIMING_CHOICES)),
+    default="friday_close",
+    show_default=True,
+    help="When to sell at end of holding period: 'friday_close' = previous "
+    "Friday's adjusted close (weekend gap before next buy); 'monday_open' = "
+    "next-rebalance Monday's open (continuous capital, no weekend gap).",
+)
 def backtest(
     max_stocks: int,
     rebalance_interval_weeks: int,
@@ -92,6 +109,7 @@ def backtest(
     ranking: str,
     stop_loss_pct: float | None,
     stop_loss_ma: str | None,
+    sell_timing: str,
 ):
     stock_index = StockIndex(index)
     try:
@@ -146,6 +164,7 @@ def backtest(
     click.echo(f"Rule: {rule}")
     click.echo(f"Ranking: {ranking}")
     click.echo(f"Stock index: {stock_index}")
+    click.echo(f"Sell timing: {sell_timing}")
     if stop_loss is not None:
         click.echo(f"Stop loss: {stop_loss.model_dump()}")
 
@@ -164,6 +183,7 @@ def backtest(
                 ranking_func=ranking_func,
                 ranking_raw=ranking,
                 stop_loss=stop_loss,
+                sell_timing=cast(SellTiming, sell_timing),
             )
             backtest_result = await backtester.backtest()
             backtest_id = await save_backtest_to_db(db_session, backtest_result)

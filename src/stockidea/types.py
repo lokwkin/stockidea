@@ -159,6 +159,14 @@ class BacktestScores(BaseModel):
 SUPPORTED_STOP_LOSS_MA_PERIODS = (20, 50, 100, 200)
 
 
+# When the holding period closes:
+# - "friday_close":  sell at previous_friday(end_date) adjusted close (current default;
+#                    weekend gap before the next Monday-open buy)
+# - "monday_open":   sell at end_date open — the next rebalance Monday's open price
+#                    (no weekend gap; flat continuous capital across rebalances)
+SellTiming = Literal["friday_close", "monday_open"]
+
+
 class StopLossConfig(BaseModel):
     """Per-position stop loss configuration.
 
@@ -208,6 +216,7 @@ class BacktestConfig(BaseModel):
     index: StockIndex
     involved_keys: list[str] = []
     stop_loss: StopLossConfig | None = None
+    sell_timing: SellTiming = "friday_close"
 
 
 class BacktestResult(BaseModel):

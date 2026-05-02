@@ -20,6 +20,7 @@ import {
 import { dateFormat } from "@/lib/utils"
 
 type StockIndex = "SP500" | "NASDAQ"
+type SellTiming = "friday_close" | "monday_open"
 
 const DEFAULT_RANKING = "change_pct_13w / return_std_52w"
 
@@ -90,6 +91,7 @@ interface BacktestRequest {
   ranking: string
   index: StockIndex
   stop_loss?: StopLossPayload | null
+  sell_timing: SellTiming
 }
 
 export function CreateBacktestView() {
@@ -107,6 +109,9 @@ export function CreateBacktestView() {
     const rule = searchParams.get("rule") || ""
     const ranking = searchParams.get("ranking") || DEFAULT_RANKING
     const index = (searchParams.get("index") as StockIndex) || "SP500"
+    const sellTimingParam = searchParams.get("sell_timing")
+    const sellTiming: SellTiming =
+      sellTimingParam === "monday_open" ? "monday_open" : "friday_close"
 
     return {
       max_stocks: maxStocks ? parseInt(maxStocks) : 3,
@@ -116,6 +121,7 @@ export function CreateBacktestView() {
       rule: rule,
       ranking: ranking,
       index: index,
+      sell_timing: sellTiming,
     }
   }
   
@@ -335,6 +341,29 @@ export function CreateBacktestView() {
             </Select>
             <p className="text-xs text-muted-foreground">
               The stock index to use as the universe for stock selection
+            </p>
+          </div>
+
+          {/* Sell Timing */}
+          <div className="space-y-2">
+            <label htmlFor="sell_timing" className="text-sm font-medium">
+              Sell Timing
+            </label>
+            <Select
+              value={formData.sell_timing}
+              onValueChange={(value) => handleChange("sell_timing", value as SellTiming)}
+            >
+              <SelectTrigger id="sell_timing">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="friday_close">Friday close (weekend gap before next buy)</SelectItem>
+                <SelectItem value="monday_open">Next Monday open (continuous capital)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Buy is always at Monday open. Choose whether the holding period closes at
+              the prior Friday's close or rolls into the next rebalance Monday's open.
             </p>
           </div>
 

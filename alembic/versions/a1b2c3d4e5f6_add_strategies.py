@@ -48,9 +48,7 @@ def upgrade() -> None:
         sa.Column("content_json", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("sequence", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["strategy_id"], ["strategies.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["strategy_id"], ["strategies.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_strategy_messages_id", "strategy_messages", ["id"])
