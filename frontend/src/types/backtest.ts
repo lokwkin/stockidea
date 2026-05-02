@@ -22,9 +22,7 @@ export interface BacktestRebalance {
 }
 
 export interface StopLossConfig {
-  type: "percent" | "ma_percent"
-  value: number
-  ma_period?: number | null
+  expression: string
 }
 
 export interface BacktestConfig {

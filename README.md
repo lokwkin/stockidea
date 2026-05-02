@@ -68,7 +68,7 @@ Given a date and a strategy (rule + sort expression), the screener returns the t
 
 This is the same picking + sizing logic that the [Backtest](#backtest) engine drives at every rebalance, exposed as a standalone command for live trading decisions and reused by the [Telegram Bot](#telegram-bot).
 
-Stop-loss is configured via either `--stop-loss-pct` (% below buy price) or `--stop-loss-ma PERIOD:PERCENT` (% of an SMA at buy time, e.g. `50:95` = 95% of the 50-day SMA). The two are mutually exclusive.
+Stop-loss is configured via a single `--stop-loss-expr` evaluated at buy time against `buy_price` plus `sma_20`/`sma_50`/`sma_100`/`sma_200` (the prior trading day's SMA — never lookahead). Examples: `'buy_price * 0.95'` (5% below buy), `'sma_50 * 0.95'` (95% of the 50-day SMA at buy). Stops where the computed price ≥ buy_price are rejected per-position (an above-buy stop would fire immediately).
 
 ```bash
 # Pick top-3 stocks for today (no portfolio sizing)
@@ -79,14 +79,14 @@ uv run python -m stockidea.cli pick \
   -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15' \
   --sort 'slope_pct_52w * r_squared_52w' \
   --max-stocks 5 \
-  --stop-loss-pct 5
+  --stop-loss-expr 'buy_price * 0.95'
 
 # Size against a portfolio — emits target_quantity per pick + buy/sell deltas
 uv run python -m stockidea.cli pick \
   -r 'change_pct_13w > 10' \
   --cash 10000 \
   --holding AAPL:5 --holding MSFT:10 \
-  --stop-loss-ma 50:95
+  --stop-loss-expr 'sma_50 * 0.95'
 ```
 
 ### Backtest
@@ -98,7 +98,7 @@ The backtest engine that evaluates a strategy over a historical date range. At e
 3. Sorts the survivors and selects the top N stocks
 4. Buys equal-weight positions on Monday-open and holds for the rebalance interval, then sells
 
-Each position can be exited early by an optional **stop-loss** (`--stop-loss-pct` for % below buy price, or `--stop-loss-ma PERIOD:PERCENT` for % of an SMA at buy time). End-of-period sells use either the previous Friday's adjusted close or the next-rebalance Monday's open, controlled by `--sell-timing`. The rebalance cadence is set by `--rebalance-interval-weeks` (default 2) and the position count by `--max-stocks` (default 3).
+Each position can be exited early by an optional **stop-loss** (`--stop-loss-expr`, an arithmetic expression evaluated at buy time over `buy_price` + `sma_{20,50,100,200}`). End-of-period sells use either the previous Friday's adjusted close or the next-rebalance Monday's open, controlled by `--sell-timing`. The rebalance cadence is set by `--rebalance-interval-weeks` (default 2) and the position count by `--max-stocks` (default 3).
 
 A per-fill **slippage** friction is applied symmetrically to every buy, period-end sell, and stop-loss exit (default 0.5%, configured via `--slippage-pct`) — the same friction is applied to the baseline so the comparison stays apples-to-apples.
 
@@ -116,7 +116,7 @@ uv run python -m stockidea.cli backtest \
   --sort='change_pct_13w / return_std_52w' \
   --max-stocks 3 \
   --rebalance-interval-weeks 2 \
-  --stop-loss-pct 5 \
+  --stop-loss-expr 'buy_price * 0.95' \
   --sell-timing friday_close \
   --slippage-pct 0.5
 ```
@@ -151,7 +151,7 @@ Required env vars:
 - `TELEGRAM_BOT_TOKEN` -- token from [@BotFather](https://t.me/BotFather)
 - `TELEGRAM_CHAT_ID` -- your own chat id (message `@userinfobot` to look it up)
 - `STRATEGY_RULE` -- the filter expression (required)
-- `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_PCT`, `STRATEGY_STOP_LOSS_MA` -- optional strategy knobs
+- `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_EXPR` -- optional strategy knobs
 
 ```bash
 # Start the bot (long-running; foreground)
@@ -188,7 +188,7 @@ Required variables:
 
 Optional variables (only needed when running the Telegram bot):
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` -- bot credentials and the single authorized chat id
-- `STRATEGY_RULE`, `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_PCT`, `STRATEGY_STOP_LOSS_MA` -- the strategy used by `/pick`
+- `STRATEGY_RULE`, `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_EXPR` -- the strategy used by `/pick`
 
 2. Start PostgreSQL and the backend using docker-compose:
 

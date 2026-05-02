@@ -107,9 +107,12 @@ If too few stocks match (<5), loosen constraints; if too many (>50), tighten the
 - `run_backtest` — Run a full backtest with a rule and optional `sort_expr` expression. \
 Returns scores AND diagnostics: worst/best periods, cash periods (where no stocks matched), \
 stock selection stats (unique stocks, top-held symbols). \
-Optionally pass `stop_loss` to set a per-position stop fixed at buy time: \
-`{"type": "percent", "value": 5}` exits 5%% below buy price; \
-`{"type": "ma_percent", "value": 95, "ma_period": 50}` exits below 95%% of MA50 at buy.
+Optionally pass `stop_loss` as `{"expression": "<arithmetic expression>"}` to set a \
+per-position stop fixed at buy time. Variables: `buy_price`, `sma_20`, `sma_50`, \
+`sma_100`, `sma_200` (prior trading day's SMA — never lookahead). Examples: \
+`{"expression": "buy_price * 0.95"}` (5%% below buy), \
+`{"expression": "sma_50 * 0.95"}` (95%% of MA50 at buy). \
+Stops where the computed price >= buy_price are rejected per-position.
 - `write_strategy_notes` — Save your reasoning, iteration history, and observations as markdown. \
 Use this to track what you've tried and what worked.
 - `read_strategy_notes` — Read back previous strategy notes or list all saved strategies.

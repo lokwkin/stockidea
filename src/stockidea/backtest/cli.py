@@ -16,7 +16,6 @@ from stockidea.types import (
     SellTiming,
     StockIndex,
     StopLossConfig,
-    SUPPORTED_STOP_LOSS_MA_PERIODS,
 )
 
 _SELL_TIMING_CHOICES = ("friday_close", "monday_open")
@@ -78,19 +77,13 @@ def backtest_cli():
     help=f"Sort expression for stock selection (default: '{DEFAULT_SORT}')",
 )
 @click.option(
-    "--stop-loss-pct",
-    type=float,
-    default=None,
-    help="Stop loss as % below buy price (e.g. 5 = exit if price drops 5%%). "
-    "Mutually exclusive with --stop-loss-ma.",
-)
-@click.option(
-    "--stop-loss-ma",
+    "--stop-loss-expr",
     type=str,
     default=None,
-    help="Stop loss as % of an MA at buy time, format 'PERIOD:PERCENT' "
-    f"(e.g. '50:95' = stop at 95%% of MA50_at_buy). PERIOD must be one of "
-    f"{list(SUPPORTED_STOP_LOSS_MA_PERIODS)}. Mutually exclusive with --stop-loss-pct.",
+    help="Stop-loss expression, evaluated at buy time. Vars: 'buy_price', "
+    "'sma_20', 'sma_50', 'sma_100', 'sma_200' (prior trading day). Examples: "
+    "'buy_price * 0.95' (5%% below buy), 'sma_50 * 0.95' (95%% of SMA50 at buy). "
+    "Stops with stop_price >= buy_price are rejected per-position.",
 )
 @click.option(
     "--sell-timing",
@@ -118,8 +111,7 @@ def backtest(
     rule: str,
     index: str,
     sort_expr: str,
-    stop_loss_pct: float | None,
-    stop_loss_ma: str | None,
+    stop_loss_expr: str | None,
     sell_timing: str,
     slippage_pct: float,
 ):
@@ -144,11 +136,13 @@ def backtest(
         raise click.BadParameter(f"Invalid sort expression: {e}")
 
     try:
-        stop_loss = StopLossConfig.parse_options(
-            pct=stop_loss_pct, ma_spec=stop_loss_ma
+        stop_loss = (
+            StopLossConfig(expression=stop_loss_expr)
+            if stop_loss_expr is not None
+            else None
         )
     except ValueError as e:
-        raise click.BadParameter(str(e))
+        raise click.BadParameter(f"Invalid --stop-loss-expr: {e}")
 
     click.echo(
         f"Running backtest from {date_start_parsed.date()} to {date_end_parsed.date()}"

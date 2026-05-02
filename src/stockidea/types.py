@@ -156,9 +156,6 @@ class BacktestScores(BaseModel):
     total_rebalances: int
 
 
-SUPPORTED_STOP_LOSS_MA_PERIODS = (20, 50, 100, 200)
-
-
 # When the holding period closes:
 # - "friday_close":  sell at previous_friday(end_date) adjusted close (current default;
 #                    weekend gap before the next Monday-open buy)
@@ -167,74 +164,35 @@ SUPPORTED_STOP_LOSS_MA_PERIODS = (20, 50, 100, 200)
 SellTiming = Literal["friday_close", "monday_open"]
 
 
+# SMA periods exposed to stop-loss expressions as ``sma_20``, ``sma_50`` etc.
+STOP_LOSS_EXPR_SMA_PERIODS = (20, 50, 100, 200)
+
+
 class StopLossConfig(BaseModel):
     """Per-position stop loss configuration.
 
     Stop level is **static at buy time** — computed once when the position is
     opened and held fixed for the entire holding period.
 
-    Note: An alternative would be a *trailing/rolling* stop where the MA is
-    recomputed every day during the hold so the stop level moves with the MA
-    (acts like a trailing MA stop). Not implemented here.
+    The stop price is computed by evaluating ``expression`` against a context
+    containing ``buy_price`` (Monday-open fill price) and ``sma_{20,50,100,200}``
+    (the prior trading day's SMA — never lookahead). Examples:
+
+      ``buy_price * 0.95``      # 5% below buy price
+      ``sma_50 * 0.95``         # 95% of SMA50 at buy time
+      ``sma_200``               # at SMA200 at buy time
+
+    A computed stop ``>= buy_price`` is rejected (treated as "no stop loss" for
+    that position) since an above-buy stop would fire immediately on day 1.
     """
 
-    type: Literal["percent", "ma_percent"]
-    # percent:    % below buy price (e.g. 5 ⇒ stop = buy_price * 0.95).
-    # ma_percent: % of MA at buy time (e.g. 95 ⇒ stop = 0.95 * MA{n}_at_buy).
-    value: float
-    # Required for type=="ma_percent"; one of SUPPORTED_STOP_LOSS_MA_PERIODS.
-    ma_period: int | None = None
+    expression: str
 
     @model_validator(mode="after")
     def _validate(self) -> "StopLossConfig":
-        if self.value <= 0:
-            raise ValueError("stop_loss.value must be > 0")
-        if self.type == "ma_percent":
-            if self.ma_period is None:
-                raise ValueError(
-                    "stop_loss.ma_period is required when type='ma_percent'"
-                )
-            if self.ma_period not in SUPPORTED_STOP_LOSS_MA_PERIODS:
-                raise ValueError(
-                    f"stop_loss.ma_period must be one of {SUPPORTED_STOP_LOSS_MA_PERIODS}"
-                )
-        else:
-            if self.ma_period is not None:
-                raise ValueError(
-                    "stop_loss.ma_period only allowed when type='ma_percent'"
-                )
+        if not self.expression.strip():
+            raise ValueError("stop_loss.expression must not be empty")
         return self
-
-    @classmethod
-    def parse_options(
-        cls, *, pct: float | None = None, ma_spec: str | None = None
-    ) -> "StopLossConfig | None":
-        """Build a StopLossConfig from CLI / env style options.
-
-        ``pct``  : stop loss as % below buy price (e.g. ``5`` ⇒ 95% of buy).
-        ``ma_spec`` : ``"PERIOD:PERCENT"`` (e.g. ``"50:95"`` ⇒ 95% of SMA50_at_buy).
-        Returns None when both are None. Raises ValueError on conflict / bad format.
-        """
-        if pct is not None and ma_spec is not None:
-            raise ValueError(
-                "stop-loss pct and stop-loss ma options are mutually exclusive"
-            )
-        if pct is not None:
-            return cls(type="percent", value=pct)
-        if ma_spec is not None:
-            try:
-                period_str, pct_str = ma_spec.split(":", 1)
-                return cls(
-                    type="ma_percent",
-                    ma_period=int(period_str),
-                    value=float(pct_str),
-                )
-            except (ValueError, TypeError) as exc:
-                raise ValueError(
-                    f"Invalid stop-loss ma spec '{ma_spec}' "
-                    f"(expected 'PERIOD:PERCENT'): {exc}"
-                )
-        return None
 
 
 class BacktestConfig(BaseModel):

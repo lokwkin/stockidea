@@ -77,7 +77,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 **Shared modules:**
 - `api.py` — Assembles FastAPI app: lifespan (startup data refresh), CORS, includes component routers
 - `cli.py` — Assembles Click CLI: flattens component subcommands into top-level commands
-- `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys, Telegram bot credentials, `STRATEGY_*` knobs for the bot)
+- `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys, Telegram bot credentials, `STRATEGY_*` knobs for the bot, including `STRATEGY_STOP_LOSS_EXPR`)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`
@@ -96,8 +96,8 @@ FastAPI app where backtests execute synchronously inside the request that trigge
   - `service.py` — Fetches/computes indicator batches, applies rules
   - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields including MA-structure (`price_vs_ma{20,50,100,200}_pct`, `ma50_vs_ma200_pct`) from FMP-cached SMA values; ranks by stability score
 - `screener/` — Stock picker on top of `indicators` (no router; CLI + library only)
-  - `cli.py` — `pick` (top-level via flatten loop, so `stockidea pick`); supports `--cash`/`--holding` for portfolio sizing and `--stop-loss-pct`/`--stop-loss-ma` for stop-loss config
-  - `service.py` — `pick(*, indicators_date, buy_date, rule_func, sort_func, max_stocks, from_index, stop_loss, portfolio)` returns a `ScreenerResult` of picks (with optional `target_quantity` + `stop_loss_price`) plus buy/sell deltas when a portfolio is given; `resolve_stop_loss_price()` handles both `percent` and `ma_percent` modes; `default_indicators_cutoff(date)` returns the previous Friday for callers that need "the most recent weekly snapshot relative to today" (used by the bot)
+  - `cli.py` — `pick` (top-level via flatten loop, so `stockidea pick`); supports `--cash`/`--holding` for portfolio sizing and `--stop-loss-expr` for an arithmetic stop-loss expression
+  - `service.py` — `pick(*, indicators_date, buy_date, rule_func, sort_func, max_stocks, from_index, stop_loss, portfolio)` returns a `ScreenerResult` of picks (with optional `target_quantity` + `stop_loss_price`) plus buy/sell deltas when a portfolio is given; `resolve_stop_loss_price()` evaluates `StopLossConfig.expression` via simpleeval against `{buy_price, sma_20, sma_50, sma_100, sma_200}` (prior trading day's SMA — never lookahead) and rejects stops where the computed price ≥ buy_price; `default_indicators_cutoff(date)` returns the previous Friday for callers that need "the most recent weekly snapshot relative to today" (used by the bot)
   - `types.py` — `Holding`, `Portfolio`, `Pick`, `OrderItem`, `ScreenerResult`
 - `backtest/` — Core backtest engine
   - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}` (synchronous — the POST runs the full backtest before returning)

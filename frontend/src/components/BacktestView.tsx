@@ -345,11 +345,7 @@ export function BacktestView() {
                           params.set("sort_expr", config.sort_expr)
                         }
                         if (config.stop_loss) {
-                          params.set("stop_loss_type", config.stop_loss.type)
-                          params.set("stop_loss_value", config.stop_loss.value.toString())
-                          if (config.stop_loss.ma_period != null) {
-                            params.set("stop_loss_ma_period", config.stop_loss.ma_period.toString())
-                          }
+                          params.set("stop_loss_expr", config.stop_loss.expression)
                         }
                         if (config.sell_timing) {
                           params.set("sell_timing", config.sell_timing)
@@ -384,9 +380,9 @@ export function BacktestView() {
                           <span>·</span>
                           <span>
                             Stop loss:{" "}
-                            {backtestData.backtest_config.stop_loss.type === "percent"
-                              ? `${backtestData.backtest_config.stop_loss.value}% below buy`
-                              : `${backtestData.backtest_config.stop_loss.value}% of MA${backtestData.backtest_config.stop_loss.ma_period} at buy`}
+                            <code className="font-mono">
+                              {backtestData.backtest_config.stop_loss.expression}
+                            </code>
                           </span>
                         </>
                       )}

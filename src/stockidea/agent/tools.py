@@ -23,7 +23,6 @@ from stockidea.types import (
     StockIndex,
     StockIndicators,
     StopLossConfig,
-    SUPPORTED_STOP_LOSS_MA_PERIODS,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,28 +86,23 @@ _BACKTEST_PARAMS = {
             "type": "object",
             "description": (
                 "Optional per-position stop loss, fixed at buy time. Omit for no stop. "
-                "type='percent' exits when price falls value%% below buy price. "
-                "type='ma_percent' exits when price falls below value%% of MA{ma_period} at buy time."
+                "Provide a single arithmetic expression evaluated at buy time. "
+                "Variables: 'buy_price' (Monday-open fill price), "
+                "'sma_20'/'sma_50'/'sma_100'/'sma_200' (prior trading day's SMA). "
+                "Examples: 'buy_price * 0.95' (5%% below buy), "
+                "'sma_50 * 0.95' (95%% of SMA50 at buy). "
+                "Stops with computed price >= buy_price are rejected per-position."
             ),
             "properties": {
-                "type": {
+                "expression": {
                     "type": "string",
-                    "enum": ["percent", "ma_percent"],
-                },
-                "value": {
-                    "type": "number",
                     "description": (
-                        "For 'percent': % below buy price (e.g. 5 = -5%%). "
-                        "For 'ma_percent': % of MA at buy time (e.g. 95 = stop at 0.95*MA)."
+                        "Arithmetic expression. E.g. 'buy_price * 0.95', "
+                        "'sma_50 * 0.95', 'sma_200'."
                     ),
                 },
-                "ma_period": {
-                    "type": "integer",
-                    "enum": list(SUPPORTED_STOP_LOSS_MA_PERIODS),
-                    "description": "Required when type='ma_percent'.",
-                },
             },
-            "required": ["type", "value"],
+            "required": ["expression"],
         },
     },
     "required": ["rule", "date_start", "date_end"],
