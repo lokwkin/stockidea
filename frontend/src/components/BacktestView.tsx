@@ -35,6 +35,7 @@ export function BacktestView() {
   const [loadingData, setLoadingData] = useState(false)
   const [ruleCopied, setRuleCopied] = useState(false)
   const [sortCopied, setSortCopied] = useState(false)
+  const [stopLossCopied, setStopLossCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
@@ -177,6 +178,19 @@ export function BacktestView() {
       console.error("Failed to copy sort:", err)
     }
   }, [backtestData?.backtest_config?.sort_expr])
+
+  const handleCopyStopLoss = useCallback(async () => {
+    const expr = backtestData?.backtest_config?.stop_loss?.expression
+    if (!expr) return
+
+    try {
+      await navigator.clipboard.writeText(expr)
+      setStopLossCopied(true)
+      setTimeout(() => setStopLossCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy stop loss:", err)
+    }
+  }, [backtestData?.backtest_config?.stop_loss?.expression])
 
   // Flatten all investments from all rebalances
   const allBacktestInvestments = useMemo(() => {
@@ -345,11 +359,13 @@ export function BacktestView() {
                           params.set("sort_expr", config.sort_expr)
                         }
                         if (config.stop_loss) {
-                          params.set("stop_loss_type", config.stop_loss.type)
-                          params.set("stop_loss_value", config.stop_loss.value.toString())
-                          if (config.stop_loss.ma_period != null) {
-                            params.set("stop_loss_ma_period", config.stop_loss.ma_period.toString())
-                          }
+                          params.set("stop_loss_expr", config.stop_loss.expression)
+                        }
+                        if (config.sell_timing) {
+                          params.set("sell_timing", config.sell_timing)
+                        }
+                        if (config.slippage_pct != null) {
+                          params.set("slippage_pct", config.slippage_pct.toString())
                         }
 
                         navigate(`/backtest/create?${params.toString()}`)
@@ -373,15 +389,10 @@ export function BacktestView() {
                       <span>Max {backtestData.backtest_config.max_stocks}</span>
                       <span>·</span>
                       <span>Rebal {backtestData.backtest_config.rebalance_interval_weeks}w</span>
-                      {backtestData.backtest_config.stop_loss && (
+                      {backtestData.backtest_config.slippage_pct != null && (
                         <>
                           <span>·</span>
-                          <span>
-                            Stop loss:{" "}
-                            {backtestData.backtest_config.stop_loss.type === "percent"
-                              ? `${backtestData.backtest_config.stop_loss.value}% below buy`
-                              : `${backtestData.backtest_config.stop_loss.value}% of MA${backtestData.backtest_config.stop_loss.ma_period} at buy`}
-                          </span>
+                          <span>Slippage {backtestData.backtest_config.slippage_pct}%</span>
                         </>
                       )}
                     </>
@@ -434,6 +445,32 @@ export function BacktestView() {
                         title="Copy sort expression to clipboard"
                       >
                         {sortCopied ? (
+                          <Check className="h-4 w-4 text-positive" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stop Loss */}
+                {backtestData.backtest_config?.stop_loss && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Stop Loss Expression</p>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono">
+                        {backtestData.backtest_config.stop_loss.expression}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleCopyStopLoss}
+                        className="shrink-0"
+                        title="Copy stop loss expression to clipboard"
+                      >
+                        {stopLossCopied ? (
                           <Check className="h-4 w-4 text-positive" />
                         ) : (
                           <Copy className="h-4 w-4" />

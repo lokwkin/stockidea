@@ -24,29 +24,52 @@ def _require_api_key() -> str:
 async def fetch_index_prices(
     index: StockIndex, from_date: date | None = None
 ) -> list[FMPFullPrice]:
-    """Fetch unadjusted OHLCV for an index from FMP's /historical-price-eod/full.
+    """Fetch dividend-adjusted OHLCV for an index proxy ETF from FMP.
 
-    Indices are not on FMP's dividend-adjusted endpoint (returns 402), but the
-    full endpoint works and returns OHLC — needed so we can use Monday open /
-    Friday close prices for the baseline.
+    SP500 is proxied by SPY so we can use the dividend-adjusted endpoint —
+    matching how stock prices are stored (adjOpen/adjHigh/adjLow/adjClose),
+    so backtest baseline returns include reinvested dividends just like the
+    individual-stock returns do.
+
+    NASDAQ still uses the raw ^IXIC index (not adjusted, no dividend reinvestment).
     """
     api_key = _require_api_key()
     match index:
         case StockIndex.SP500:
-            symbol = "^GSPC"
+            symbol = "SPY"
+            endpoint = "historical-price-eod/dividend-adjusted"
         case StockIndex.NASDAQ:
             symbol = "^IXIC"
+            endpoint = "historical-price-eod/full"
         case _:
             raise ValueError(f"Unsupported index: {index}")
     from_str = from_date.isoformat() if from_date else "2011-01-01"
     logger.info(f"Fetching index prices for {index.value} ({symbol}) from {from_str}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
-            f"{FMP_BASE_URL}/stable/historical-price-eod/full",
+            f"{FMP_BASE_URL}/stable/{endpoint}",
             params={"symbol": symbol.upper(), "apikey": api_key, "from": from_str},
         )
         response.raise_for_status()
         data: list[dict] = response.json()
+        if endpoint.endswith("dividend-adjusted"):
+            # Map FMPAdjustedStockPrice fields onto FMPFullPrice for uniform
+            # downstream handling (save_index_prices expects FMPFullPrice).
+            from stockidea.types import FMPAdjustedStockPrice
+
+            adjusted = [FMPAdjustedStockPrice.model_validate(item) for item in data]
+            return [
+                FMPFullPrice(
+                    symbol=p.symbol,
+                    date=p.date,
+                    open=p.adjOpen,
+                    high=p.adjHigh,
+                    low=p.adjLow,
+                    close=p.adjClose,
+                    volume=p.volume,
+                )
+                for p in adjusted
+            ]
         return [FMPFullPrice.model_validate(item) for item in data]
 
 

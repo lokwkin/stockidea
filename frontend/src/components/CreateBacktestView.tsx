@@ -71,15 +71,8 @@ const RULE_VARIABLES: { name: string; type: string; description: string }[] = [
   { name: "ma50_vs_ma200_pct", type: "float", description: "50-day SMA vs 200-day SMA in %. >0 = golden-cross territory" },
 ]
 
-type StopLossMode = "none" | "percent" | "ma_percent"
-type StopLossMaPeriod = 20 | 50 | 100 | 200
-
-const STOP_LOSS_MA_PERIODS: StopLossMaPeriod[] = [20, 50, 100, 200]
-
 interface StopLossPayload {
-  type: "percent" | "ma_percent"
-  value: number
-  ma_period?: number
+  expression: string
 }
 
 interface BacktestRequest {
@@ -92,6 +85,7 @@ interface BacktestRequest {
   index: StockIndex
   stop_loss?: StopLossPayload | null
   sell_timing: SellTiming
+  slippage_pct: number
 }
 
 export function CreateBacktestView() {
@@ -112,6 +106,9 @@ export function CreateBacktestView() {
     const sellTimingParam = searchParams.get("sell_timing")
     const sellTiming: SellTiming =
       sellTimingParam === "monday_open" ? "monday_open" : "friday_close"
+    const slippageRaw = searchParams.get("slippage_pct")
+    const slippageParsed = slippageRaw !== null ? parseFloat(slippageRaw) : NaN
+    const slippage = !isNaN(slippageParsed) && slippageParsed >= 0 ? slippageParsed : 0.5
 
     return {
       max_stocks: maxStocks ? parseInt(maxStocks) : 3,
@@ -122,6 +119,7 @@ export function CreateBacktestView() {
       sort_expr: sortExpr,
       index: index,
       sell_timing: sellTiming,
+      slippage_pct: slippage,
     }
   }
   
@@ -136,6 +134,10 @@ export function CreateBacktestView() {
     const val = searchParams.get("rebalance_interval_weeks")
     return val || formData.rebalance_interval_weeks.toString()
   })
+  const [slippagePctInput, setSlippagePctInput] = useState<string>(() => {
+    const val = searchParams.get("slippage_pct")
+    return val !== null ? val : formData.slippage_pct.toString()
+  })
   // Store raw string values for date inputs to allow free typing
   const [dateStartInput, setDateStartInput] = useState<string>(() => {
     const val = searchParams.get("date_start")
@@ -145,17 +147,10 @@ export function CreateBacktestView() {
     const val = searchParams.get("date_end")
     return val || ""
   })
-  // Stop-loss state. Stop level is fixed at buy time (static; not trailing).
-  const [stopLossMode, setStopLossMode] = useState<StopLossMode>(() => {
-    const t = searchParams.get("stop_loss_type")
-    return t === "percent" || t === "ma_percent" ? t : "none"
-  })
-  const [stopLossValueInput, setStopLossValueInput] = useState<string>(() => {
-    return searchParams.get("stop_loss_value") || ""
-  })
-  const [stopLossMaPeriod, setStopLossMaPeriod] = useState<StopLossMaPeriod>(() => {
-    const p = parseInt(searchParams.get("stop_loss_ma_period") || "", 10)
-    return STOP_LOSS_MA_PERIODS.includes(p as StopLossMaPeriod) ? (p as StopLossMaPeriod) : 50
+  // Stop-loss expression — evaluated at buy time against
+  // {buy_price, sma_20, sma_50, sma_100, sma_200}. Empty = no stop loss.
+  const [stopLossExprInput, setStopLossExprInput] = useState<string>(() => {
+    return searchParams.get("stop_loss_expr") || ""
   })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
@@ -193,21 +188,20 @@ export function CreateBacktestView() {
         throw new Error("Rebalance interval must be greater than 0")
       }
 
+      const slippageParsed = slippagePctInput === "" ? formData.slippage_pct : parseFloat(slippagePctInput)
+      if (isNaN(slippageParsed) || slippageParsed < 0) {
+        throw new Error("Slippage must be a non-negative number")
+      }
+
       // Send naive midnight datetimes (no timezone marker) so backend parses
       // them identically to CLI `datetime.strptime(..., "%Y-%m-%d")`.
       const dateStart = `${formData.date_start}T00:00:00`
       const dateEnd = `${formData.date_end}T00:00:00`
 
       let stopLoss: StopLossPayload | null = null
-      if (stopLossMode !== "none") {
-        const value = parseFloat(stopLossValueInput)
-        if (isNaN(value) || value <= 0) {
-          throw new Error("Stop loss value must be a positive number")
-        }
-        stopLoss =
-          stopLossMode === "percent"
-            ? { type: "percent", value }
-            : { type: "ma_percent", value, ma_period: stopLossMaPeriod }
+      const exprTrimmed = stopLossExprInput.trim()
+      if (exprTrimmed !== "") {
+        stopLoss = { expression: exprTrimmed }
       }
 
       const response = await fetch("/api/backtest", {
@@ -222,6 +216,7 @@ export function CreateBacktestView() {
           date_start: dateStart,
           date_end: dateEnd,
           stop_loss: stopLoss,
+          slippage_pct: slippageParsed,
         }),
       })
 
@@ -364,6 +359,41 @@ export function CreateBacktestView() {
             <p className="text-xs text-muted-foreground">
               Buy is always at Monday open. Choose whether the holding period closes at
               the prior Friday's close or rolls into the next rebalance Monday's open.
+            </p>
+          </div>
+
+          {/* Slippage */}
+          <div className="space-y-2">
+            <label htmlFor="slippage_pct" className="text-sm font-medium">
+              Slippage (% per fill)
+            </label>
+            <Input
+              id="slippage_pct"
+              type="number"
+              min="0"
+              step="any"
+              value={slippagePctInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setSlippagePctInput(value)
+                const numValue = parseFloat(value)
+                if (!isNaN(numValue) && numValue >= 0) {
+                  handleChange("slippage_pct", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                const value = e.target.value
+                if (value === "" || isNaN(parseFloat(value)) || parseFloat(value) < 0) {
+                  setSlippagePctInput("0.5")
+                  handleChange("slippage_pct", 0.5)
+                }
+              }}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Per-fill slippage friction. Applied symmetrically to buys (above open),
+              period-end sells (below close), stop-loss exits (below stop), and the
+              baseline for an apples-to-apples comparison. Default 0.5%.
             </p>
           </div>
 
@@ -535,69 +565,24 @@ export function CreateBacktestView() {
 
           {/* Stop Loss */}
           <div className="space-y-2">
-            <label htmlFor="stop_loss_mode" className="text-sm font-medium">
-              Stop Loss
+            <label htmlFor="stop_loss_expr" className="text-sm font-medium">
+              Stop Loss Expression
             </label>
-            <Select
-              value={stopLossMode}
-              onValueChange={(value) => setStopLossMode(value as StopLossMode)}
-            >
-              <SelectTrigger id="stop_loss_mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="percent">% below buy price</SelectItem>
-                <SelectItem value="ma_percent">% of MA at buy time</SelectItem>
-              </SelectContent>
-            </Select>
-            {stopLossMode !== "none" && (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {stopLossMode === "ma_percent" && (
-                  <div className="space-y-1">
-                    <label htmlFor="stop_loss_ma_period" className="text-xs font-medium">
-                      MA period
-                    </label>
-                    <Select
-                      value={stopLossMaPeriod.toString()}
-                      onValueChange={(v) =>
-                        setStopLossMaPeriod(parseInt(v) as StopLossMaPeriod)
-                      }
-                    >
-                      <SelectTrigger id="stop_loss_ma_period">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STOP_LOSS_MA_PERIODS.map((p) => (
-                          <SelectItem key={p} value={p.toString()}>
-                            MA{p}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <label htmlFor="stop_loss_value" className="text-xs font-medium">
-                    {stopLossMode === "percent"
-                      ? "% below buy price"
-                      : "% of MA at buy"}
-                  </label>
-                  <Input
-                    id="stop_loss_value"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={stopLossValueInput}
-                    onChange={(e) => setStopLossValueInput(e.target.value)}
-                    placeholder={stopLossMode === "percent" ? "5" : "95"}
-                  />
-                </div>
-              </div>
-            )}
+            <Input
+              id="stop_loss_expr"
+              type="text"
+              value={stopLossExprInput}
+              onChange={(e) => setStopLossExprInput(e.target.value)}
+              placeholder="buy_price * 0.95"
+              className="font-mono"
+            />
             <p className="text-xs text-muted-foreground">
-              Per-position stop loss, fixed at buy time. Triggers when daily low ≤
-              stop price; sells at the stop price.
+              Optional. Evaluated once at buy time. Variables:{" "}
+              <code>buy_price</code>, <code>sma_20</code>, <code>sma_50</code>,{" "}
+              <code>sma_100</code>, <code>sma_200</code> (prior trading day).
+              Examples: <code>buy_price * 0.95</code> (5% below buy),{" "}
+              <code>sma_50 * 0.95</code> (95% of SMA50). Stops with computed
+              price ≥ buy_price are rejected per-position.
             </p>
           </div>
 

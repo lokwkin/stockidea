@@ -22,9 +22,7 @@ export interface BacktestRebalance {
 }
 
 export interface StopLossConfig {
-  type: "percent" | "ma_percent"
-  value: number
-  ma_period?: number | null
+  expression: string
 }
 
 export interface BacktestConfig {
@@ -37,6 +35,8 @@ export interface BacktestConfig {
   index: string
   involved_keys?: string[]
   stop_loss?: StopLossConfig | null
+  sell_timing?: "friday_close" | "monday_open"
+  slippage_pct?: number
 }
 
 export interface BacktestScores {

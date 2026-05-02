@@ -1,10 +1,13 @@
 """Screener service — pick stocks for a date and (optionally) size against a portfolio."""
 
+import asyncio
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from math import floor
 from typing import Callable
 
+from simpleeval import SimpleEval  # type: ignore
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockidea.datasource import service as datasource_service
@@ -16,9 +19,20 @@ from stockidea.screener.types import (
     Portfolio,
     ScreenerResult,
 )
-from stockidea.types import StockIndex, StockIndicators, StopLossConfig
+from stockidea.types import (
+    STOP_LOSS_EXPR_SMA_PERIODS,
+    StockIndex,
+    StockIndicators,
+    StopLossConfig,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _referenced_sma_periods(expression: str) -> list[int]:
+    """Return the SMA periods (e.g. 50) referenced as ``sma_NN`` in the expression."""
+    found = {int(m) for m in re.findall(r"\bsma_(\d+)\b", expression)}
+    return sorted(p for p in STOP_LOSS_EXPR_SMA_PERIODS if p in found)
 
 
 async def resolve_stop_loss_price(
@@ -28,24 +42,53 @@ async def resolve_stop_loss_price(
     buy_price: float,
     stop_loss: StopLossConfig,
 ) -> float | None:
-    """Compute a per-position stop-loss price, fixed at buy time.
+    """Compute a per-position stop-loss price by evaluating the expression.
 
-    Returns None when type is ``ma_percent`` and the required SMA is unavailable.
+    Context exposes ``buy_price`` and ``sma_20``/``sma_50``/``sma_100``/``sma_200``
+    (prior trading day's SMA — never includes ``buy_date``'s close, which would be
+    lookahead at the moment of the Monday-open fill). Returns ``None`` when:
+
+    - a referenced SMA is unavailable for the symbol/date,
+    - the expression fails to evaluate, or
+    - the resulting stop price is ``>= buy_price`` (an above-buy stop would
+      fire immediately on day 1 and produce phantom profit).
     """
-    if stop_loss.type == "percent":
-        return buy_price * (1 - stop_loss.value / 100)
-    # type == "ma_percent"
-    assert stop_loss.ma_period is not None
-    ma_value = await datasource_service.get_sma_at_date(
-        db_session, symbol, stop_loss.ma_period, buy_date.date()
+    needed_periods = _referenced_sma_periods(stop_loss.expression)
+    sma_lookup_date = (buy_date - timedelta(days=1)).date()
+    sma_values = await asyncio.gather(
+        *[
+            datasource_service.get_sma_at_date(db_session, symbol, p, sma_lookup_date)
+            for p in needed_periods
+        ]
     )
-    if ma_value is None or ma_value <= 0:
+    context: dict[str, float] = {"buy_price": buy_price}
+    for period, value in zip(needed_periods, sma_values):
+        if value is None or value <= 0:
+            logger.warning(
+                f"SMA({period}) unavailable for {symbol} on/before {sma_lookup_date}; "
+                f"skipping stop loss for this position"
+            )
+            return None
+        context[f"sma_{period}"] = value
+
+    try:
+        result = SimpleEval(names=context).eval(stop_loss.expression)
+        stop_price = float(result)
+    except Exception as e:
         logger.warning(
-            f"SMA({stop_loss.ma_period}) unavailable for {symbol} on "
-            f"{buy_date.date()}; skipping stop loss for this position"
+            f"Stop-loss expression {stop_loss.expression!r} failed to evaluate "
+            f"for {symbol} on {buy_date.date()}: {e}; skipping stop loss"
         )
         return None
-    return ma_value * (stop_loss.value / 100)
+
+    if stop_price >= buy_price:
+        logger.warning(
+            f"Stop-loss expression {stop_loss.expression!r} produced "
+            f"${stop_price:.2f} >= buy_price ${buy_price:.2f} for {symbol} on "
+            f"{buy_date.date()}; rejecting stop loss for this position"
+        )
+        return None
+    return stop_price
 
 
 async def _lookup_buy_price(

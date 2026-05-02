@@ -48,6 +48,7 @@ STRATEGY_RULE: str | None = os.getenv("STRATEGY_RULE")
 STRATEGY_SORT: str | None = os.getenv("STRATEGY_SORT")  # None ⇒ DEFAULT_SORT
 STRATEGY_MAX_STOCKS: int = int(os.getenv("STRATEGY_MAX_STOCKS", "3"))
 STRATEGY_INDEX: str = os.getenv("STRATEGY_INDEX", "SP500")
-# Stop loss — at most one of these two should be set.
-STRATEGY_STOP_LOSS_PCT: str | None = os.getenv("STRATEGY_STOP_LOSS_PCT")
-STRATEGY_STOP_LOSS_MA: str | None = os.getenv("STRATEGY_STOP_LOSS_MA")
+# Stop-loss expression evaluated at buy time. Variables: buy_price,
+# sma_20/50/100/200 (prior trading day). Examples: "buy_price * 0.95",
+# "sma_50 * 0.95". Unset = no stop loss.
+STRATEGY_STOP_LOSS_EXPR: str | None = os.getenv("STRATEGY_STOP_LOSS_EXPR")

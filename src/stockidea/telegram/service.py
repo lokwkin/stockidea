@@ -62,11 +62,10 @@ def _build_strategy() -> _Strategy:
         raise RuntimeError("STRATEGY_RULE env var is required to run the Telegram bot")
     rule_str = constants.STRATEGY_RULE
     sort_str = constants.STRATEGY_SORT or DEFAULT_SORT
-    stop_loss = StopLossConfig.parse_options(
-        pct=float(constants.STRATEGY_STOP_LOSS_PCT)
-        if constants.STRATEGY_STOP_LOSS_PCT
-        else None,
-        ma_spec=constants.STRATEGY_STOP_LOSS_MA or None,
+    stop_loss = (
+        StopLossConfig(expression=constants.STRATEGY_STOP_LOSS_EXPR)
+        if constants.STRATEGY_STOP_LOSS_EXPR
+        else None
     )
     return _Strategy(
         rule_str=rule_str,
@@ -154,9 +153,7 @@ def _parse_pick_args(text: str) -> _PickArgs:
 def _format_stop_loss(stop_loss: StopLossConfig | None) -> str:
     if stop_loss is None:
         return "(none)"
-    if stop_loss.type == "percent":
-        return f"{stop_loss.value:g}% below buy"
-    return f"<b>{stop_loss.value:g}%</b> of <b>SMA{stop_loss.ma_period}</b> at buy"
+    return f"<code>{html.escape(stop_loss.expression)}</code>"
 
 
 def _format_pick_line(
