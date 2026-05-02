@@ -26,11 +26,30 @@ interface DailyPrice {
   volume: number | null
 }
 
+interface SmaPoint {
+  date: string
+  value: number
+}
+
+type SmaSeries = Record<string, SmaPoint[]> // keyed by period length as string
+
+const SMA_PERIODS: number[] = [20, 50, 100, 200]
+const SMA_COLORS: Record<number, string> = {
+  20: "#f59e0b", // amber
+  50: "#10b981", // emerald
+  100: "#8b5cf6", // violet
+  200: "#ef4444", // red
+}
+
 interface WeeklyPoint {
   weekEnding: string
   close: number
   volume: number
   date: string // raw ISO for API calls
+  ma20?: number
+  ma50?: number
+  ma100?: number
+  ma200?: number
 }
 
 const PERIOD_OPTIONS = [
@@ -40,8 +59,11 @@ const PERIOD_OPTIONS = [
   { label: "5Y", weeks: 260 },
 ]
 
-/** Aggregate daily prices into weekly (Friday close) */
-function aggregateWeekly(dailyPrices: DailyPrice[]): WeeklyPoint[] {
+/** Aggregate daily prices into weekly (Friday close), merging SMA values from daily series */
+function aggregateWeekly(
+  dailyPrices: DailyPrice[],
+  smaSeries: SmaSeries,
+): WeeklyPoint[] {
   if (!dailyPrices.length) return []
 
   const sorted = [...dailyPrices].sort(
@@ -63,14 +85,37 @@ function aggregateWeekly(dailyPrices: DailyPrice[]): WeeklyPoint[] {
     weeks.set(key, { close: p.adj_close, volume: vol, date: p.date })
   }
 
+  // For each SMA period, build a date-sorted list and a pointer to do an
+  // O(weeks + days) two-pointer walk picking each week's last available SMA.
+  const sortedPeriods = SMA_PERIODS.map((period) => ({
+    period,
+    points: (smaSeries[String(period)] ?? [])
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  }))
+
   return Array.from(weeks.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([weekEnding, data]) => ({
-      weekEnding,
-      close: data.close,
-      volume: data.volume,
-      date: data.date,
-    }))
+    .map(([weekEnding, data]) => {
+      const point: WeeklyPoint = {
+        weekEnding,
+        close: data.close,
+        volume: data.volume,
+        date: data.date,
+      }
+      for (const { period, points } of sortedPeriods) {
+        // Last SMA on or before weekEnding
+        let lastVal: number | undefined
+        for (const sp of points) {
+          if (sp.date <= weekEnding) lastVal = sp.value
+          else break
+        }
+        if (lastVal !== undefined) {
+          point[`ma${period}` as "ma20" | "ma50" | "ma100" | "ma200"] = lastVal
+        }
+      }
+      return point
+    })
 }
 
 function formatDate(d: string) {
@@ -109,6 +154,11 @@ const INDICATOR_DISPLAY_KEYS = [
   "from_high_pct_4w",
   "r_squared_13w",
   "acceleration_pct_13w",
+  "price_vs_ma20_pct",
+  "price_vs_ma50_pct",
+  "price_vs_ma100_pct",
+  "price_vs_ma200_pct",
+  "ma50_vs_ma200_pct",
 ]
 
 function formatIndicatorValue(key: string, val: number): { formatted: string; colorClass: string } {
@@ -173,6 +223,16 @@ function ChartTooltip({ active, payload }: any) {
     <div className="rounded-md border bg-card px-3 py-2 shadow-sm text-sm">
       <div className="font-medium mb-1">{formatDate(data.weekEnding)}</div>
       <div>Close: <span className="font-medium">{formatCurrency(data.close)}</span></div>
+      {SMA_PERIODS.map((p) => {
+        const v = data[`ma${p}` as "ma20" | "ma50" | "ma100" | "ma200"]
+        if (v === undefined) return null
+        return (
+          <div key={p} className="text-xs">
+            <span style={{ color: SMA_COLORS[p] }}>MA{p}:</span>{" "}
+            <span className="font-medium">{formatCurrency(v)}</span>
+          </div>
+        )
+      })}
       {data.volume > 0 && (
         <div>Volume: <span className="font-medium">{formatVolume(data.volume)}</span></div>
       )}
@@ -186,6 +246,7 @@ export function StockChartView() {
   const [searchInput, setSearchInput] = useState(urlSymbol?.toUpperCase() || "")
   const [symbol, setSymbol] = useState(urlSymbol?.toUpperCase() || "")
   const [prices, setPrices] = useState<DailyPrice[]>([])
+  const [smaSeries, setSmaSeries] = useState<SmaSeries>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [periodWeeks, setPeriodWeeks] = useState(156) // default 3Y
@@ -212,7 +273,7 @@ export function StockChartView() {
     return d.toISOString().slice(0, 10)
   }, [])
 
-  // Fetch price data
+  // Fetch price data + SMA series in parallel
   const fetchPrices = useCallback(async (sym: string, weeks: number) => {
     if (!sym) return
     setLoading(true)
@@ -222,14 +283,25 @@ export function StockChartView() {
 
     try {
       const fromDate = getFromDate(weeks)
-      const res = await fetch(`/api/stocks/${sym}/prices?from=${fromDate}`)
-      if (!res.ok) throw new Error(`Failed to load prices for ${sym}`)
-      const data: DailyPrice[] = await res.json()
+      const periods = SMA_PERIODS.join(",")
+      const [pricesRes, smaRes] = await Promise.all([
+        fetch(`/api/stocks/${sym}/prices?from=${fromDate}`),
+        fetch(`/api/stocks/${sym}/sma?periods=${periods}&from=${fromDate}`),
+      ])
+      if (!pricesRes.ok) throw new Error(`Failed to load prices for ${sym}`)
+      const data: DailyPrice[] = await pricesRes.json()
       setPrices(data)
       setSymbol(sym)
+      if (smaRes.ok) {
+        const smaJson: SmaSeries = await smaRes.json()
+        setSmaSeries(smaJson)
+      } else {
+        setSmaSeries({})
+      }
     } catch (e) {
       setError((e as Error).message)
       setPrices([])
+      setSmaSeries({})
     } finally {
       setLoading(false)
     }
@@ -305,14 +377,21 @@ export function StockChartView() {
     }
   }, [symbol, fetchPrices])
 
-  const weeklyData = useMemo(() => aggregateWeekly(prices), [prices])
+  const weeklyData = useMemo(() => aggregateWeekly(prices, smaSeries), [prices, smaSeries])
 
-  // Price domain for Y-axis
+  // Price domain for Y-axis (include MA values so lines aren't clipped)
   const priceDomain = useMemo(() => {
     if (!weeklyData.length) return [0, 100]
-    const prices = weeklyData.map((d) => d.close)
-    const min = Math.min(...prices)
-    const max = Math.max(...prices)
+    const values: number[] = []
+    for (const d of weeklyData) {
+      values.push(d.close)
+      for (const p of SMA_PERIODS) {
+        const v = d[`ma${p}` as "ma20" | "ma50" | "ma100" | "ma200"]
+        if (v !== undefined) values.push(v)
+      }
+    }
+    const min = Math.min(...values)
+    const max = Math.max(...values)
     const padding = (max - min) * 0.05
     return [Math.floor(min - padding), Math.ceil(max + padding)]
   }, [weeklyData])
@@ -623,8 +702,36 @@ export function StockChartView() {
                       dot={false}
                       activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
                     />
+
+                    {SMA_PERIODS.map((p) => (
+                      <Line
+                        key={p}
+                        type="monotone"
+                        dataKey={`ma${p}`}
+                        stroke={SMA_COLORS[p]}
+                        strokeWidth={1}
+                        dot={false}
+                        activeDot={false}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    ))}
                   </ComposedChart>
                 </ResponsiveContainer>
+              </div>
+
+              {/* MA legend */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground px-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-0.5 w-3" style={{ background: "hsl(var(--primary))" }} />
+                  Close
+                </span>
+                {SMA_PERIODS.map((p) => (
+                  <span key={p} className="flex items-center gap-1.5">
+                    <span className="inline-block h-0.5 w-3" style={{ background: SMA_COLORS[p] }} />
+                    MA{p}
+                  </span>
+                ))}
               </div>
 
               {/* Volume chart */}

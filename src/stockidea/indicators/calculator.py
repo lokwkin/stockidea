@@ -123,18 +123,14 @@ def compute_stock_indicators(
     from_date: datetime,
     to_date: datetime,
     sma_lookup: dict[int, float | None] | None = None,
-    benchmark_changes_pct: dict[int, float] | None = None,
 ) -> StockIndicators:
     """Analyze stock price data and return weekly indicators.
 
     Optional inputs:
         sma_lookup: pre-loaded SMA value at `to_date` for each window
             (20/50/100/200). Missing/None windows produce 0.0 for the related fields.
-        benchmark_changes_pct: pre-computed `change_pct_Nw` for the benchmark index
-            (windows 4/13/26/52). Missing windows produce 0.0 for the related fields.
     """
     sma_lookup = sma_lookup or {}
-    benchmark_changes_pct = benchmark_changes_pct or {}
     if not prices:
         raise ValueError(
             f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
@@ -260,16 +256,6 @@ def compute_stock_indicators(
     else:
         ma50_vs_ma200_pct = 0.0
 
-    # Relative strength vs benchmark (% point difference of N-week change)
-    stock_change_pct_4w = _pt_change(weekly_data, 4)
-    stock_change_pct_13w = _pt_change(weekly_data, 13)
-    stock_change_pct_26w = _pt_change(weekly_data, 26)
-    stock_change_pct_52w = _pt_change(weekly_data, 52)
-    rs_pct_4w = stock_change_pct_4w - benchmark_changes_pct.get(4, 0.0)
-    rs_pct_13w = stock_change_pct_13w - benchmark_changes_pct.get(13, 0.0)
-    rs_pct_26w = stock_change_pct_26w - benchmark_changes_pct.get(26, 0.0)
-    rs_pct_52w = stock_change_pct_52w - benchmark_changes_pct.get(52, 0.0)
-
     return StockIndicators(
         symbol=symbol,
         date=to_date.date(),
@@ -326,11 +312,6 @@ def compute_stock_indicators(
         price_vs_ma100_pct=price_vs_ma100_pct,
         price_vs_ma200_pct=price_vs_ma200_pct,
         ma50_vs_ma200_pct=ma50_vs_ma200_pct,
-        # Relative strength vs benchmark
-        rs_pct_4w=rs_pct_4w,
-        rs_pct_13w=rs_pct_13w,
-        rs_pct_26w=rs_pct_26w,
-        rs_pct_52w=rs_pct_52w,
     )
 
 

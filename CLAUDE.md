@@ -89,8 +89,8 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 - `indicators/` — Pre-computed stock indicators for strategy evaluation
   - `router.py` — `GET /indicators`, `GET /indicators/{date}/`, `GET /indicators/symbol/{symbol}/latest`, `GET /indicators/symbol/{symbol}/{date}`
   - `cli.py` — `compute`, `pick`
-  - `service.py` — Fetches/computes indicator batches, applies rules; orchestrates per-`(index, date)` `MarketRegime` (computed once, cached in `market_regime` table) and merges its `mkt_*` fields onto each returned `StockIndicators` so the rule_engine sees a flat namespace
-  - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields including MA-structure (`price_vs_ma{20,50,100,200}_pct`, `ma50_vs_ma200_pct`) from FMP-cached SMA values and relative-strength (`rs_pct_{4,13,26,52}w`) from pre-computed benchmark changes; ranks by stability score
+  - `service.py` — Fetches/computes indicator batches, applies rules
+  - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields including MA-structure (`price_vs_ma{20,50,100,200}_pct`, `ma50_vs_ma200_pct`) from FMP-cached SMA values; ranks by stability score
 - `backtest/` — Core backtest engine
   - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}` (synchronous — the POST runs the full backtest before returning)
   - `cli.py` — `backtest`

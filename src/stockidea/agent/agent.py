@@ -71,7 +71,7 @@ Examples:
 - `change_pct_13w > 10 AND max_drop_pct_2w < 15`
 - `r_squared_52w > 0.7 AND change_pct_26w > 20 AND max_drawdown_pct_52w < 25`
 - `slope_pct_13w > 0.5 AND pct_weeks_positive_52w > 0.55 OR change_pct_52w > 50`
-- `mkt_index_above_ma200 == 1 AND price_vs_ma50_pct > 0 AND rs_pct_13w > 5` (regime gate + MA structure + relative strength)
+- `price_vs_ma200_pct > 0 AND ma50_vs_ma200_pct > 0 AND change_pct_13w > 10` (long-term uptrend + golden-cross territory + momentum)
 
 ## Indicator categories (call `list_indicator_fields` for the full list)
 
@@ -79,10 +79,6 @@ Examples:
 - **Volatility / risk** — return_std_52w, downside_std_52w, max_drop_pct over 1w/2w/4w, max_drawdown_pct over 4w-52w
 - **Up-period frequency** — pct_weeks_positive over 4w-52w
 - **Moving-average structure** — price_vs_ma{20,50,100,200}_pct, ma50_vs_ma200_pct (golden/death cross)
-- **Relative strength vs benchmark** — rs_pct_{4,13,26,52}w (stock return minus index return)
-- **Market regime** — mkt_index_above_ma{50,200}, mkt_index_drawdown_pct_52w, mkt_breadth_pct_above_ma{50,200}. \
-These describe the whole market on the date and are the same for every stock of a given index — \
-use them as gates (e.g. `mkt_index_above_ma200 == 1 AND ...`) to stay out during downturns.
 
 ## Ranking expression
 
