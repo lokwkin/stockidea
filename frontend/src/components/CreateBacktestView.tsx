@@ -92,6 +92,7 @@ interface BacktestRequest {
   index: StockIndex
   stop_loss?: StopLossPayload | null
   sell_timing: SellTiming
+  slippage_pct: number
 }
 
 export function CreateBacktestView() {
@@ -112,6 +113,9 @@ export function CreateBacktestView() {
     const sellTimingParam = searchParams.get("sell_timing")
     const sellTiming: SellTiming =
       sellTimingParam === "monday_open" ? "monday_open" : "friday_close"
+    const slippageRaw = searchParams.get("slippage_pct")
+    const slippageParsed = slippageRaw !== null ? parseFloat(slippageRaw) : NaN
+    const slippage = !isNaN(slippageParsed) && slippageParsed >= 0 ? slippageParsed : 0.5
 
     return {
       max_stocks: maxStocks ? parseInt(maxStocks) : 3,
@@ -122,6 +126,7 @@ export function CreateBacktestView() {
       sort_expr: sortExpr,
       index: index,
       sell_timing: sellTiming,
+      slippage_pct: slippage,
     }
   }
   
@@ -135,6 +140,10 @@ export function CreateBacktestView() {
   const [rebalanceIntervalInput, setRebalanceIntervalInput] = useState<string>(() => {
     const val = searchParams.get("rebalance_interval_weeks")
     return val || formData.rebalance_interval_weeks.toString()
+  })
+  const [slippagePctInput, setSlippagePctInput] = useState<string>(() => {
+    const val = searchParams.get("slippage_pct")
+    return val !== null ? val : formData.slippage_pct.toString()
   })
   // Store raw string values for date inputs to allow free typing
   const [dateStartInput, setDateStartInput] = useState<string>(() => {
@@ -193,6 +202,11 @@ export function CreateBacktestView() {
         throw new Error("Rebalance interval must be greater than 0")
       }
 
+      const slippageParsed = slippagePctInput === "" ? formData.slippage_pct : parseFloat(slippagePctInput)
+      if (isNaN(slippageParsed) || slippageParsed < 0) {
+        throw new Error("Slippage must be a non-negative number")
+      }
+
       // Send naive midnight datetimes (no timezone marker) so backend parses
       // them identically to CLI `datetime.strptime(..., "%Y-%m-%d")`.
       const dateStart = `${formData.date_start}T00:00:00`
@@ -222,6 +236,7 @@ export function CreateBacktestView() {
           date_start: dateStart,
           date_end: dateEnd,
           stop_loss: stopLoss,
+          slippage_pct: slippageParsed,
         }),
       })
 
@@ -364,6 +379,41 @@ export function CreateBacktestView() {
             <p className="text-xs text-muted-foreground">
               Buy is always at Monday open. Choose whether the holding period closes at
               the prior Friday's close or rolls into the next rebalance Monday's open.
+            </p>
+          </div>
+
+          {/* Slippage */}
+          <div className="space-y-2">
+            <label htmlFor="slippage_pct" className="text-sm font-medium">
+              Slippage (% per fill)
+            </label>
+            <Input
+              id="slippage_pct"
+              type="number"
+              min="0"
+              step="any"
+              value={slippagePctInput}
+              onChange={(e) => {
+                const value = e.target.value
+                setSlippagePctInput(value)
+                const numValue = parseFloat(value)
+                if (!isNaN(numValue) && numValue >= 0) {
+                  handleChange("slippage_pct", numValue)
+                }
+              }}
+              onBlur={(e) => {
+                const value = e.target.value
+                if (value === "" || isNaN(parseFloat(value)) || parseFloat(value) < 0) {
+                  setSlippagePctInput("0.5")
+                  handleChange("slippage_pct", 0.5)
+                }
+              }}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Per-fill slippage friction. Applied symmetrically to buys (above open),
+              period-end sells (below close), stop-loss exits (below stop), and the
+              baseline for an apples-to-apples comparison. Default 0.5%.
             </p>
           </div>
 

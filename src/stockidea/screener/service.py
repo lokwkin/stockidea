@@ -1,7 +1,7 @@
 """Screener service — pick stocks for a date and (optionally) size against a portfolio."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import floor
 from typing import Callable
 
@@ -36,13 +36,17 @@ async def resolve_stop_loss_price(
         return buy_price * (1 - stop_loss.value / 100)
     # type == "ma_percent"
     assert stop_loss.ma_period is not None
+    # Use the SMA from the prior trading day (Sunday → Friday) — querying at
+    # buy_date itself would include buy_date's close, which is *future*
+    # information at the moment of the Monday-open fill.
+    sma_lookup_date = (buy_date - timedelta(days=1)).date()
     ma_value = await datasource_service.get_sma_at_date(
-        db_session, symbol, stop_loss.ma_period, buy_date.date()
+        db_session, symbol, stop_loss.ma_period, sma_lookup_date
     )
     if ma_value is None or ma_value <= 0:
         logger.warning(
-            f"SMA({stop_loss.ma_period}) unavailable for {symbol} on "
-            f"{buy_date.date()}; skipping stop loss for this position"
+            f"SMA({stop_loss.ma_period}) unavailable for {symbol} on/before "
+            f"{sma_lookup_date}; skipping stop loss for this position"
         )
         return None
     return ma_value * (stop_loss.value / 100)

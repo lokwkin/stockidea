@@ -248,6 +248,11 @@ class BacktestConfig(BaseModel):
     involved_keys: list[str] = []
     stop_loss: StopLossConfig | None = None
     sell_timing: SellTiming = "friday_close"
+    # Per-fill slippage friction (% of price). Applied symmetrically: buys fill
+    # above the open, period-end sells below the close, stop-loss exits below
+    # the stop trigger. Same friction is applied to the baseline for
+    # apples-to-apples comparison. Default 0.5%.
+    slippage_pct: float = 0.5
 
 
 class BacktestResult(BaseModel):

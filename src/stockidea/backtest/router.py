@@ -66,6 +66,7 @@ async def create_backtest(backtest_config: BacktestConfig) -> dict:
             sort_raw=backtest_config.sort_expr,
             stop_loss=backtest_config.stop_loss,
             sell_timing=backtest_config.sell_timing,
+            slippage_pct=backtest_config.slippage_pct,
         )
         result = await backtester.backtest()
         backtest_id = await queries.save_backtest_result(db_session, result)

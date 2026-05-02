@@ -37,6 +37,7 @@ class Backtester:
     sort_raw: str
     stop_loss: StopLossConfig | None
     sell_timing: SellTiming
+    slippage_pct: float
 
     def __init__(
         self,
@@ -53,6 +54,7 @@ class Backtester:
         sort_raw: str,
         stop_loss: StopLossConfig | None = None,
         sell_timing: SellTiming = "friday_close",
+        slippage_pct: float = 0.5,
     ):
         self.db_session = db_session
         self.initial_balance = 10000
@@ -68,6 +70,7 @@ class Backtester:
         self.sort_raw = sort_raw
         self.stop_loss = stop_loss
         self.sell_timing = sell_timing
+        self.slippage_pct = slippage_pct
 
     async def _find_stop_loss_exit(
         self,
@@ -79,8 +82,9 @@ class Backtester:
         """Scan daily prices between buy and sell. Return (exit_date, exit_price) on
         the first day whose intra-day low breaches `stop_price`, else None.
 
-        Per assumption: when `low <= stop_price`, the position fills at exactly
-        `stop_price` (no intra-day data, so this is a simplification).
+        When `low <= stop_price`, the position fills at `stop_price` reduced by
+        `self.slippage_pct` — gap-down opens and queue-jumping at the stop level
+        mean the realistic fill is below the stop trigger.
         """
         prices = await datasource_service.get_stock_price_history(
             self.db_session,
@@ -92,7 +96,8 @@ class Backtester:
         for price in sorted(prices, key=lambda p: p.date):
             if price.low is not None and price.low <= stop_price:
                 exit_dt = datetime.combine(price.date, buy_date.time())
-                return exit_dt, stop_price
+                fill_price = stop_price * (1 - self.slippage_pct / 100)
+                return exit_dt, fill_price
         return None
 
     async def _resolve_stock_sell(
@@ -134,16 +139,20 @@ class Backtester:
         date/price per ``self.sell_timing``, scan for a stop-loss exit, and
         record the resulting BacktestInvestment.
         """
-        buy_stock_price = pick.buy_price
+        # Apply slippage: pay above the open on buys, receive below the close on
+        # period-end sells. Stop-loss fills already include slippage inside
+        # `_find_stop_loss_exit`.
+        buy_stock_price = pick.buy_price * (1 + self.slippage_pct / 100)
         position = pick.target_quantity
         assert position is not None, (
             "screener.pick must size positions in backtest mode"
         )
         stop_price = pick.stop_loss_price
 
-        actual_sell_date, sell_stock_price = await self._resolve_stock_sell(
+        actual_sell_date, raw_sell_price = await self._resolve_stock_sell(
             pick.symbol, sell_date
         )
+        sell_stock_price = raw_sell_price * (1 - self.slippage_pct / 100)
 
         if stop_price is not None:
             exit_info = await self._find_stop_loss_exit(
@@ -212,11 +221,13 @@ class Backtester:
                 f"No open price for {self.baseline_index.value} on/near "
                 f"{buy_date.date()} — cannot apply Monday-open buy convention"
             )
-        baseline_index_price_buy = buy_price_data.open
+        # Apply same slippage friction as stocks for apples-to-apples comparison.
+        baseline_index_price_buy = buy_price_data.open * (1 + self.slippage_pct / 100)
 
-        actual_sell_date, baseline_index_price_sell = await self._resolve_baseline_sell(
+        actual_sell_date, raw_baseline_sell = await self._resolve_baseline_sell(
             sell_date
         )
+        baseline_index_price_sell = raw_baseline_sell * (1 - self.slippage_pct / 100)
         # Use fractional shares for baseline — it's a benchmark, not a real trade
         position = amount / baseline_index_price_buy
         profit = (baseline_index_price_sell - baseline_index_price_buy) * position
@@ -354,6 +365,7 @@ class Backtester:
                 involved_keys=extract_involved_keys(self.rule_raw),
                 stop_loss=self.stop_loss,
                 sell_timing=self.sell_timing,
+                slippage_pct=self.slippage_pct,
             ),
             scores=scores,
         )

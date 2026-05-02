@@ -100,7 +100,9 @@ The backtest engine that evaluates a strategy over a historical date range. At e
 
 Each position can be exited early by an optional **stop-loss** (`--stop-loss-pct` for % below buy price, or `--stop-loss-ma PERIOD:PERCENT` for % of an SMA at buy time). End-of-period sells use either the previous Friday's adjusted close or the next-rebalance Monday's open, controlled by `--sell-timing`. The rebalance cadence is set by `--rebalance-interval-weeks` (default 2) and the position count by `--max-stocks` (default 3).
 
-The engine tracks portfolio value over time against a baseline index (S&P 500) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
+A per-fill **slippage** friction is applied symmetrically to every buy, period-end sell, and stop-loss exit (default 0.5%, configured via `--slippage-pct`) — the same friction is applied to the baseline so the comparison stays apples-to-apples.
+
+The engine tracks portfolio value over time against a baseline index (SP500 proxied by SPY using FMP's dividend-adjusted endpoint, so baseline returns include reinvested dividends like the per-stock returns) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
 
 Backtests submitted through the web dashboard run synchronously inside the `POST /backtest` request -- the engine executes the full date range and returns the result in the response.
 
@@ -115,7 +117,8 @@ uv run python -m stockidea.cli backtest \
   --max-stocks 3 \
   --rebalance-interval-weeks 2 \
   --stop-loss-pct 5 \
-  --sell-timing friday_close
+  --sell-timing friday_close \
+  --slippage-pct 0.5
 ```
 
 ### Agent

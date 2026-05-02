@@ -101,6 +101,15 @@ def backtest_cli():
     "Friday's adjusted close (weekend gap before next buy); 'monday_open' = "
     "next-rebalance Monday's open (continuous capital, no weekend gap).",
 )
+@click.option(
+    "--slippage-pct",
+    type=float,
+    default=0.5,
+    show_default=True,
+    help="Per-fill slippage friction (% of price). Applied symmetrically: buys "
+    "fill above the open, period-end sells below the close, and stop-loss "
+    "exits below the stop trigger. Same friction applies to the baseline.",
+)
 def backtest(
     max_stocks: int,
     rebalance_interval_weeks: int,
@@ -112,6 +121,7 @@ def backtest(
     stop_loss_pct: float | None,
     stop_loss_ma: str | None,
     sell_timing: str,
+    slippage_pct: float,
 ):
     stock_index = StockIndex(index)
     try:
@@ -150,6 +160,7 @@ def backtest(
     click.echo(f"Sort: {sort_expr}")
     click.echo(f"Stock index: {stock_index}")
     click.echo(f"Sell timing: {sell_timing}")
+    click.echo(f"Slippage: {slippage_pct}% per fill")
     if stop_loss is not None:
         click.echo(f"Stop loss: {stop_loss.model_dump()}")
 
@@ -169,6 +180,7 @@ def backtest(
                 sort_raw=sort_expr,
                 stop_loss=stop_loss,
                 sell_timing=cast(SellTiming, sell_timing),
+                slippage_pct=slippage_pct,
             )
             backtest_result = await backtester.backtest()
             backtest_id = await save_backtest_to_db(db_session, backtest_result)
