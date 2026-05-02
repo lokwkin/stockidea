@@ -27,9 +27,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "DELETE FROM stock_price_metadata WHERE symbol IN ('SP500', 'NASDAQ')"
-    )
+    op.execute("DELETE FROM stock_price_metadata WHERE symbol IN ('SP500', 'NASDAQ')")
 
 
 def downgrade() -> None:

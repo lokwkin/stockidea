@@ -68,9 +68,7 @@ def upgrade() -> None:
         sa.Column("fetched_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("symbol", "period_length"),
     )
-    op.create_index(
-        "ix_stock_sma_metadata_symbol", "stock_sma_metadata", ["symbol"]
-    )
+    op.create_index("ix_stock_sma_metadata_symbol", "stock_sma_metadata", ["symbol"])
     op.create_index(
         "ix_stock_sma_metadata_period_length",
         "stock_sma_metadata",

@@ -15,6 +15,7 @@ from stockidea.types import (
     BacktestRebalance,
     BacktestConfig,
     BacktestResult,
+    SellTiming,
     StockIndex,
     StockIndicators,
     StopLossConfig,
@@ -35,6 +36,7 @@ class Backtester:
     ranking_func: Callable[[StockIndicators], float] | None
     ranking_raw: str
     stop_loss: StopLossConfig | None
+    sell_timing: SellTiming
 
     def __init__(
         self,
@@ -50,6 +52,7 @@ class Backtester:
         ranking_func: Callable[[StockIndicators], float],
         ranking_raw: str,
         stop_loss: StopLossConfig | None = None,
+        sell_timing: SellTiming = "friday_close",
     ):
         self.db_session = db_session
         self.initial_balance = 10000
@@ -64,6 +67,7 @@ class Backtester:
         self.ranking_func = ranking_func
         self.ranking_raw = ranking_raw
         self.stop_loss = stop_loss
+        self.sell_timing = sell_timing
 
     async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
         # Compute indicators from data through last Friday's close. With the
@@ -149,15 +153,43 @@ class Backtester:
                 return exit_dt, stop_price
         return None
 
+    async def _resolve_stock_sell(
+        self, symbol: str, sell_date: datetime
+    ) -> tuple[datetime, float]:
+        """Return (actual_sell_date, sell_price) for a stock based on sell_timing.
+
+        - friday_close: previous_friday(sell_date) adjusted close
+        - monday_open:  sell_date open (the next-rebalance Monday open)
+        """
+        if self.sell_timing == "friday_close":
+            target = previous_friday(sell_date)
+            price = (
+                await datasource_service.get_stock_price_at_date(
+                    self.db_session, symbol, target.date(), nearest=True
+                )
+            ).adj_close
+            return target, price
+
+        # monday_open
+        price_data = await datasource_service.get_stock_price_at_date(
+            self.db_session, symbol, sell_date.date(), nearest=True
+        )
+        if price_data.open is None:
+            raise ValueError(
+                f"No open price for {symbol} on/near {sell_date.date()} — "
+                "cannot apply Monday-open sell convention"
+            )
+        return sell_date, price_data.open
+
     async def invest(
         self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
     ) -> tuple[BacktestInvestment, float]:
-        """Invest in a stock — buy at Monday open, sell at the prior Friday's close.
+        """Invest in a stock — buy at Monday open, sell per `self.sell_timing`.
 
         `buy_date` is the rebalance Monday; `sell_date` is the next rebalance
-        Monday. Real fill is the open of `buy_date` and the close of
-        previous_friday(sell_date), with the weekend gap before the next buy.
-        Returns (investment, uninvested_cash).
+        Monday. Real fill is the open of `buy_date`, and the sell point depends
+        on `sell_timing` (Friday close vs next Monday open). Returns
+        (investment, uninvested_cash).
         """
         buy_price_data = await datasource_service.get_stock_price_at_date(
             self.db_session, symbol, buy_date.date(), nearest=True
@@ -169,18 +201,14 @@ class Backtester:
             )
         buy_stock_price = buy_price_data.open
 
-        friday_sell_date = previous_friday(sell_date)
-        sell_stock_price = (
-            await datasource_service.get_stock_price_at_date(
-                self.db_session, symbol, friday_sell_date.date(), nearest=True
-            )
-        ).adj_close
-        actual_sell_date = friday_sell_date
+        actual_sell_date, sell_stock_price = await self._resolve_stock_sell(
+            symbol, sell_date
+        )
 
         stop_price = await self._resolve_stop_price(symbol, buy_date, buy_stock_price)
         if stop_price is not None:
             exit_info = await self._find_stop_loss_exit(
-                symbol, buy_date, friday_sell_date, stop_price
+                symbol, buy_date, actual_sell_date, stop_price
             )
             if exit_info is not None:
                 actual_sell_date, sell_stock_price = exit_info
@@ -208,13 +236,37 @@ class Backtester:
         )
         return investment, uninvested
 
+    async def _resolve_baseline_sell(
+        self, sell_date: datetime
+    ) -> tuple[datetime, float]:
+        """Return (actual_sell_date, sell_price) for the baseline index."""
+        if self.sell_timing == "friday_close":
+            target = previous_friday(sell_date)
+            price = (
+                await datasource_service.get_index_price_at_date(
+                    self.db_session, self.baseline_index, target.date(), nearest=True
+                )
+            ).adj_close
+            return target, price
+
+        # monday_open
+        price_data = await datasource_service.get_index_price_at_date(
+            self.db_session, self.baseline_index, sell_date.date(), nearest=True
+        )
+        if price_data.open is None:
+            raise ValueError(
+                f"No open price for {self.baseline_index.value} on/near "
+                f"{sell_date.date()} — cannot apply Monday-open sell convention"
+            )
+        return sell_date, price_data.open
+
     async def invest_baseline(
         self, buy_date: datetime, sell_date: datetime, amount: float
     ) -> BacktestInvestment:
         """Invest in the baseline index using fractional shares.
 
-        Uses the same Monday-open / Friday-close convention as `invest()` for
-        apples-to-apples comparison.
+        Uses the same buy/sell convention as `invest()` for apples-to-apples
+        comparison.
         """
         buy_price_data = await datasource_service.get_index_price_at_date(
             self.db_session, self.baseline_index, buy_date.date(), nearest=True
@@ -226,15 +278,9 @@ class Backtester:
             )
         baseline_index_price_buy = buy_price_data.open
 
-        friday_sell_date = previous_friday(sell_date)
-        baseline_index_price_sell = (
-            await datasource_service.get_index_price_at_date(
-                self.db_session,
-                self.baseline_index,
-                friday_sell_date.date(),
-                nearest=True,
-            )
-        ).adj_close
+        actual_sell_date, baseline_index_price_sell = await self._resolve_baseline_sell(
+            sell_date
+        )
         # Use fractional shares for baseline — it's a benchmark, not a real trade
         position = amount / baseline_index_price_buy
         profit = (baseline_index_price_sell - baseline_index_price_buy) * position
@@ -250,7 +296,7 @@ class Backtester:
             buy_price=baseline_index_price_buy,
             buy_date=buy_date,
             sell_price=baseline_index_price_sell,
-            sell_date=friday_sell_date,
+            sell_date=actual_sell_date,
             profit_pct=profit_pct,
             profit=profit,
         )
@@ -270,13 +316,18 @@ class Backtester:
             if end_date > self.date_end:
                 end_date = self.date_end
 
-            # Skip if the (clamped) period is too short to span at least one
-            # Mon-open → Fri-close holding window — previous_friday(end_date)
-            # would land on or before date_iter and produce an invalid sell.
-            if previous_friday(end_date) <= date_iter:
+            # Skip if the (clamped) period is too short for the holding window.
+            # - friday_close: needs a Friday strictly after the buy Monday
+            # - monday_open:  needs end_date strictly after the buy Monday
+            too_short = (
+                previous_friday(end_date) <= date_iter
+                if self.sell_timing == "friday_close"
+                else end_date <= date_iter
+            )
+            if too_short:
                 logger.info(
                     f"Skipping final period {date_iter.date()} → {end_date.date()}: "
-                    "too short for a Mon-open / Fri-close holding window"
+                    f"too short for a Mon-open / {self.sell_timing} holding window"
                 )
                 break
 
@@ -357,6 +408,7 @@ class Backtester:
                 index=self.from_index,
                 involved_keys=extract_involved_keys(self.rule_raw),
                 stop_loss=self.stop_loss,
+                sell_timing=self.sell_timing,
             ),
             scores=scores,
         )

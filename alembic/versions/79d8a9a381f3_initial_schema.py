@@ -149,9 +149,7 @@ def upgrade() -> None:
         sa.Column("baseline_profit_pct", sa.Float(), nullable=False),
         sa.Column("baseline_profit", sa.Float(), nullable=False),
         sa.Column("baseline_balance", sa.Float(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["backtest_id"], ["backtests.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["backtest_id"], ["backtests.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_backtest_rebalances_id", "backtest_rebalances", ["id"])
@@ -172,9 +170,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["backtest_id"], ["backtests.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["backtest_id"], ["backtests.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_backtest_jobs_id", "backtest_jobs", ["id"])
@@ -206,7 +202,9 @@ def upgrade() -> None:
         "backtest_investments",
         ["backtest_rebalance_id"],
     )
-    op.create_index("ix_backtest_investments_symbol", "backtest_investments", ["symbol"])
+    op.create_index(
+        "ix_backtest_investments_symbol", "backtest_investments", ["symbol"]
+    )
 
 
 def downgrade() -> None:

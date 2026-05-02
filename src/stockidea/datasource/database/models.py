@@ -21,31 +21,6 @@ class Base(DeclarativeBase):
     """Base class for SQLAlchemy models."""
 
 
-class DBBacktestJob(Base):
-    __tablename__ = "backtest_jobs"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, index=True, default=uuid.uuid4
-    )
-    status: Mapped[str] = mapped_column(
-        String, nullable=False, default="pending", index=True
-    )
-    # BacktestConfig stored as JSON text
-    config_json: Mapped[str] = mapped_column(Text, nullable=False)
-    backtest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID, ForeignKey("backtests.id", ondelete="SET NULL"), nullable=True
-    )
-    error_message: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.now, index=True
-    )
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-
-    def __repr__(self) -> str:
-        return f"<BacktestJob(id={self.id}, status={self.status})>"
-
-
 class DBStockPrice(Base):
     __tablename__ = "stock_prices"
 
