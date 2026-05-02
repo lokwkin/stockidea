@@ -22,7 +22,7 @@ import { dateFormat } from "@/lib/utils"
 type StockIndex = "SP500" | "NASDAQ"
 type SellTiming = "friday_close" | "monday_open"
 
-const DEFAULT_RANKING = "change_pct_13w / return_std_52w"
+const DEFAULT_SORT = "change_pct_13w / return_std_52w"
 
 const RULE_VARIABLES: { name: string; type: string; description: string }[] = [
   { name: "max_jump_pct_1w", type: "float", description: "Maximum 1-week percentage increase" },
@@ -88,7 +88,7 @@ interface BacktestRequest {
   date_start: string // ISO datetime string
   date_end: string // ISO datetime string
   rule: string
-  ranking: string
+  sort_expr: string
   index: StockIndex
   stop_loss?: StopLossPayload | null
   sell_timing: SellTiming
@@ -107,7 +107,7 @@ export function CreateBacktestView() {
     const dateStart = searchParams.get("date_start") || ""
     const dateEnd = searchParams.get("date_end") || ""
     const rule = searchParams.get("rule") || ""
-    const ranking = searchParams.get("ranking") || DEFAULT_RANKING
+    const sortExpr = searchParams.get("sort_expr") || DEFAULT_SORT
     const index = (searchParams.get("index") as StockIndex) || "SP500"
     const sellTimingParam = searchParams.get("sell_timing")
     const sellTiming: SellTiming =
@@ -119,7 +119,7 @@ export function CreateBacktestView() {
       date_start: dateStart ? dateStart.replace(/\//g, "-") : "", // Convert yyyy/mm/dd to yyyy-mm-dd
       date_end: dateEnd ? dateEnd.replace(/\//g, "-") : "",
       rule: rule,
-      ranking: ranking,
+      sort_expr: sortExpr,
       index: index,
       sell_timing: sellTiming,
     }
@@ -514,22 +514,22 @@ export function CreateBacktestView() {
             </div>
           </div>
 
-          {/* Ranking */}
+          {/* Sort */}
           <div className="space-y-2">
-            <label htmlFor="ranking" className="text-sm font-medium">
-              Ranking Expression
+            <label htmlFor="sort_expr" className="text-sm font-medium">
+              Sort Expression
             </label>
             <Input
-              id="ranking"
+              id="sort_expr"
               type="text"
-              value={formData.ranking}
-              onChange={(e) => handleChange("ranking", e.target.value)}
+              value={formData.sort_expr}
+              onChange={(e) => handleChange("sort_expr", e.target.value)}
               required
               className="font-mono"
-              placeholder={DEFAULT_RANKING}
+              placeholder={DEFAULT_SORT}
             />
             <p className="text-xs text-muted-foreground">
-              Expression used to rank stocks that pass the rule. Higher value = higher priority.
+              Expression used to sort stocks that pass the rule. Higher value = higher priority.
             </p>
           </div>
 

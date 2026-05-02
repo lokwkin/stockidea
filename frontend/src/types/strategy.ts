@@ -23,7 +23,7 @@ export interface StrategyMessage {
 export interface StrategyBacktestSummary {
   id: string
   rule: string
-  ranking?: string | null
+  sort_expr?: string | null
   profit_pct: number
   baseline_profit_pct: number
   max_stocks: number

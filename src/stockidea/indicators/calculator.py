@@ -325,16 +325,16 @@ def compute_stock_indicators(
 
 def rank_by_expression(
     items: list[StockIndicators],
-    ranking_func: Callable[[StockIndicators], float],
+    sort_func: Callable[[StockIndicators], float],
 ) -> list[StockIndicators]:
-    """Rank items by a user-defined ranking expression.
+    """Sort items by a user-defined sort expression.
 
     Items are sorted by score descending (higher = better).
     """
     if len(items) <= 1:
         return items
 
-    scored = [(ranking_func(item), item) for item in items]
+    scored = [(sort_func(item), item) for item in items]
     scored.sort(key=lambda x: x[0], reverse=True)
     return [item for _, item in scored]
 

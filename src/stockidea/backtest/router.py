@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from stockidea.backtest.backtester import Backtester
 from stockidea.datasource.database import conn, queries
-from stockidea.rule_engine import compile_ranking, compile_rule, extract_involved_keys
+from stockidea.rule_engine import compile_rule, compile_sort, extract_involved_keys
 from stockidea.types import BacktestConfig, StockIndex
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ async def create_backtest(backtest_config: BacktestConfig) -> dict:
         raise HTTPException(status_code=400, detail=f"Invalid rule expression: {e}")
 
     try:
-        ranking_func = compile_ranking(backtest_config.ranking)
+        sort_func = compile_sort(backtest_config.sort_expr)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid ranking expression: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid sort expression: {e}")
 
     async with conn.get_db_session() as db_session:
         backtester = Backtester(
@@ -62,8 +62,8 @@ async def create_backtest(backtest_config: BacktestConfig) -> dict:
             rule_raw=backtest_config.rule,
             from_index=backtest_config.index,
             baseline_index=StockIndex.SP500,
-            ranking_func=ranking_func,
-            ranking_raw=backtest_config.ranking,
+            sort_func=sort_func,
+            sort_raw=backtest_config.sort_expr,
             stop_loss=backtest_config.stop_loss,
             sell_timing=backtest_config.sell_timing,
         )

@@ -12,9 +12,9 @@ from stockidea.datasource import service as datasource_service
 from stockidea.helper import previous_friday
 from stockidea.indicators import service as indicators_service
 from stockidea.rule_engine import (
-    DEFAULT_RANKING,
-    compile_ranking,
+    DEFAULT_SORT,
     compile_rule,
+    compile_sort,
     extract_involved_keys,
 )
 from stockidea.backtest.backtester import Backtester
@@ -72,12 +72,12 @@ _BACKTEST_PARAMS = {
             "description": "Stock index universe (default: SP500)",
             "default": "SP500",
         },
-        "ranking": {
+        "sort_expr": {
             "type": "string",
             "description": (
-                "Ranking expression to sort filtered stocks. Uses StockIndicators fields "
+                "Sort expression to rank filtered stocks. Uses StockIndicators fields "
                 "and returns a numeric score (higher = better). "
-                f"Default: '{DEFAULT_RANKING}'. "
+                f"Default: '{DEFAULT_SORT}'. "
                 "Examples: 'slope_pct_52w * r_squared_52w', "
                 "'change_pct_26w / max_drawdown_pct_52w', "
                 "'slope_pct_13w * r_squared_13w + 0.5 * change_pct_4w'"
@@ -138,11 +138,11 @@ _PREVIEW_FILTER_PARAMS = {
             "description": "Stock index universe (default: SP500)",
             "default": "SP500",
         },
-        "ranking": {
+        "sort_expr": {
             "type": "string",
             "description": (
-                "Ranking expression to sort filtered stocks (higher = better). "
-                f"Default: '{DEFAULT_RANKING}'"
+                "Sort expression to rank filtered stocks (higher = better). "
+                f"Default: '{DEFAULT_SORT}'"
             ),
         },
     },
@@ -402,7 +402,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
     max_stocks = params.get("max_stocks", 3)
     rebalance_interval_weeks = params.get("rebalance_interval_weeks", 2)
     index_str = params.get("index", "SP500")
-    ranking_str = params.get("ranking", DEFAULT_RANKING)
+    sort_str = params.get("sort_expr", DEFAULT_SORT)
     stop_loss_param = params.get("stop_loss")
 
     try:
@@ -411,9 +411,9 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
         return json.dumps({"error": f"Invalid rule expression: {e}"})
 
     try:
-        ranking_func = compile_ranking(ranking_str)
+        sort_func = compile_sort(sort_str)
     except Exception as e:
-        return json.dumps({"error": f"Invalid ranking expression: {e}"})
+        return json.dumps({"error": f"Invalid sort expression: {e}"})
 
     try:
         date_start = datetime.strptime(date_start_str, "%Y-%m-%d")
@@ -448,8 +448,8 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
                 rule_raw=rule_str,
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
-                ranking_func=ranking_func,
-                ranking_raw=ranking_str,
+                sort_func=sort_func,
+                sort_raw=sort_str,
                 stop_loss=stop_loss,
             )
             result: BacktestResult = await backtester.backtest()
@@ -466,7 +466,7 @@ async def _run_backtest(params: dict, strategy_id: str) -> str:
     # Return a concise summary with scores and diagnostics
     summary: dict = {
         "rule": rule_str,
-        "ranking": ranking_str,
+        "sort_expr": sort_str,
         "date_start": date_start_str,
         "date_end": date_end_str,
         "max_stocks": max_stocks,
@@ -491,7 +491,7 @@ async def _preview_filter(params: dict) -> str:
     rule_str = params["rule"]
     date_str = params["date"]
     index_str = params.get("index", "SP500")
-    ranking_str = params.get("ranking", DEFAULT_RANKING)
+    sort_str = params.get("sort_expr", DEFAULT_SORT)
 
     try:
         rule_func = compile_rule(rule_str)
@@ -499,9 +499,9 @@ async def _preview_filter(params: dict) -> str:
         return json.dumps({"error": f"Invalid rule expression: {e}"})
 
     try:
-        ranking_func = compile_ranking(ranking_str)
+        sort_func = compile_sort(sort_str)
     except Exception as e:
-        return json.dumps({"error": f"Invalid ranking expression: {e}"})
+        return json.dumps({"error": f"Invalid sort expression: {e}"})
 
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
@@ -534,7 +534,7 @@ async def _preview_filter(params: dict) -> str:
             filtered = indicators_service.apply_rule(
                 indicators_batch,
                 rule_func=rule_func,
-                ranking_func=ranking_func,
+                sort_func=sort_func,
             )
     except Exception as e:
         logger.exception(f"Preview filter failed: {e}")

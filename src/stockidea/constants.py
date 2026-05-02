@@ -31,3 +31,23 @@ DATABASE_URL: str = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{
 
 ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+
+# =============================================================================
+# Telegram bot (required only when running the bot)
+# =============================================================================
+
+TELEGRAM_BOT_TOKEN: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
+# The bot replies only to messages whose chat id matches this — single-user auth.
+TELEGRAM_CHAT_ID: str | None = os.getenv("TELEGRAM_CHAT_ID")
+
+# =============================================================================
+# Strategy used by the Telegram bot's /pick handler
+# =============================================================================
+
+STRATEGY_RULE: str | None = os.getenv("STRATEGY_RULE")
+STRATEGY_SORT: str | None = os.getenv("STRATEGY_SORT")  # None ⇒ DEFAULT_SORT
+STRATEGY_MAX_STOCKS: int = int(os.getenv("STRATEGY_MAX_STOCKS", "3"))
+STRATEGY_INDEX: str = os.getenv("STRATEGY_INDEX", "SP500")
+# Stop loss — at most one of these two should be set.
+STRATEGY_STOP_LOSS_PCT: str | None = os.getenv("STRATEGY_STOP_LOSS_PCT")
+STRATEGY_STOP_LOSS_MA: str | None = os.getenv("STRATEGY_STOP_LOSS_MA")

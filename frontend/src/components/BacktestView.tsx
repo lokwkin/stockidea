@@ -34,7 +34,7 @@ export function BacktestView() {
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [ruleCopied, setRuleCopied] = useState(false)
-  const [rankingCopied, setRankingCopied] = useState(false)
+  const [sortCopied, setSortCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tableView, setTableView] = useState<"investment" | "rebalance">("investment")
   const [selectedRebalanceIndex, setSelectedRebalanceIndex] = useState<number | null>(null)
@@ -164,18 +164,18 @@ export function BacktestView() {
     }
   }, [backtestData?.rule_ref])
 
-  const handleCopyRanking = useCallback(async () => {
-    const ranking = backtestData?.backtest_config?.ranking
-    if (!ranking) return
+  const handleCopySort = useCallback(async () => {
+    const sortExpr = backtestData?.backtest_config?.sort_expr
+    if (!sortExpr) return
 
     try {
-      await navigator.clipboard.writeText(ranking)
-      setRankingCopied(true)
-      setTimeout(() => setRankingCopied(false), 2000)
+      await navigator.clipboard.writeText(sortExpr)
+      setSortCopied(true)
+      setTimeout(() => setSortCopied(false), 2000)
     } catch (err) {
-      console.error("Failed to copy ranking:", err)
+      console.error("Failed to copy sort:", err)
     }
-  }, [backtestData?.backtest_config?.ranking])
+  }, [backtestData?.backtest_config?.sort_expr])
 
   // Flatten all investments from all rebalances
   const allBacktestInvestments = useMemo(() => {
@@ -312,14 +312,14 @@ export function BacktestView() {
                           max_stocks: config.max_stocks.toString(),
                           index: config.index,
                         })
-                        if (config.ranking) {
-                          params.set("ranking", config.ranking)
+                        if (config.sort_expr) {
+                          params.set("sort_expr", config.sort_expr)
                         }
 
                         navigate(`/analysis?${params.toString()}`)
                       }}
                       className="flex items-center gap-2"
-                      title="Apply this rule + ranking on the latest indicators"
+                      title="Apply this rule + sort on the latest indicators"
                     >
                       <RefreshCw className="h-4 w-4" />
                       Run on Latest Data
@@ -340,8 +340,8 @@ export function BacktestView() {
                           rule: config.rule,
                           index: config.index,
                         })
-                        if (config.ranking) {
-                          params.set("ranking", config.ranking)
+                        if (config.sort_expr) {
+                          params.set("sort_expr", config.sort_expr)
                         }
                         if (config.stop_loss) {
                           params.set("stop_loss_type", config.stop_loss.type)
@@ -416,23 +416,23 @@ export function BacktestView() {
                   </div>
                 )}
 
-                {/* Ranking */}
-                {backtestData.backtest_config?.ranking && (
+                {/* Sort */}
+                {backtestData.backtest_config?.sort_expr && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Ranking Expression</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Sort Expression</p>
                     <div className="flex gap-2 items-start">
                       <div className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono">
-                        {backtestData.backtest_config.ranking}
+                        {backtestData.backtest_config.sort_expr}
                       </div>
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={handleCopyRanking}
+                        onClick={handleCopySort}
                         className="shrink-0"
-                        title="Copy ranking to clipboard"
+                        title="Copy sort expression to clipboard"
                       >
-                        {rankingCopied ? (
+                        {sortCopied ? (
                           <Check className="h-4 w-4 text-positive" />
                         ) : (
                           <Copy className="h-4 w-4" />

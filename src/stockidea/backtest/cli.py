@@ -11,7 +11,7 @@ from stockidea.datasource.database import conn
 from stockidea.datasource.database.queries import (
     save_backtest_result as save_backtest_to_db,
 )
-from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
+from stockidea.rule_engine import DEFAULT_SORT, compile_rule, compile_sort
 from stockidea.types import (
     SellTiming,
     StockIndex,
@@ -70,10 +70,12 @@ def backtest_cli():
     help="Rule expression string (e.g., 'change_pct_13w > 10 AND max_drop_pct_2w > 15')",
 )
 @click.option(
-    "--ranking",
+    "--sort",
+    "-s",
+    "sort_expr",
     type=str,
-    default=DEFAULT_RANKING,
-    help=f"Ranking expression for stock selection (default: '{DEFAULT_RANKING}')",
+    default=DEFAULT_SORT,
+    help=f"Sort expression for stock selection (default: '{DEFAULT_SORT}')",
 )
 @click.option(
     "--stop-loss-pct",
@@ -106,7 +108,7 @@ def backtest(
     date_end: str,
     rule: str,
     index: str,
-    ranking: str,
+    sort_expr: str,
     stop_loss_pct: float | None,
     stop_loss_ma: str | None,
     sell_timing: str,
@@ -127,33 +129,16 @@ def backtest(
         raise click.BadParameter(f"Invalid rule expression: {e}")
 
     try:
-        ranking_func = compile_ranking(ranking)
+        sort_func = compile_sort(sort_expr)
     except Exception as e:
-        raise click.BadParameter(f"Invalid ranking expression: {e}")
+        raise click.BadParameter(f"Invalid sort expression: {e}")
 
-    if stop_loss_pct is not None and stop_loss_ma is not None:
-        raise click.BadParameter(
-            "--stop-loss-pct and --stop-loss-ma are mutually exclusive"
+    try:
+        stop_loss = StopLossConfig.parse_options(
+            pct=stop_loss_pct, ma_spec=stop_loss_ma
         )
-
-    stop_loss: StopLossConfig | None = None
-    if stop_loss_pct is not None:
-        try:
-            stop_loss = StopLossConfig(type="percent", value=stop_loss_pct)
-        except ValueError as e:
-            raise click.BadParameter(f"Invalid --stop-loss-pct: {e}")
-    elif stop_loss_ma is not None:
-        try:
-            period_str, pct_str = stop_loss_ma.split(":", 1)
-            stop_loss = StopLossConfig(
-                type="ma_percent",
-                ma_period=int(period_str),
-                value=float(pct_str),
-            )
-        except (ValueError, TypeError) as e:
-            raise click.BadParameter(
-                f"Invalid --stop-loss-ma '{stop_loss_ma}' (expected 'PERIOD:PERCENT'): {e}"
-            )
+    except ValueError as e:
+        raise click.BadParameter(str(e))
 
     click.echo(
         f"Running backtest from {date_start_parsed.date()} to {date_end_parsed.date()}"
@@ -162,7 +147,7 @@ def backtest(
         f"Max stocks: {max_stocks}, Rebalance interval: {rebalance_interval_weeks} weeks"
     )
     click.echo(f"Rule: {rule}")
-    click.echo(f"Ranking: {ranking}")
+    click.echo(f"Sort: {sort_expr}")
     click.echo(f"Stock index: {stock_index}")
     click.echo(f"Sell timing: {sell_timing}")
     if stop_loss is not None:
@@ -180,8 +165,8 @@ def backtest(
                 rule_raw=rule,
                 from_index=stock_index,
                 baseline_index=StockIndex.SP500,
-                ranking_func=ranking_func,
-                ranking_raw=ranking,
+                sort_func=sort_func,
+                sort_raw=sort_expr,
                 stop_loss=stop_loss,
                 sell_timing=cast(SellTiming, sell_timing),
             )

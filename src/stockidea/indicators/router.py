@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.indicators import service as indicators_service
-from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
+from stockidea.rule_engine import DEFAULT_SORT, compile_rule, compile_sort
 from stockidea.types import StockIndex
 
 router = APIRouter()
@@ -74,7 +74,7 @@ async def get_indicators_for_symbol_at_date(symbol: str, date: str) -> dict:
 async def get_analysis(
     date: str,
     rule: Optional[str] = None,
-    ranking: Optional[str] = None,
+    sort_expr: Optional[str] = None,
     max_stocks: Optional[int] = None,
     index: StockIndex = StockIndex.SP500,
 ) -> dict:
@@ -92,19 +92,19 @@ async def get_analysis(
             back_period_weeks=52,
         )
 
-    # Apply rule/ranking whenever any of rule, ranking, or max_stocks is provided.
-    if rule or ranking or max_stocks is not None:
+    # Apply rule/sort whenever any of rule, sort_expr, or max_stocks is provided.
+    if rule or sort_expr or max_stocks is not None:
         try:
             rule_func = compile_rule(rule) if rule else None
-            ranking_func = compile_ranking(ranking or DEFAULT_RANKING)
+            sort_func = compile_sort(sort_expr or DEFAULT_SORT)
             stock_indicators_batch = indicators_service.apply_rule(
                 stock_indicators_batch,
                 rule_func=rule_func,
-                ranking_func=ranking_func,
+                sort_func=sort_func,
             )
         except Exception as e:
             raise HTTPException(
-                status_code=400, detail=f"Invalid rule/ranking expression: {e}"
+                status_code=400, detail=f"Invalid rule/sort expression: {e}"
             )
 
         if max_stocks is not None and max_stocks > 0:

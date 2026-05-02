@@ -19,9 +19,9 @@ _SMA_PERIODS = [20, 50, 100, 200]
 def apply_rule(
     indicators_batch: list[StockIndicators],
     rule_func: Callable[[StockIndicators], bool] | None = None,
-    ranking_func: Callable[[StockIndicators], float] | None = None,
+    sort_func: Callable[[StockIndicators], float] | None = None,
 ) -> list[StockIndicators]:
-    from stockidea.rule_engine import compile_ranking, DEFAULT_RANKING
+    from stockidea.rule_engine import compile_sort, DEFAULT_SORT
 
     if rule_func is None:
         filtered_stocks = list(indicators_batch)
@@ -30,10 +30,10 @@ def apply_rule(
             indicator for indicator in indicators_batch if rule_func(indicator)
         ]
 
-    # Rank by expression (default: risk-adjusted momentum)
-    if ranking_func is None:
-        ranking_func = compile_ranking(DEFAULT_RANKING)
-    filtered_stocks = calculator.rank_by_expression(filtered_stocks, ranking_func)
+    # Sort by expression (default: risk-adjusted momentum)
+    if sort_func is None:
+        sort_func = compile_sort(DEFAULT_SORT)
+    filtered_stocks = calculator.rank_by_expression(filtered_stocks, sort_func)
 
     # Remove outliers based on the linear slope percentage
     filtered_stocks = calculator.slope_outlier_mask(filtered_stocks, k=3.0)

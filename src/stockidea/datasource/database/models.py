@@ -204,7 +204,7 @@ class DBBacktest(Base):
     max_stocks: Mapped[int] = mapped_column(Integer, nullable=False)
     rebalance_interval_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     rule: Mapped[str] = mapped_column(Text, nullable=False)
-    ranking: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_expr: Mapped[str | None] = mapped_column(Text, nullable=True)
     index: Mapped[str] = mapped_column(String, nullable=False)
     # Per-position stop loss config (JSON-serialized StopLossConfig); NULL = no stop loss
     stop_loss_json: Mapped[str | None] = mapped_column(Text, nullable=True)

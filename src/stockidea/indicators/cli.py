@@ -9,7 +9,6 @@ import click
 from stockidea.datasource import service as datasource_service
 from stockidea.datasource.database import conn
 from stockidea.indicators import service as indicators_service
-from stockidea.rule_engine import DEFAULT_RANKING, compile_ranking, compile_rule
 from stockidea.types import StockIndex, StockIndicators
 
 logger = logging.getLogger(__name__)
@@ -127,73 +126,3 @@ def compute(date: str | None, date_start: str | None, date_end: str | None, inde
                 f"Invalid date format: {date_str}. Use YYYY-MM-DD format."
             )
         asyncio.run(_compute(date=date_parsed, index=stock_index))
-
-
-@indicators_cli.command(
-    "pick", help="Apply a rule onto analyzed stock prices for a given date range."
-)
-@click.option(
-    "--date",
-    "-d",
-    type=str,
-    required=False,
-    default=datetime.now().strftime("%Y-%m-%d"),
-    help="Analysis date in YYYY-MM-DD format",
-)
-@click.option(
-    "--rule",
-    "-r",
-    type=str,
-    required=True,
-    help="Rule expression string (e.g., 'change_pct_13w > 10 AND max_drop_pct_2w > 15')",
-)
-@click.option(
-    "--max-stocks",
-    "-m",
-    type=int,
-    default=3,
-    help="Maximum number of stocks to hold at once (default: 3)",
-)
-@click.option(
-    "--index",
-    "-i",
-    type=click.Choice([member.value for member in StockIndex]),
-    required=False,
-    default=StockIndex.SP500.value,
-    help="Stock index to analyze",
-)
-@click.option(
-    "--ranking",
-    type=str,
-    default=DEFAULT_RANKING,
-    help=f"Ranking expression for stock selection (default: '{DEFAULT_RANKING}')",
-)
-def pick(date: str, rule: str, max_stocks: int, index: str, ranking: str):
-    stock_index = StockIndex(index)
-    try:
-        date_parsed = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise click.BadParameter(f"Invalid date format: {date}. Use YYYY-MM-DD format.")
-
-    try:
-        rule_func = compile_rule(rule)
-    except Exception as e:
-        raise click.BadParameter(f"Invalid rule expression: {e}")
-
-    try:
-        ranking_func = compile_ranking(ranking)
-    except Exception as e:
-        raise click.BadParameter(f"Invalid ranking expression: {e}")
-
-    stock_indicators_batch = asyncio.run(_compute(date=date_parsed, index=stock_index))
-
-    filtered_stocks = indicators_service.apply_rule(
-        indicators_batch=stock_indicators_batch,
-        rule_func=rule_func,
-        ranking_func=ranking_func,
-    )
-
-    selected_stocks = filtered_stocks[:max_stocks]
-    logger.info(
-        f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)"
-    )
