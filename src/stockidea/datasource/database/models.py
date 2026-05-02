@@ -208,6 +208,10 @@ class DBBacktest(Base):
     index: Mapped[str] = mapped_column(String, nullable=False)
     # Per-position stop loss config (JSON-serialized StopLossConfig); NULL = no stop loss
     stop_loss_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # End-of-period sell convention ("friday_close" | "monday_open").
+    sell_timing: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Per-fill slippage friction (% of price). NULL on legacy rows.
+    slippage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Scores stored inline
     scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
