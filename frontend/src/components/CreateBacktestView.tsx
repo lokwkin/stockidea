@@ -151,9 +151,17 @@ export function CreateBacktestView() {
     return val || ""
   })
   // Stop-loss state. Stop level is fixed at buy time (static; not trailing).
-  const [stopLossMode, setStopLossMode] = useState<StopLossMode>("none")
-  const [stopLossValueInput, setStopLossValueInput] = useState<string>("")
-  const [stopLossMaPeriod, setStopLossMaPeriod] = useState<StopLossMaPeriod>(50)
+  const [stopLossMode, setStopLossMode] = useState<StopLossMode>(() => {
+    const t = searchParams.get("stop_loss_type")
+    return t === "percent" || t === "ma_percent" ? t : "none"
+  })
+  const [stopLossValueInput, setStopLossValueInput] = useState<string>(() => {
+    return searchParams.get("stop_loss_value") || ""
+  })
+  const [stopLossMaPeriod, setStopLossMaPeriod] = useState<StopLossMaPeriod>(() => {
+    const p = parseInt(searchParams.get("stop_loss_ma_period") || "", 10)
+    return STOP_LOSS_MA_PERIODS.includes(p as StopLossMaPeriod) ? (p as StopLossMaPeriod) : 50
+  })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   
   // Convert yyyy/mm/dd input to yyyy-mm-dd (ISO) for storage

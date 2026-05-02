@@ -20,6 +20,12 @@ export interface BacktestRebalance {
   baseline_balance?: number
 }
 
+export interface StopLossConfig {
+  type: "percent" | "ma_percent"
+  value: number
+  ma_period?: number | null
+}
+
 export interface BacktestConfig {
   max_stocks: number
   rebalance_interval_weeks: number
@@ -29,6 +35,7 @@ export interface BacktestConfig {
   ranking?: string
   index: string
   involved_keys?: string[]
+  stop_loss?: StopLossConfig | null
 }
 
 export interface BacktestScores {
