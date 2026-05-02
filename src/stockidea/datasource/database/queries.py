@@ -18,7 +18,6 @@ from stockidea.datasource.database.models import (
     DBStockPriceMetadata,
     DBStockSma,
     DBStockSmaMetadata,
-    DBMarketRegime,
     DBConstituentChange,
     DBConstituentMetadata,
     DBBacktest,
@@ -33,7 +32,6 @@ from stockidea.types import (
     ConstituentChange,
     FMPAdjustedStockPrice,
     FMPLightPrice,
-    MarketRegime,
     StockIndex,
     StockPrice,
     BacktestResult,
@@ -299,61 +297,6 @@ async def get_latest_price_per_symbol(
 
 
 # =============================================================================
-# Market Regime Queries
-# =============================================================================
-
-
-async def save_market_regime(db_session: AsyncSession, regime: MarketRegime) -> None:
-    """Upsert a market regime row for an (index, date)."""
-    stmt = pg_insert(DBMarketRegime).values(
-        index=regime.index.value,
-        date=regime.date,
-        index_above_ma50=regime.index_above_ma50,
-        index_above_ma200=regime.index_above_ma200,
-        index_drawdown_pct_52w=regime.index_drawdown_pct_52w,
-        breadth_pct_above_ma50=regime.breadth_pct_above_ma50,
-        breadth_pct_above_ma200=regime.breadth_pct_above_ma200,
-        created_at=datetime.now(),
-    )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["index", "date"],
-        set_={
-            "index_above_ma50": stmt.excluded.index_above_ma50,
-            "index_above_ma200": stmt.excluded.index_above_ma200,
-            "index_drawdown_pct_52w": stmt.excluded.index_drawdown_pct_52w,
-            "breadth_pct_above_ma50": stmt.excluded.breadth_pct_above_ma50,
-            "breadth_pct_above_ma200": stmt.excluded.breadth_pct_above_ma200,
-            "created_at": stmt.excluded.created_at,
-        },
-    )
-    await db_session.execute(stmt)
-    await db_session.commit()
-
-
-async def load_market_regime(
-    db_session: AsyncSession, index: StockIndex, target_date: date
-) -> MarketRegime | None:
-    stmt = (
-        select(DBMarketRegime)
-        .where(DBMarketRegime.index == index.value)
-        .where(DBMarketRegime.date == target_date)
-    )
-    result = await db_session.execute(stmt)
-    record = result.scalar_one_or_none()
-    if record is None:
-        return None
-    return MarketRegime(
-        index=StockIndex(record.index),
-        date=record.date,
-        index_above_ma50=record.index_above_ma50,
-        index_above_ma200=record.index_above_ma200,
-        index_drawdown_pct_52w=record.index_drawdown_pct_52w,
-        breadth_pct_above_ma50=record.breadth_pct_above_ma50,
-        breadth_pct_above_ma200=record.breadth_pct_above_ma200,
-    )
-
-
-# =============================================================================
 # Constituent Change Queries
 # =============================================================================
 
@@ -575,6 +518,7 @@ async def save_backtest_result(
                 sell_date=investment.sell_date,
                 profit_pct=investment.profit_pct,
                 profit=investment.profit,
+                stop_loss_price=investment.stop_loss_price,
             )
             db_session.add(investment_record)
 
@@ -653,6 +597,7 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
                 sell_date=inv.sell_date,
                 profit_pct=inv.profit_pct,
                 profit=inv.profit,
+                stop_loss_price=inv.stop_loss_price,
             )
             for inv in db_rebalance.backtest_investments
         ]
@@ -712,19 +657,10 @@ async def save_stock_indicators(
     stock_indicators: StockIndicators,
     indicators_date: date,
 ) -> None:
-    """Save stock indicators to the database for a specific date.
-
-    Market regime (`mkt_*`) fields are merged at read time and are NOT persisted on
-    the per-stock row — strip them here.
-    """
+    """Save stock indicators to the database for a specific date."""
     logger.info(f"Saving indicators for {stock_indicators.symbol} on {indicators_date}")
 
-    payload = {
-        k: v
-        for k, v in stock_indicators.model_dump().items()
-        if not k.startswith("mkt_")
-    }
-    record = DBStockIndicators(**payload)
+    record = DBStockIndicators(**stock_indicators.model_dump())
     await db_session.merge(record)
 
     await db_session.commit()
@@ -796,10 +732,6 @@ async def load_stock_indicators(
         price_vs_ma100_pct=record.price_vs_ma100_pct,
         price_vs_ma200_pct=record.price_vs_ma200_pct,
         ma50_vs_ma200_pct=record.ma50_vs_ma200_pct,
-        rs_pct_4w=record.rs_pct_4w,
-        rs_pct_13w=record.rs_pct_13w,
-        rs_pct_26w=record.rs_pct_26w,
-        rs_pct_52w=record.rs_pct_52w,
     )
 
 

@@ -91,3 +91,59 @@ async def get_stock_prices(
                 status_code=500,
                 detail=f"Failed to fetch prices for {symbol}: {str(e)}",
             )
+
+
+@router.get("/stocks/{symbol}/sma")
+async def get_stock_sma(
+    symbol: str,
+    periods: str = Query(
+        default="20,50,100,200",
+        description="Comma-separated SMA period lengths (days)",
+    ),
+    from_date: str = Query(
+        default=None, alias="from", description="Start date YYYY-MM-DD"
+    ),
+    to_date: str = Query(default=None, alias="to", description="End date YYYY-MM-DD"),
+) -> dict[str, list[dict]]:
+    """Return SMA series for one symbol across multiple period lengths.
+
+    Response shape: ``{"20": [{"date": "YYYY-MM-DD", "value": 123.45}, ...], ...}``
+    """
+    try:
+        period_list = [int(p.strip()) for p in periods.split(",") if p.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid periods format")
+    if not period_list:
+        raise HTTPException(status_code=400, detail="At least one period required")
+
+    to_dt = (
+        datetime.strptime(to_date, "%Y-%m-%d").date()
+        if to_date
+        else datetime.now().date()
+    )
+    from_dt = (
+        datetime.strptime(from_date, "%Y-%m-%d").date()
+        if from_date
+        else to_dt - timedelta(weeks=156)
+    )
+
+    async with conn.get_db_session() as db_session:
+        try:
+            series_per_period = await asyncio.gather(
+                *[
+                    datasource_service.get_sma_series(
+                        db_session, symbol.upper(), p, from_dt, to_dt
+                    )
+                    for p in period_list
+                ]
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch SMA for {symbol}: {str(e)}",
+            )
+
+    return {
+        str(period): [{"date": d.isoformat(), "value": v} for d, v in series]
+        for period, series in zip(period_list, series_per_period)
+    }

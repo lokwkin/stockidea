@@ -90,7 +90,6 @@ async def get_analysis(
             symbols=symbols,
             indicators_date=indicators_date,
             back_period_weeks=52,
-            from_index=index,
         )
 
     # Apply rule/ranking whenever any of rule, ranking, or max_stocks is provided.

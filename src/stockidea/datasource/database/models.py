@@ -113,24 +113,6 @@ class DBStockSmaMetadata(Base):
         )
 
 
-class DBMarketRegime(Base):
-    __tablename__ = "market_regime"
-
-    index: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
-    index_above_ma50: Mapped[int] = mapped_column(Integer, nullable=False)
-    index_above_ma200: Mapped[int] = mapped_column(Integer, nullable=False)
-    index_drawdown_pct_52w: Mapped[float] = mapped_column(Float, nullable=False)
-    breadth_pct_above_ma50: Mapped[float] = mapped_column(Float, nullable=False)
-    breadth_pct_above_ma200: Mapped[float] = mapped_column(Float, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.now
-    )
-
-    def __repr__(self) -> str:
-        return f"<MarketRegime(index={self.index}, date={self.date})>"
-
-
 class DBConstituentChange(Base):
     __tablename__ = "constituent_changes"
 
@@ -321,6 +303,7 @@ class DBBacktestInvestment(Base):
     sell_date: Mapped[datetime] = mapped_column(Date, nullable=False)
     profit_pct: Mapped[float] = mapped_column(Float, nullable=False)
     profit: Mapped[float] = mapped_column(Float, nullable=False)
+    stop_loss_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     backtest_rebalance: Mapped["DBBacktestRebalance"] = relationship(
         "DBBacktestRebalance", back_populates="backtest_investments"
@@ -401,11 +384,6 @@ class DBStockIndicators(Base):
     ma50_vs_ma200_pct: Mapped[float] = mapped_column(
         Float, nullable=False, server_default="0"
     )
-    # Relative strength vs benchmark index (% point difference)
-    rs_pct_4w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
-    rs_pct_13w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
-    rs_pct_26w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
-    rs_pct_52w: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.now
     )

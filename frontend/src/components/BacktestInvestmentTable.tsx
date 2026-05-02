@@ -106,6 +106,7 @@ export function BacktestInvestmentTable({
             </TableHead>
             <TableHead>{getColumnDisplayName("sell_price")}</TableHead>
             <TableHead>{getColumnDisplayName("sell_date")}</TableHead>
+            <TableHead>{getColumnDisplayName("stop_loss_price")}</TableHead>
             <TableHead
               className="cursor-pointer select-none hover:bg-muted/50"
               onClick={() => handleSort("profit_pct")}
@@ -158,6 +159,9 @@ export function BacktestInvestmentTable({
               <TableCell>{formatDate(investment.buy_date)}</TableCell>
               <TableCell className="font-mono tabular-nums">{formatCurrency(investment.sell_price)}</TableCell>
               <TableCell>{formatDate(investment.sell_date)}</TableCell>
+              <TableCell className="font-mono tabular-nums text-muted-foreground">
+                {investment.stop_loss_price != null ? formatCurrency(investment.stop_loss_price) : "—"}
+              </TableCell>
               <TableCell
                 className={`font-mono tabular-nums ${
                   investment.profit_pct >= 0 ? "text-positive" : "text-negative"

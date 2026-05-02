@@ -204,21 +204,10 @@ All indicator fields follow a `<metric>_<unit>_<window>` naming convention so yo
 | `price_vs_ma100_pct` | Current price vs 100-day SMA in % |
 | `price_vs_ma200_pct` | Current price vs 200-day SMA in % |
 | `ma50_vs_ma200_pct` | 50-day SMA vs 200-day SMA in % (positive = golden-cross territory) |
-| **Relative strength vs benchmark index** | |
-| `rs_pct_4w` | 4-week return minus benchmark index 4-week return (% point difference) |
-| `rs_pct_13w` | 13-week return minus benchmark index 13-week return |
-| `rs_pct_26w` | 26-week return minus benchmark index 26-week return |
-| `rs_pct_52w` | 52-week return minus benchmark index 52-week return |
-| **Market regime (per benchmark index, merged onto each stock)** | |
-| `mkt_index_above_ma50` | 1 if benchmark index is above its 50-day SMA, else 0 |
-| `mkt_index_above_ma200` | 1 if benchmark index is above its 200-day SMA, else 0 (classic bull/bear gate) |
-| `mkt_index_drawdown_pct_52w` | Benchmark index current drawdown from its 52-week peak (positive %) |
-| `mkt_breadth_pct_above_ma50` | Fraction of index constituents above their 50-day SMA (0.0--1.0) |
-| `mkt_breadth_pct_above_ma200` | Fraction of index constituents above their 200-day SMA (0.0--1.0) |
 
-Example regime-aware rule:
+Example trend-gated rule:
 ```
-mkt_index_above_ma200 == 1 AND price_vs_ma50_pct > 0 AND rs_pct_13w > 5
+price_vs_ma200_pct > 0 AND ma50_vs_ma200_pct > 0 AND change_pct_13w > 10
 ```
 
 ## Backtest Scores

@@ -105,29 +105,6 @@ class StockIndicators(BaseModel):
     price_vs_ma100_pct: float = 0.0
     price_vs_ma200_pct: float = 0.0
     ma50_vs_ma200_pct: float = 0.0
-    # Relative strength vs benchmark index (% point difference)
-    rs_pct_4w: float = 0.0
-    rs_pct_13w: float = 0.0
-    rs_pct_26w: float = 0.0
-    rs_pct_52w: float = 0.0
-    # Market regime fields (merged at read time from MarketRegime, not stored on StockIndicators)
-    mkt_index_above_ma50: int = 0
-    mkt_index_above_ma200: int = 0
-    mkt_index_drawdown_pct_52w: float = 0.0
-    mkt_breadth_pct_above_ma50: float = 0.0
-    mkt_breadth_pct_above_ma200: float = 0.0
-
-
-class MarketRegime(BaseModel):
-    """Market-wide regime snapshot for an index on a specific date."""
-
-    index: StockIndex
-    date: date
-    index_above_ma50: int  # 0 / 1
-    index_above_ma200: int  # 0 / 1
-    index_drawdown_pct_52w: float  # positive % below 52w peak
-    breadth_pct_above_ma50: float  # 0.0 – 1.0
-    breadth_pct_above_ma200: float  # 0.0 – 1.0
 
 
 # =============================================================================
@@ -144,6 +121,7 @@ class BacktestInvestment(BaseModel):
     sell_date: datetime
     profit_pct: float
     profit: float
+    stop_loss_price: float | None = None
 
 
 class BacktestRebalance(BaseModel):

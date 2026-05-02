@@ -7,6 +7,7 @@ export interface BacktestInvestment {
   sell_date: string
   profit_pct: number
   profit: number
+  stop_loss_price?: number | null
 }
 
 export interface BacktestRebalance {

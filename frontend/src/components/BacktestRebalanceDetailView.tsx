@@ -146,6 +146,7 @@ export function BacktestRebalanceDetailView({
               <TableHead>{getColumnDisplayName("buy_date")}</TableHead>
               <TableHead>{getColumnDisplayName("sell_price")}</TableHead>
               <TableHead>{getColumnDisplayName("sell_date")}</TableHead>
+              <TableHead>{getColumnDisplayName("stop_loss_price")}</TableHead>
               <TableHead>{getColumnDisplayName("profit_pct")}</TableHead>
               <TableHead>{getColumnDisplayName("profit")}</TableHead>
             </TableRow>
@@ -166,6 +167,9 @@ export function BacktestRebalanceDetailView({
                 <TableCell>{formatDate(investment.buy_date)}</TableCell>
                 <TableCell className="font-mono tabular-nums">{formatCurrency(investment.sell_price)}</TableCell>
                 <TableCell>{formatDate(investment.sell_date)}</TableCell>
+                <TableCell className="font-mono tabular-nums text-muted-foreground">
+                  {investment.stop_loss_price != null ? formatCurrency(investment.stop_loss_price) : "—"}
+                </TableCell>
                 <TableCell
                   className={`font-mono tabular-nums ${
                     investment.profit_pct >= 0 ? "text-positive" : "text-negative"

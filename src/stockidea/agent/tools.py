@@ -315,17 +315,6 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "price_vs_ma100_pct": "Current price vs 100-day SMA in %. >0 = above MA. Typical: -20 to +20",
     "price_vs_ma200_pct": "Current price vs 200-day SMA in %. >0 = above MA (classic long-term uptrend). Typical: -30 to +40",
     "ma50_vs_ma200_pct": "50-day SMA vs 200-day SMA in %. >0 = golden-cross territory (50d above 200d). <0 = death-cross. Typical: -10 to +15",
-    # Relative strength vs benchmark index
-    "rs_pct_4w": "4-week return minus benchmark index 4-week return (% points). Positive = outperforming. Typical: -10 to +10",
-    "rs_pct_13w": "13-week return minus benchmark 13-week return. Identifies leaders vs market beta. Typical: -20 to +25",
-    "rs_pct_26w": "26-week return minus benchmark 26-week return. Typical: -30 to +40",
-    "rs_pct_52w": "52-week return minus benchmark 52-week return. Typical: -40 to +60",
-    # Market regime (whole-market context, same for all stocks of the same index)
-    "mkt_index_above_ma50": "1 if benchmark index is above its 50-day SMA today, else 0. Use to filter out short-term downtrends",
-    "mkt_index_above_ma200": "1 if benchmark index is above its 200-day SMA today, else 0. Classic bull/bear regime gate",
-    "mkt_index_drawdown_pct_52w": "Current drawdown of the benchmark index from its 52-week peak (positive %). Typical: 0-30. >15 indicates a correction",
-    "mkt_breadth_pct_above_ma50": "Fraction of index constituents currently above their 50-day SMA (0.0-1.0). >0.6 = healthy breadth",
-    "mkt_breadth_pct_above_ma200": "Fraction of index constituents currently above their 200-day SMA (0.0-1.0). >0.5 = bullish regime",
 }
 
 # Fields always included in preview_filter sample output
@@ -534,7 +523,6 @@ async def _preview_filter(params: dict) -> str:
                 indicators_date=target_date,
                 back_period_weeks=52,
                 compute_if_not_exists=True,
-                from_index=stock_index,
             )
 
             filtered = indicators_service.apply_rule(
