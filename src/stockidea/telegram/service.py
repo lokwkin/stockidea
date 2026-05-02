@@ -5,6 +5,7 @@ buy/sell recommendation against the portfolio supplied in the message.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
@@ -22,10 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 _USAGE_TEXT = (
-    "Send /pick with your portfolio inline, e.g.:\n\n"
-    "/pick $:10000 AAPL:5 MSFT:10\n\n"
-    "Use $:N for cash and SYMBOL:QTY for each holding. Both are optional — "
-    "I'll reply with picks based on the configured strategy."
+    "Send /pick with optional inline overrides + portfolio, e.g.:\n\n"
+    "/pick 5 NASDAQ $:10000 AAPL:5 MSFT:10\n\n"
+    "Tokens (any order, all optional):\n"
+    "  N            max stocks (default from STRATEGY_MAX_STOCKS)\n"
+    "  SP500|NASDAQ index (default from STRATEGY_INDEX)\n"
+    "  $:N          cash available\n"
+    "  SYMBOL:QTY   current holding\n"
 )
 
 
@@ -34,13 +38,17 @@ class _Strategy:
 
     def __init__(
         self,
+        rule_str: str,
         rule_func: Callable[[StockIndicators], bool],
+        sort_str: str,
         sort_func: Callable[[StockIndicators], float],
         max_stocks: int,
         from_index: StockIndex,
         stop_loss: StopLossConfig | None,
     ):
+        self.rule_str = rule_str
         self.rule_func = rule_func
+        self.sort_str = sort_str
         self.sort_func = sort_func
         self.max_stocks = max_stocks
         self.from_index = from_index
@@ -50,8 +58,8 @@ class _Strategy:
 def _build_strategy() -> _Strategy:
     if not constants.STRATEGY_RULE:
         raise RuntimeError("STRATEGY_RULE env var is required to run the Telegram bot")
-    rule_func = compile_rule(constants.STRATEGY_RULE)
-    sort_func = compile_sort(constants.STRATEGY_SORT or DEFAULT_SORT)
+    rule_str = constants.STRATEGY_RULE
+    sort_str = constants.STRATEGY_SORT or DEFAULT_SORT
     stop_loss = StopLossConfig.parse_options(
         pct=float(constants.STRATEGY_STOP_LOSS_PCT)
         if constants.STRATEGY_STOP_LOSS_PCT
@@ -59,48 +67,94 @@ def _build_strategy() -> _Strategy:
         ma_spec=constants.STRATEGY_STOP_LOSS_MA or None,
     )
     return _Strategy(
-        rule_func=rule_func,
-        sort_func=sort_func,
+        rule_str=rule_str,
+        rule_func=compile_rule(rule_str),
+        sort_str=sort_str,
+        sort_func=compile_sort(sort_str),
         max_stocks=constants.STRATEGY_MAX_STOCKS,
         from_index=StockIndex(constants.STRATEGY_INDEX),
         stop_loss=stop_loss,
     )
 
 
-def _parse_portfolio_message(text: str) -> tuple[Portfolio, bool]:
-    """Parse the args following ``/pick`` into ``(Portfolio, has_holdings)``.
+@dataclass
+class _PickArgs:
+    portfolio: Portfolio
+    has_holdings: bool
+    max_stocks: int | None  # None ⇒ use strategy default
+    from_index: StockIndex | None  # None ⇒ use strategy default
 
-    Format: space-delimited tokens on one line, e.g. ``/pick $:10000 GEV:20``.
-    ``$:N`` sets cash; ``SYMBOL:QTY`` adds a holding. Both are optional.
+
+_INDEX_TOKENS = {idx.value: idx for idx in StockIndex}
+
+
+def _parse_pick_args(text: str) -> _PickArgs:
+    """Parse the args following ``/pick`` into a ``_PickArgs``.
+
+    Format: space-delimited tokens on one line, e.g.
+    ``/pick 5 NASDAQ $:10000 GEV:20``.
+
+    Token forms (all optional, any order):
+      ``N``            integer ⇒ max_stocks override
+      ``SP500|NASDAQ`` index override
+      ``$:N``          cash
+      ``SYMBOL:QTY``   holding
+
     Anything malformed raises ``ValueError`` — the caller turns that into a
     friendly reply.
     """
     cash: float = 0.0
     holdings: list[Holding] = []
     has_holdings = False
+    max_stocks: int | None = None
+    from_index: StockIndex | None = None
     # Skip the first token (the /pick command itself).
     for token in text.split()[1:]:
-        if ":" not in token:
-            raise ValueError(f"expected '$:N' or 'SYMBOL:QTY', got '{token}'")
-        prefix, _, value = token.partition(":")
-        prefix = prefix.strip()
-        value = value.strip()
-        if prefix == "$":
+        if ":" in token:
+            prefix, _, value = token.partition(":")
+            prefix = prefix.strip()
+            value = value.strip()
+            if prefix == "$":
+                try:
+                    cash = float(value)
+                except ValueError:
+                    raise ValueError(f"cash must be a number, got '{value}'")
+                continue
             try:
-                cash = float(value)
+                qty = int(value)
             except ValueError:
-                raise ValueError(f"cash must be a number, got '{value}'")
+                raise ValueError(f"quantity must be an integer, got '{value}'")
+            try:
+                holdings.append(Holding(symbol=prefix.upper(), quantity=qty))
+            except ValueError as e:
+                raise ValueError(f"invalid holding {prefix}: {e}")
+            has_holdings = True
             continue
-        try:
-            qty = int(value)
-        except ValueError:
-            raise ValueError(f"quantity must be an integer, got '{value}'")
-        try:
-            holdings.append(Holding(symbol=prefix.upper(), quantity=qty))
-        except ValueError as e:
-            raise ValueError(f"invalid holding {prefix}: {e}")
-        has_holdings = True
-    return Portfolio(cash=cash, holdings=holdings), has_holdings
+        upper = token.upper()
+        if upper in _INDEX_TOKENS:
+            from_index = _INDEX_TOKENS[upper]
+            continue
+        if token.isdigit():
+            max_stocks = int(token)
+            continue
+        raise ValueError(
+            f"unrecognised token '{token}' "
+            f"— expected N, SP500/NASDAQ, $:N, or SYMBOL:QTY"
+        )
+    return _PickArgs(
+        portfolio=Portfolio(cash=cash, holdings=holdings),
+        has_holdings=has_holdings,
+        max_stocks=max_stocks,
+        from_index=from_index,
+    )
+
+
+def _format_stop_loss(stop_loss: StopLossConfig | None) -> str:
+    if stop_loss is None:
+        return "(none)"
+    if stop_loss.type == "percent":
+        return f"{stop_loss.value:g}% below buy"
+    return f"{stop_loss.value:g}% of SMA{stop_loss.ma_period} at buy"
 
 
 def _format_pick_line(
@@ -108,24 +162,40 @@ def _format_pick_line(
     quantity: int | None,
     price: float | None,
     stop_loss_price: float | None,
+    show_quantity: bool,
 ) -> str:
+    qty_to_show = quantity if show_quantity else None
     if price is not None:
         head = (
-            f"{symbol} {quantity}@${price:.2f}"
-            if quantity is not None
+            f"{symbol} {qty_to_show}@${price:.2f}"
+            if qty_to_show is not None
             else f"{symbol} @${price:.2f}"
         )
     else:
-        head = f"{symbol} {quantity}" if quantity is not None else symbol
+        head = f"{symbol} {qty_to_show}" if qty_to_show is not None else symbol
     parts = [head, "lmt/mkt"]
     if stop_loss_price is not None:
         parts.append(f"stop @${stop_loss_price:.2f}")
     return "  • " + " ".join(parts)
 
 
-def _format_screener_result(result: ScreenerResult, show_orders: bool) -> str:
+def _format_screener_result(
+    result: ScreenerResult,
+    *,
+    rule_str: str,
+    sort_str: str,
+    stop_loss: StopLossConfig | None,
+    max_stocks: int,
+    from_index: StockIndex,
+    show_orders: bool,
+) -> str:
     lines: list[str] = []
     lines.append("📊 Screener Result")
+    lines.append("")
+    lines.append(f"Index: {from_index.value}    Max stocks: {max_stocks}")
+    lines.append(f"Rule: {rule_str}")
+    lines.append(f"Sort: {sort_str}")
+    lines.append(f"Stop loss: {_format_stop_loss(stop_loss)}")
     lines.append("")
     lines.append("Picks:")
     if not result.picks:
@@ -134,7 +204,11 @@ def _format_screener_result(result: ScreenerResult, show_orders: bool) -> str:
         for p in result.picks:
             lines.append(
                 _format_pick_line(
-                    p.symbol, p.target_quantity, p.buy_price, p.stop_loss_price
+                    p.symbol,
+                    p.target_quantity,
+                    p.buy_price,
+                    p.stop_loss_price,
+                    show_quantity=show_orders,
                 )
             )
 
@@ -145,7 +219,11 @@ def _format_screener_result(result: ScreenerResult, show_orders: bool) -> str:
             lines.append("  (none)")
         else:
             for s in result.sells:
-                lines.append(_format_pick_line(s.symbol, s.quantity, s.price, None))
+                lines.append(
+                    _format_pick_line(
+                        s.symbol, s.quantity, s.price, None, show_quantity=True
+                    )
+                )
 
         lines.append("")
         lines.append("🟢 Buy:")
@@ -154,7 +232,13 @@ def _format_screener_result(result: ScreenerResult, show_orders: bool) -> str:
         else:
             for b in result.buys:
                 lines.append(
-                    _format_pick_line(b.symbol, b.quantity, b.price, b.stop_loss_price)
+                    _format_pick_line(
+                        b.symbol,
+                        b.quantity,
+                        b.price,
+                        b.stop_loss_price,
+                        show_quantity=True,
+                    )
                 )
     return "\n".join(lines)
 
@@ -186,12 +270,19 @@ def _make_pick_handler(strategy: _Strategy):
             return
 
         try:
-            portfolio, has_holdings = _parse_portfolio_message(update.message.text)
+            args = _parse_pick_args(update.message.text)
         except ValueError as e:
             await update.message.reply_text(
-                f"⚠️ Couldn't parse your portfolio: {e}\n\n{_USAGE_TEXT}"
+                f"⚠️ Couldn't parse your message: {e}\n\n{_USAGE_TEXT}"
             )
             return
+
+        max_stocks = (
+            args.max_stocks if args.max_stocks is not None else strategy.max_stocks
+        )
+        from_index = (
+            args.from_index if args.from_index is not None else strategy.from_index
+        )
 
         try:
             now = datetime.now()
@@ -202,10 +293,10 @@ def _make_pick_handler(strategy: _Strategy):
                     buy_date=now,
                     rule_func=strategy.rule_func,
                     sort_func=strategy.sort_func,
-                    max_stocks=strategy.max_stocks,
-                    from_index=strategy.from_index,
+                    max_stocks=max_stocks,
+                    from_index=from_index,
                     stop_loss=strategy.stop_loss,
-                    portfolio=portfolio,
+                    portfolio=args.portfolio,
                 )
         except Exception as e:
             logger.exception("screener.pick failed")
@@ -213,7 +304,15 @@ def _make_pick_handler(strategy: _Strategy):
             return
 
         await update.message.reply_text(
-            _format_screener_result(result, show_orders=has_holdings)
+            _format_screener_result(
+                result,
+                rule_str=strategy.rule_str,
+                sort_str=strategy.sort_str,
+                stop_loss=strategy.stop_loss,
+                max_stocks=max_stocks,
+                from_index=from_index,
+                show_orders=args.has_holdings,
+            )
         )
 
     return _handle_pick
