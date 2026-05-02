@@ -22,12 +22,10 @@ logger = logging.getLogger(__name__)
 
 
 _USAGE_TEXT = (
-    "Send /pick with your portfolio on subsequent lines, e.g.:\n\n"
-    "/pick\n"
-    "cash: 10000\n"
-    "AAPL 5\n"
-    "MSFT 10\n\n"
-    "I'll reply with which stocks to buy/sell based on the configured strategy."
+    "Send /pick with your portfolio inline, e.g.:\n\n"
+    "/pick $:10000 AAPL:5 MSFT:10\n\n"
+    "Use $:N for cash and SYMBOL:QTY for each holding. Both are optional — "
+    "I'll reply with picks based on the configured strategy."
 )
 
 
@@ -69,49 +67,63 @@ def _build_strategy() -> _Strategy:
     )
 
 
-def _parse_portfolio_message(text: str) -> Portfolio:
-    """Parse the lines following ``/pick`` into a Portfolio.
+def _parse_portfolio_message(text: str) -> tuple[Portfolio, bool]:
+    """Parse the args following ``/pick`` into ``(Portfolio, has_holdings)``.
 
-    Format: optional ``cash: N`` line, then ``SYMBOL QTY`` lines. Whitespace
-    around tokens is tolerated; blank lines are ignored. Anything malformed
-    raises ``ValueError`` — the caller turns that into a friendly reply.
+    Format: space-delimited tokens on one line, e.g. ``/pick $:10000 GEV:20``.
+    ``$:N`` sets cash; ``SYMBOL:QTY`` adds a holding. Both are optional.
+    Anything malformed raises ``ValueError`` — the caller turns that into a
+    friendly reply.
     """
     cash: float = 0.0
     holdings: list[Holding] = []
-    # Skip the first line (the /pick command itself, possibly with trailing args).
-    for raw in text.splitlines()[1:]:
-        line = raw.strip()
-        if not line:
+    has_holdings = False
+    # Skip the first token (the /pick command itself).
+    for token in text.split()[1:]:
+        if ":" not in token:
+            raise ValueError(f"expected '$:N' or 'SYMBOL:QTY', got '{token}'")
+        prefix, _, value = token.partition(":")
+        prefix = prefix.strip()
+        value = value.strip()
+        if prefix == "$":
+            try:
+                cash = float(value)
+            except ValueError:
+                raise ValueError(f"cash must be a number, got '{value}'")
             continue
-        if ":" in line:
-            key, _, value = line.partition(":")
-            key = key.strip().lower()
-            if key == "cash":
-                try:
-                    cash = float(value.strip())
-                except ValueError:
-                    raise ValueError(f"cash must be a number, got '{value.strip()}'")
-                continue
-            raise ValueError(f"unknown key '{key}' (expected 'cash')")
-        # Otherwise treat as SYMBOL QTY
-        parts = line.split()
-        if len(parts) != 2:
-            raise ValueError(
-                f"expected 'SYMBOL QTY' on each holding line, got '{line}'"
-            )
-        symbol_str, qty_str = parts
         try:
-            qty = int(qty_str)
+            qty = int(value)
         except ValueError:
-            raise ValueError(f"quantity must be an integer, got '{qty_str}'")
+            raise ValueError(f"quantity must be an integer, got '{value}'")
         try:
-            holdings.append(Holding(symbol=symbol_str.upper(), quantity=qty))
+            holdings.append(Holding(symbol=prefix.upper(), quantity=qty))
         except ValueError as e:
-            raise ValueError(f"invalid holding {symbol_str}: {e}")
-    return Portfolio(cash=cash, holdings=holdings)
+            raise ValueError(f"invalid holding {prefix}: {e}")
+        has_holdings = True
+    return Portfolio(cash=cash, holdings=holdings), has_holdings
 
 
-def _format_screener_result(result: ScreenerResult) -> str:
+def _format_pick_line(
+    symbol: str,
+    quantity: int | None,
+    price: float | None,
+    stop_loss_price: float | None,
+) -> str:
+    if price is not None:
+        head = (
+            f"{symbol} {quantity}@${price:.2f}"
+            if quantity is not None
+            else f"{symbol} @${price:.2f}"
+        )
+    else:
+        head = f"{symbol} {quantity}" if quantity is not None else symbol
+    parts = [head, "lmt/mkt"]
+    if stop_loss_price is not None:
+        parts.append(f"stop @${stop_loss_price:.2f}")
+    return "  • " + " ".join(parts)
+
+
+def _format_screener_result(result: ScreenerResult, show_orders: bool) -> str:
     lines: list[str] = []
     lines.append("📊 Screener Result")
     lines.append("")
@@ -120,40 +132,30 @@ def _format_screener_result(result: ScreenerResult) -> str:
         lines.append("  (no stocks passed the rule)")
     else:
         for p in result.picks:
-            qty_str = (
-                f" target_qty={p.target_quantity}"
-                if p.target_quantity is not None
-                else ""
+            lines.append(
+                _format_pick_line(
+                    p.symbol, p.target_quantity, p.buy_price, p.stop_loss_price
+                )
             )
-            stop_str = (
-                f" stop=${p.stop_loss_price:.2f}"
-                if p.stop_loss_price is not None
-                else ""
-            )
-            lines.append(f"  • {p.symbol}  buy=${p.buy_price:.2f}{qty_str}{stop_str}")
 
-    lines.append("")
-    lines.append("🔴 Sell:")
-    if not result.sells:
-        lines.append("  (none)")
-    else:
-        for s in result.sells:
-            price_str = f" @ ${s.price:.2f}" if s.price is not None else ""
-            lines.append(f"  • {s.symbol}  qty={s.quantity}{price_str}")
+    if show_orders:
+        lines.append("")
+        lines.append("🔴 Sell:")
+        if not result.sells:
+            lines.append("  (none)")
+        else:
+            for s in result.sells:
+                lines.append(_format_pick_line(s.symbol, s.quantity, s.price, None))
 
-    lines.append("")
-    lines.append("🟢 Buy:")
-    if not result.buys:
-        lines.append("  (none)")
-    else:
-        for b in result.buys:
-            price_str = f" @ ${b.price:.2f}" if b.price is not None else ""
-            stop_str = (
-                f" stop=${b.stop_loss_price:.2f}"
-                if b.stop_loss_price is not None
-                else ""
-            )
-            lines.append(f"  • {b.symbol}  qty={b.quantity}{price_str}{stop_str}")
+        lines.append("")
+        lines.append("🟢 Buy:")
+        if not result.buys:
+            lines.append("  (none)")
+        else:
+            for b in result.buys:
+                lines.append(
+                    _format_pick_line(b.symbol, b.quantity, b.price, b.stop_loss_price)
+                )
     return "\n".join(lines)
 
 
@@ -184,7 +186,7 @@ def _make_pick_handler(strategy: _Strategy):
             return
 
         try:
-            portfolio = _parse_portfolio_message(update.message.text)
+            portfolio, has_holdings = _parse_portfolio_message(update.message.text)
         except ValueError as e:
             await update.message.reply_text(
                 f"⚠️ Couldn't parse your portfolio: {e}\n\n{_USAGE_TEXT}"
@@ -210,7 +212,9 @@ def _make_pick_handler(strategy: _Strategy):
             await update.message.reply_text(f"⚠️ Screener failed: {e}")
             return
 
-        await update.message.reply_text(_format_screener_result(result))
+        await update.message.reply_text(
+            _format_screener_result(result, show_orders=has_holdings)
+        )
 
     return _handle_pick
 
