@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { COLUMNS, DEFAULT_VISIBLE_COLUMNS } from "@/config/columns"
 import { dateFormat, cn } from "@/lib/utils"
 
-const DEFAULT_RANKING = "change_pct_13w / return_std_52w"
+const DEFAULT_SORT = "change_pct_13w / return_std_52w"
 
 /** Group columns by their `group` field for the column picker */
 function groupColumns() {
@@ -41,12 +41,12 @@ export function AnalysisView() {
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [rule, setRule] = useState<string>("")
-  const [ranking, setRanking] = useState<string>("")
+  const [sortExpr, setSortExpr] = useState<string>("")
   const [maxStocks, setMaxStocks] = useState<string>("")
   // "applied" values are what's actually sent to the API. Inputs only update
   // these on Apply (button or Enter). Date + Index dropdowns refetch directly.
   const [appliedRule, setAppliedRule] = useState<string>("")
-  const [appliedRanking, setAppliedRanking] = useState<string>("")
+  const [appliedSortExpr, setAppliedSortExpr] = useState<string>("")
   const [appliedMaxStocks, setAppliedMaxStocks] = useState<string>("")
   const [stockIndex, setStockIndex] = useState<"SP500" | "NASDAQ">("SP500")
   const [symbolFilter, setSymbolFilter] = useState<string>("")
@@ -56,7 +56,7 @@ export function AnalysisView() {
 
   const targetSymbol = searchParams.get("symbol")
   const urlRule = searchParams.get("rule")
-  const urlRanking = searchParams.get("ranking")
+  const urlSortExpr = searchParams.get("sort_expr")
   const urlMaxStocks = searchParams.get("max_stocks")
   const urlIndex = searchParams.get("index")
 
@@ -97,37 +97,37 @@ export function AnalysisView() {
     }
   }, [urlDate, availableDates, selectedDate])
 
-  // Set rule, ranking, max_stocks, index from URL query params on mount
+  // Set rule, sort_expr, max_stocks, index from URL query params on mount
   useEffect(() => {
     if (urlRule) {
       setRule(urlRule)
       setAppliedRule(urlRule)
     }
-    if (urlRanking) {
-      setRanking(urlRanking)
-      setAppliedRanking(urlRanking)
+    if (urlSortExpr) {
+      setSortExpr(urlSortExpr)
+      setAppliedSortExpr(urlSortExpr)
     }
     if (urlMaxStocks) {
       setMaxStocks(urlMaxStocks)
       setAppliedMaxStocks(urlMaxStocks)
     }
     if (urlIndex === "SP500" || urlIndex === "NASDAQ") setStockIndex(urlIndex)
-  }, [urlRule, urlRanking, urlMaxStocks, urlIndex])
+  }, [urlRule, urlSortExpr, urlMaxStocks, urlIndex])
 
   const buildIndicatorsUrl = useCallback(
     (
       date: string,
       ruleStr: string,
-      rankingStr: string,
+      sortStr: string,
       maxStocksStr: string,
       indexStr: string
     ) => {
       const params = new URLSearchParams()
       const trimmedRule = ruleStr.trim()
-      const trimmedRanking = rankingStr.trim()
+      const trimmedSort = sortStr.trim()
       const trimmedMax = maxStocksStr.trim()
       if (trimmedRule) params.set("rule", trimmedRule)
-      if (trimmedRanking) params.set("ranking", trimmedRanking)
+      if (trimmedSort) params.set("sort_expr", trimmedSort)
       if (trimmedMax) {
         const n = parseInt(trimmedMax, 10)
         if (!isNaN(n) && n > 0) params.set("max_stocks", String(n))
@@ -154,7 +154,7 @@ export function AnalysisView() {
       }
     })
 
-    fetch(buildIndicatorsUrl(selectedDate, appliedRule, appliedRanking, appliedMaxStocks, stockIndex))
+    fetch(buildIndicatorsUrl(selectedDate, appliedRule, appliedSortExpr, appliedMaxStocks, stockIndex))
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load indicator data")
         return res.json()
@@ -175,7 +175,7 @@ export function AnalysisView() {
     return () => {
       cancelled = true
     }
-  }, [selectedDate, appliedRule, appliedRanking, appliedMaxStocks, stockIndex, buildIndicatorsUrl])
+  }, [selectedDate, appliedRule, appliedSortExpr, appliedMaxStocks, stockIndex, buildIndicatorsUrl])
 
   // Scroll to target symbol when data loads
   useEffect(() => {
@@ -199,9 +199,9 @@ export function AnalysisView() {
 
   const handleRuleSubmit = useCallback(() => {
     setAppliedRule(rule)
-    setAppliedRanking(ranking)
+    setAppliedSortExpr(sortExpr)
     setAppliedMaxStocks(maxStocks)
-  }, [rule, ranking, maxStocks])
+  }, [rule, sortExpr, maxStocks])
 
   const toggleColumn = useCallback((key: string) => {
     setVisibleColumns((prev) => {
@@ -308,7 +308,7 @@ export function AnalysisView() {
             </button>
           </div>
           <p className="text-muted-foreground">
-            Browse per-stock indicators with rule-based filtering and ranking
+            Browse per-stock indicators with rule-based filtering and sorting
           </p>
         </header>
 
@@ -380,17 +380,17 @@ export function AnalysisView() {
             </p>
           </div>
 
-          {/* Ranking + Max Stocks */}
+          {/* Sort + Max Stocks */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_180px]">
             <div className="space-y-2">
-              <label htmlFor="ranking" className="text-sm font-medium">
-                Ranking Expression
+              <label htmlFor="sort_expr" className="text-sm font-medium">
+                Sort Expression
               </label>
               <Input
-                id="ranking"
-                value={ranking}
-                onChange={(e) => setRanking(e.target.value)}
-                placeholder={DEFAULT_RANKING}
+                id="sort_expr"
+                value={sortExpr}
+                onChange={(e) => setSortExpr(e.target.value)}
+                placeholder={DEFAULT_SORT}
                 className="font-mono text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -400,7 +400,7 @@ export function AnalysisView() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Numeric formula — higher scores rank higher. Default: {DEFAULT_RANKING}
+                Numeric formula — higher scores rank higher. Default: {DEFAULT_SORT}
               </p>
             </div>
             <div className="space-y-2">
@@ -423,12 +423,12 @@ export function AnalysisView() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Top N by ranking
+                Top N by sort score
               </p>
             </div>
           </div>
 
-          {/* Apply — for rule / ranking / max stocks */}
+          {/* Apply — for rule / sort / max stocks */}
           <div className="flex justify-end">
             <Button
               type="button"

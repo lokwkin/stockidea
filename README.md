@@ -8,8 +8,10 @@ Stockidea is a platform for designing and backtesting systematic stock strategie
 - [Architecture](#architecture)
   - [Datasource](#datasource)
   - [Indicators](#indicators)
+  - [Screener](#screener)
   - [Backtest](#backtest)
   - [Agent](#agent)
+  - [Telegram Bot](#telegram-bot)
 - [Setup](#setup)
 - [Stock Indicators and Rule Syntax](#stock-indicators-and-rule-syntax)
 - [Backtest Scores](#backtest-scores)
@@ -23,7 +25,7 @@ The frontend dashboard is organized around **Strategy Ideas**. Users create a st
 
 ## Architecture
 
-The project is organized around four core components: **Datasource**, **Indicators**, **Backtest**, and **Agent**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
+The project is organized around six core components: **Datasource**, **Indicators**, **Screener**, **Backtest**, **Agent**, and the **Telegram Bot**. These are exposed through both a web dashboard (React + FastAPI) and a CLI.
 
 ### Datasource
 
@@ -50,25 +52,41 @@ Computes per-stock performance indicators from raw price data. Daily prices are 
 - **Volatility** -- Maximum upward/downward swings at 1w, 2w, and 4w windows; weekly-return standard deviation (incl. downside-only)
 - **Stability** -- Maximum drawdown across windows (4w, 13w, 26w, 52w), fraction of positive weeks across windows
 - **Moving average structure** -- Price vs 20/50/100/200-day SMAs and the 50/200 cross ratio (golden/death cross territory)
-- **Relative strength** -- Stock return minus benchmark index return across 4w/13w/26w/52w windows
-- **Market regime** -- Benchmark index position vs 50d/200d MA, index 52w drawdown, and constituent breadth above 50d/200d MA (one regime per `(index, date)`, merged onto each stock)
 
 Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`). Rules support comparison operators and `AND`/`OR` logic.
 
-After filtering, the remaining stocks are sorted by a **ranking expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_pct_13w / return_std_52w` (risk-adjusted momentum). Pass `--ranking` to override it: e.g. `--ranking 'slope_pct_52w * r_squared_52w'` for trend quality, or `--ranking 'change_pct_26w / max_drawdown_pct_52w'` for return per unit of drawdown. Ranking matters whenever more stocks pass the filter than `--max-stocks` allows.
+After filtering, the remaining stocks are sorted by a **sort expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_pct_13w / return_std_52w` (risk-adjusted momentum). Pass `--sort` (or `-s`) to override it: e.g. `--sort 'slope_pct_52w * r_squared_52w'` for trend quality, or `--sort 'change_pct_26w / max_drawdown_pct_52w'` for return per unit of drawdown. The sort expression matters whenever more stocks pass the filter than `--max-stocks` allows.
 
 ```bash
 # Compute indicators for all SP500 constituents at a given date
 uv run python -m stockidea.cli compute -d 2026-01-20
+```
 
-# Compute indicators and filter by a rule (uses the default ranking)
+### Screener
+
+Given a date and a strategy (rule + sort expression), the screener returns the top-N stocks to hold along with the buy price (Monday-open) and an optional per-position stop-loss price. When given a **portfolio** (cash + current holdings), it also sizes each pick (equal-weight allocation across `total_value = cash + Σ(qty × current_price)`) and emits the exact **buy/sell deltas** needed to rebalance into the new picks.
+
+This is the same picking + sizing logic that the [Backtest](#backtest) engine drives at every rebalance, exposed as a standalone command for live trading decisions and reused by the [Telegram Bot](#telegram-bot).
+
+Stop-loss is configured via either `--stop-loss-pct` (% below buy price) or `--stop-loss-ma PERIOD:PERCENT` (% of an SMA at buy time, e.g. `50:95` = 95% of the 50-day SMA). The two are mutually exclusive.
+
+```bash
+# Pick top-3 stocks for today (no portfolio sizing)
 uv run python -m stockidea.cli pick -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15'
 
-# Filter and rank with a custom ranking expression
+# With a custom sort expression and a 5% stop loss
 uv run python -m stockidea.cli pick \
   -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15' \
-  --ranking 'slope_pct_52w * r_squared_52w' \
-  --max-stocks 5
+  --sort 'slope_pct_52w * r_squared_52w' \
+  --max-stocks 5 \
+  --stop-loss-pct 5
+
+# Size against a portfolio — emits target_quantity per pick + buy/sell deltas
+uv run python -m stockidea.cli pick \
+  -r 'change_pct_13w > 10' \
+  --cash 10000 \
+  --holding AAPL:5 --holding MSFT:10 \
+  --stop-loss-ma 50:95
 ```
 
 ### Backtest
@@ -113,6 +131,34 @@ uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids 
 uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI
 ```
 
+### Telegram Bot
+
+A long-running personal trading assistant on top of the [Screener](#screener). Send `/pick` to your bot with your current portfolio, and it replies with the buy/sell orders to place — useful for getting rebalance recommendations from your phone without running the CLI.
+
+The strategy (rule, sort expression, max stocks, index, stop loss) is configured **once** via env vars at bot startup, so each `/pick` only needs the live portfolio. The bot is single-user by design: it only responds to messages from `TELEGRAM_CHAT_ID` and silently ignores everything else.
+
+Required env vars:
+- `TELEGRAM_BOT_TOKEN` -- token from [@BotFather](https://t.me/BotFather)
+- `TELEGRAM_CHAT_ID` -- your own chat id (message `@userinfobot` to look it up)
+- `STRATEGY_RULE` -- the filter expression (required)
+- `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_PCT`, `STRATEGY_STOP_LOSS_MA` -- optional strategy knobs
+
+```bash
+# Start the bot (long-running; foreground)
+uv run python -m stockidea.cli telegram run-bot
+```
+
+Send the bot a multi-line message:
+
+```
+/pick
+cash: 10000
+AAPL 5
+MSFT 10
+```
+
+It replies with the picks (with target quantities + stop-loss prices) and the exact buy/sell orders needed to rebalance from your current holdings.
+
 ## Setup
 
 1. Clone a `.env` from `.env.example` and provide your own credentials.
@@ -125,6 +171,10 @@ Required variables:
 - `FMP_API_KEY` -- [Financial Modeling Prep](https://financialmodelingprep.com/) API key for market data
 - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` -- at least one is needed for the AI agent feature
 - PostgreSQL credentials (defaults work with docker-compose)
+
+Optional variables (only needed when running the Telegram bot):
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` -- bot credentials and the single authorized chat id
+- `STRATEGY_RULE`, `STRATEGY_SORT`, `STRATEGY_MAX_STOCKS`, `STRATEGY_INDEX`, `STRATEGY_STOP_LOSS_PCT`, `STRATEGY_STOP_LOSS_MA` -- the strategy used by `/pick`
 
 2. Start PostgreSQL and the backend using docker-compose:
 

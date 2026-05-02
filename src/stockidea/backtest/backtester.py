@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta
-from math import floor
 import logging
 from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stockidea.indicators import service as indicators_service
 from stockidea.datasource import service as datasource_service
 from stockidea.helper import next_monday, previous_friday
 from stockidea.rule_engine import extract_involved_keys
 from stockidea.backtest.scoring import compute_scores
+from stockidea.screener import service as screener_service
+from stockidea.screener.types import Pick, Portfolio
 from stockidea.types import (
     BacktestInvestment,
     BacktestRebalance,
@@ -33,8 +33,8 @@ class Backtester:
     max_stocks: int
     rule_func: Callable[[StockIndicators], bool]
     rule_raw: str
-    ranking_func: Callable[[StockIndicators], float] | None
-    ranking_raw: str
+    sort_func: Callable[[StockIndicators], float] | None
+    sort_raw: str
     stop_loss: StopLossConfig | None
     sell_timing: SellTiming
 
@@ -49,8 +49,8 @@ class Backtester:
         rule_raw: str,
         from_index: StockIndex,
         baseline_index: StockIndex,
-        ranking_func: Callable[[StockIndicators], float],
-        ranking_raw: str,
+        sort_func: Callable[[StockIndicators], float],
+        sort_raw: str,
         stop_loss: StopLossConfig | None = None,
         sell_timing: SellTiming = "friday_close",
     ):
@@ -64,68 +64,10 @@ class Backtester:
         self.rule_raw = rule_raw
         self.from_index = from_index
         self.baseline_index = baseline_index
-        self.ranking_func = ranking_func
-        self.ranking_raw = ranking_raw
+        self.sort_func = sort_func
+        self.sort_raw = sort_raw
         self.stop_loss = stop_loss
         self.sell_timing = sell_timing
-
-    async def pick_stocks(self, today: datetime) -> list[StockIndicators]:
-        # Compute indicators from data through last Friday's close. With the
-        # Monday-open buy convention, the rebalance Monday's prices aren't
-        # known when the picks are made — using `today` would be lookahead
-        # (the weekly aggregator would bucket Monday's close as the latest
-        # observation).
-        cutoff = previous_friday(today)
-
-        symbols = await datasource_service.get_constituent_at(
-            self.db_session, self.from_index, today.date()
-        )
-
-        stock_indicators_batch = await indicators_service.get_stock_indicators_batch(
-            self.db_session,
-            symbols=symbols,
-            indicators_date=cutoff,
-            back_period_weeks=52,
-            compute_if_not_exists=True,
-        )
-
-        filtered_stocks = indicators_service.apply_rule(
-            stock_indicators_batch,
-            rule_func=self.rule_func,
-            ranking_func=self.ranking_func,
-        )
-
-        selected_stocks = filtered_stocks[: self.max_stocks]
-        logger.info(
-            f"Selected: {[stock.symbol for stock in selected_stocks]} (from {len(filtered_stocks)} filtered)"
-        )
-
-        return selected_stocks
-
-    async def _resolve_stop_price(
-        self, symbol: str, buy_date: datetime, buy_price: float
-    ) -> float | None:
-        """Compute the stop-loss price for a position, fixed at buy time.
-
-        Returns None if no stop loss is configured, or if the required MA value is
-        unavailable (in which case the position is held without a stop).
-        """
-        if self.stop_loss is None:
-            return None
-        if self.stop_loss.type == "percent":
-            return buy_price * (1 - self.stop_loss.value / 100)
-        # type == "ma_percent"
-        assert self.stop_loss.ma_period is not None
-        ma_value = await datasource_service.get_sma_at_date(
-            self.db_session, symbol, self.stop_loss.ma_period, buy_date.date()
-        )
-        if ma_value is None or ma_value <= 0:
-            logger.warning(
-                f"SMA({self.stop_loss.ma_period}) unavailable for {symbol} on "
-                f"{buy_date.date()}; skipping stop loss for this position"
-            )
-            return None
-        return ma_value * (self.stop_loss.value / 100)
 
     async def _find_stop_loss_exit(
         self,
@@ -181,50 +123,45 @@ class Backtester:
             )
         return sell_date, price_data.open
 
-    async def invest(
-        self, symbol: str, buy_date: datetime, sell_date: datetime, amount: float
-    ) -> tuple[BacktestInvestment, float]:
-        """Invest in a stock — buy at Monday open, sell per `self.sell_timing`.
+    async def _execute_pick(
+        self, pick: Pick, buy_date: datetime, sell_date: datetime
+    ) -> BacktestInvestment:
+        """Run the holding-period simulation for a sized pick.
 
-        `buy_date` is the rebalance Monday; `sell_date` is the next rebalance
-        Monday. Real fill is the open of `buy_date`, and the sell point depends
-        on `sell_timing` (Friday close vs next Monday open). Returns
-        (investment, uninvested_cash).
+        ``pick`` already carries ``buy_price``, ``target_quantity`` and
+        ``stop_loss_price`` — those are computed once by the screener at the
+        rebalance moment. This method handles the sell side: resolve the sell
+        date/price per ``self.sell_timing``, scan for a stop-loss exit, and
+        record the resulting BacktestInvestment.
         """
-        buy_price_data = await datasource_service.get_stock_price_at_date(
-            self.db_session, symbol, buy_date.date(), nearest=True
+        buy_stock_price = pick.buy_price
+        position = pick.target_quantity
+        assert position is not None, (
+            "screener.pick must size positions in backtest mode"
         )
-        if buy_price_data.open is None:
-            raise ValueError(
-                f"No open price for {symbol} on/near {buy_date.date()} — "
-                "cannot apply Monday-open buy convention"
-            )
-        buy_stock_price = buy_price_data.open
+        stop_price = pick.stop_loss_price
 
         actual_sell_date, sell_stock_price = await self._resolve_stock_sell(
-            symbol, sell_date
+            pick.symbol, sell_date
         )
 
-        stop_price = await self._resolve_stop_price(symbol, buy_date, buy_stock_price)
         if stop_price is not None:
             exit_info = await self._find_stop_loss_exit(
-                symbol, buy_date, actual_sell_date, stop_price
+                pick.symbol, buy_date, actual_sell_date, stop_price
             )
             if exit_info is not None:
                 actual_sell_date, sell_stock_price = exit_info
                 logger.info(
-                    f"Stop loss hit for {symbol}: exit {actual_sell_date.date()} "
+                    f"Stop loss hit for {pick.symbol}: exit {actual_sell_date.date()} "
                     f"@ {sell_stock_price:.2f} (stop={stop_price:.2f}, "
                     f"buy={buy_stock_price:.2f})"
                 )
 
-        position = floor(amount / buy_stock_price)
-        uninvested = amount - position * buy_stock_price
         profit = (sell_stock_price - buy_stock_price) * position
         profit_pct = (sell_stock_price - buy_stock_price) / buy_stock_price * 100
 
-        investment = BacktestInvestment(
-            symbol=symbol,
+        return BacktestInvestment(
+            symbol=pick.symbol,
             position=position,
             buy_price=buy_stock_price,
             buy_date=buy_date,
@@ -234,7 +171,6 @@ class Backtester:
             profit=profit,
             stop_loss_price=stop_price,
         )
-        return investment, uninvested
 
     async def _resolve_baseline_sell(
         self, sell_date: datetime
@@ -334,16 +270,25 @@ class Backtester:
             logger.info(
                 f"=========== Rebalance on {date_iter.date()} (Balance: {balance}), hold til: {end_date.date()} ==========="
             )
-            selected_stocks = await self.pick_stocks(date_iter)
+            screener_result = await screener_service.pick(
+                self.db_session,
+                indicators_date=previous_friday(date_iter),
+                buy_date=date_iter,
+                rule_func=self.rule_func,
+                sort_func=self.sort_func,
+                max_stocks=self.max_stocks,
+                from_index=self.from_index,
+                stop_loss=self.stop_loss,
+                # Backtester sells everything before each rebalance; pass an
+                # empty-holdings portfolio so screener equally splits cash among
+                # the picks (matches prior allocation = balance / len(picks)).
+                portfolio=Portfolio(cash=balance, holdings=[]),
+            )
 
             investments: list[BacktestInvestment] = []
-            if selected_stocks:
-                allocation = balance / len(selected_stocks)
-                for stock in selected_stocks:
-                    investment, _uninvested = await self.invest(
-                        stock.symbol, date_iter, end_date, allocation
-                    )
-                    investments.append(investment)
+            for pick in screener_result.picks:
+                investment = await self._execute_pick(pick, date_iter, end_date)
+                investments.append(investment)
 
             # Calculate the profit of this rebalance
             profit = sum(inv.profit for inv in investments)
@@ -404,7 +349,7 @@ class Backtester:
                 date_start=self.date_start,
                 date_end=self.date_end,
                 rule=self.rule_raw,
-                ranking=self.ranking_raw,
+                sort_expr=self.sort_raw,
                 index=self.from_index,
                 involved_keys=extract_involved_keys(self.rule_raw),
                 stop_loss=self.stop_loss,

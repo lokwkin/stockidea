@@ -205,6 +205,37 @@ class StopLossConfig(BaseModel):
                 )
         return self
 
+    @classmethod
+    def parse_options(
+        cls, *, pct: float | None = None, ma_spec: str | None = None
+    ) -> "StopLossConfig | None":
+        """Build a StopLossConfig from CLI / env style options.
+
+        ``pct``  : stop loss as % below buy price (e.g. ``5`` ⇒ 95% of buy).
+        ``ma_spec`` : ``"PERIOD:PERCENT"`` (e.g. ``"50:95"`` ⇒ 95% of SMA50_at_buy).
+        Returns None when both are None. Raises ValueError on conflict / bad format.
+        """
+        if pct is not None and ma_spec is not None:
+            raise ValueError(
+                "stop-loss pct and stop-loss ma options are mutually exclusive"
+            )
+        if pct is not None:
+            return cls(type="percent", value=pct)
+        if ma_spec is not None:
+            try:
+                period_str, pct_str = ma_spec.split(":", 1)
+                return cls(
+                    type="ma_percent",
+                    ma_period=int(period_str),
+                    value=float(pct_str),
+                )
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"Invalid stop-loss ma spec '{ma_spec}' "
+                    f"(expected 'PERIOD:PERCENT'): {exc}"
+                )
+        return None
+
 
 class BacktestConfig(BaseModel):
     max_stocks: int
@@ -212,7 +243,7 @@ class BacktestConfig(BaseModel):
     date_start: datetime
     date_end: datetime
     rule: str
-    ranking: str = "change_pct_13w / return_std_52w"
+    sort_expr: str = "change_pct_13w / return_std_52w"
     index: StockIndex
     involved_keys: list[str] = []
     stop_loss: StopLossConfig | None = None
@@ -268,7 +299,7 @@ class StrategySummary(BaseModel):
 class StrategyBacktestSummary(BaseModel):
     id: _uuid.UUID
     rule: str
-    ranking: str | None = None
+    sort_expr: str | None = None
     profit_pct: float
     baseline_profit_pct: float
     max_stocks: int

@@ -8,7 +8,7 @@ from simpleeval import SimpleEval  # type: ignore
 from stockidea.types import StockIndicators
 
 
-DEFAULT_RANKING = "change_pct_13w / return_std_52w"
+DEFAULT_SORT = "change_pct_13w / return_std_52w"
 
 
 class RuleEngine:
@@ -136,22 +136,22 @@ class RuleEngine:
         return result
 
 
-def compile_ranking(ranking_expr: str) -> Callable[[StockIndicators], float]:
+def compile_sort(sort_expr: str) -> Callable[[StockIndicators], float]:
     """
-    Compile a ranking expression string into a callable that returns a numeric score.
+    Compile a sort expression string into a callable that returns a numeric score.
 
     The expression uses StockIndicators field names and arithmetic operators.
     Higher scores rank higher. Stocks where evaluation fails (e.g. division by zero)
     receive -inf.
 
     Args:
-        ranking_expr: Arithmetic expression like "change_pct_13w / return_std_52w"
+        sort_expr: Arithmetic expression like "change_pct_13w / return_std_52w"
 
     Returns:
         A callable that takes StockIndicators and returns a float score.
 
     Examples:
-        >>> rank = compile_ranking("change_pct_13w / return_std_52w")
+        >>> rank = compile_sort("change_pct_13w / return_std_52w")
         >>> score = rank(indicators)
     """
     field_names = set(StockIndicators.model_fields.keys())
@@ -160,7 +160,7 @@ def compile_ranking(ranking_expr: str) -> Callable[[StockIndicators], float]:
         names = {name: getattr(indicators, name) for name in field_names}
         try:
             evaluator = SimpleEval(names=names)
-            result = evaluator.eval(ranking_expr)
+            result = evaluator.eval(sort_expr)
             return float(result)
         except Exception:
             return float("-inf")

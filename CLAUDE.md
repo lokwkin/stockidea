@@ -31,12 +31,16 @@ uv run python -m stockidea.cli fetch-prices --index SP500
 
 # Backend — Analysis & Backtest
 uv run python -m stockidea.cli compute -d 2026-01-20
-uv run python -m stockidea.cli pick -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15'
+uv run python -m stockidea.cli pick -r 'change_pct_13w > 10 AND max_drop_pct_2w < 15'        # screener (top-N picks)
+uv run python -m stockidea.cli pick -r 'change_pct_13w > 10' --cash 10000 --holding AAPL:5   # screener + portfolio sizing → buy/sell deltas
 uv run python -m stockidea.cli backtest --date-start=2022-01-01 --date-end=2026-01-20 --rule='change_pct_13w > 10'
 
 # Backend — AI Agent (creates a strategy in DB, runs 5-10 backtest iterations)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
 uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI instead of Claude
+
+# Backend — Telegram bot (long-running; reads STRATEGY_* + TELEGRAM_* env vars)
+uv run python -m stockidea.cli telegram run-bot
 
 # Type checking (run after every code change)
 uv run mypy src/stockidea
@@ -62,7 +66,7 @@ The ultimate goal is an **AI-driven strategy design and optimization platform**:
 
 ### Current gaps toward this vision
 - **No out-of-sample split** — train/test separation needed to prevent overfitting
-- **Limited signal coverage** — momentum/trend/volatility/MA-structure/relative-strength/market-regime are covered; fundamentals (P/E, earnings, etc.) and sector signals are still missing
+- **Limited signal coverage** — momentum/trend/volatility/MA-structure are covered; fundamentals (P/E, earnings, etc.) and sector signals are still missing
 
 ## Architecture
 
@@ -73,7 +77,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 **Shared modules:**
 - `api.py` — Assembles FastAPI app: lifespan (startup data refresh), CORS, includes component routers
 - `cli.py` — Assembles Click CLI: flattens component subcommands into top-level commands
-- `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys)
+- `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys, Telegram bot credentials, `STRATEGY_*` knobs for the bot)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`
@@ -88,19 +92,26 @@ FastAPI app where backtests execute synchronously inside the request that trigge
   - `database/` — SQLAlchemy models (`models.py`), queries (`queries.py`), connection pool (`conn.py`)
 - `indicators/` — Pre-computed stock indicators for strategy evaluation
   - `router.py` — `GET /indicators`, `GET /indicators/{date}/`, `GET /indicators/symbol/{symbol}/latest`, `GET /indicators/symbol/{symbol}/{date}`
-  - `cli.py` — `compute`, `pick`
+  - `cli.py` — `compute`
   - `service.py` — Fetches/computes indicator batches, applies rules
   - `calculator.py` — Aggregates daily prices to Friday-close weekly series, computes all indicator fields including MA-structure (`price_vs_ma{20,50,100,200}_pct`, `ma50_vs_ma200_pct`) from FMP-cached SMA values; ranks by stability score
+- `screener/` — Stock picker on top of `indicators` (no router; CLI + library only)
+  - `cli.py` — `pick` (top-level via flatten loop, so `stockidea pick`); supports `--cash`/`--holding` for portfolio sizing and `--stop-loss-pct`/`--stop-loss-ma` for stop-loss config
+  - `service.py` — `pick(*, indicators_date, buy_date, rule_func, sort_func, max_stocks, from_index, stop_loss, portfolio)` returns a `ScreenerResult` of picks (with optional `target_quantity` + `stop_loss_price`) plus buy/sell deltas when a portfolio is given; `resolve_stop_loss_price()` handles both `percent` and `ma_percent` modes; `default_indicators_cutoff(date)` returns the previous Friday for callers that need "the most recent weekly snapshot relative to today" (used by the bot)
+  - `types.py` — `Holding`, `Portfolio`, `Pick`, `OrderItem`, `ScreenerResult`
 - `backtest/` — Core backtest engine
   - `router.py` — `POST /backtest`, `GET /backtests`, `GET /backtests/{id}` (synchronous — the POST runs the full backtest before returning)
   - `cli.py` — `backtest`
-  - `backtester.py` — Iterates rebalance dates, calls `pick_stocks()`, executes trades
+  - `backtester.py` — Iterates rebalance dates; at each rebalance calls `screener_service.pick(..., portfolio=Portfolio(cash=balance, holdings=[]))` to get pre-sized picks (buy_price, target_quantity, stop_loss_price), then runs the holding-period simulation (stop-loss exit scan + sell-at-period-end)
   - `scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
   - `router.py` — `GET/POST/DELETE /strategies`, `GET /strategies/{id}/notes`, `POST /strategies/{id}/messages`
   - `cli.py` — `agent`
   - `agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
   - `tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
+- `telegram/` — Long-running personal trading-assistant bot (no router)
+  - `cli.py` — `telegram run-bot` (kept as subgroup, not flattened, to avoid colliding with future `run-bot`-style commands)
+  - `service.py` — Builds `_Strategy` once at startup from `STRATEGY_*` env vars; handles `/pick` by parsing a multi-line portfolio (`cash: N` + `SYMBOL QTY` lines), running the screener with `indicators_date=default_indicators_cutoff(now)` + `buy_date=now`, and replying with picks/buys/sells; auth is a single-user gate on `TELEGRAM_CHAT_ID` (silent ignore for everyone else); uses `python-telegram-bot` v22+ with `Application.run_polling()`
 
 **Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
 
@@ -117,7 +128,7 @@ React 19 + TypeScript SPA with React Router v7:
 - Views (`*View.tsx`) are full-page route components; reusable pieces live in `components/`
 - `App.tsx` owns routing and the `Sidebar` with sections for Strategies (status indicators), Create Backtest, Backtests, Indicators, and Stocks
 - `CreateStrategyView.tsx` — Strategy creation form (instruction, model selector, date range)
-- `CreateBacktestView.tsx` — Manual backtest form (rule, ranking expression, date range, index); sends naive midnight datetimes to match CLI behavior
+- `CreateBacktestView.tsx` — Manual backtest form (rule, sort expression, date range, index); sends naive midnight datetimes to match CLI behavior
 - `StrategyView.tsx` — Multi-turn chat UI with SSE streaming, backtest comparison table, follow-up input
 - `StockChartView.tsx` — Per-symbol page (`/chart/:symbol`) showing FMP company profile + peers above the price/volume charts
 - API calls always use relative `/api/...` paths — Vite proxies them to the backend in dev

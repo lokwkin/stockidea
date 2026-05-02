@@ -11,10 +11,10 @@ const POLL_INTERVAL_MS = 2000
 
 // --- Reusable components from AgentView ---
 
-function ScoreCard({ scores, rule, ranking, maxStocks, rebalanceWeeks, indexName, profitPct, baselinePct }: {
+function ScoreCard({ scores, rule, sortExpr, maxStocks, rebalanceWeeks, indexName, profitPct, baselinePct }: {
   scores: BacktestScores
   rule?: string
-  ranking?: string
+  sortExpr?: string
   maxStocks?: number
   rebalanceWeeks?: number
   indexName?: string
@@ -29,10 +29,10 @@ function ScoreCard({ scores, rule, ranking, maxStocks, rebalanceWeeks, indexName
           <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{rule}</code>
         </div>
       )}
-      {ranking && (
+      {sortExpr && (
         <div className="text-xs">
-          <span className="text-muted-foreground">Ranking: </span>
-          <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{ranking}</code>
+          <span className="text-muted-foreground">Sort: </span>
+          <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs">{sortExpr}</code>
         </div>
       )}
       {(maxStocks !== undefined || rebalanceWeeks !== undefined || indexName) && (
@@ -213,7 +213,7 @@ function MessageBubble({ message, backtestIndex }: { message: ChatMessage; backt
           <ScoreCard
             scores={result.scores}
             rule={result.rule as string | undefined}
-            ranking={result.ranking as string | undefined}
+            sortExpr={result.sort_expr as string | undefined}
             maxStocks={result.max_stocks as number | undefined}
             rebalanceWeeks={result.rebalance_interval_weeks as number | undefined}
             indexName={result.index as string | undefined}
@@ -294,10 +294,10 @@ function BacktestComparisonTable({ backtests }: { backtests: StrategyBacktestSum
               <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.rule}</code>
             </div>
 
-            {bt.ranking && (
+            {bt.sort_expr && (
               <div className="text-xs">
-                <span className="text-muted-foreground">Ranking: </span>
-                <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.ranking}</code>
+                <span className="text-muted-foreground">Sort: </span>
+                <code className="text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded text-xs break-all">{bt.sort_expr}</code>
               </div>
             )}
 

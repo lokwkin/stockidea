@@ -80,13 +80,13 @@ Examples:
 - **Up-period frequency** — pct_weeks_positive over 4w-52w
 - **Moving-average structure** — price_vs_ma{20,50,100,200}_pct, ma50_vs_ma200_pct (golden/death cross)
 
-## Ranking expression
+## Sort expression
 
-After filtering, stocks are ranked by a **ranking expression** — a numeric formula using the same \
+After filtering, stocks are ranked by a **sort expression** — a numeric formula using the same \
 StockIndicators fields. Higher score = higher priority for selection. You can customize this \
-per backtest via the `ranking` parameter.
+per backtest via the `sort_expr` parameter.
 
-Default ranking: `change_pct_13w / return_std_52w` (risk-adjusted momentum — return per unit of volatility).
+Default sort: `change_pct_13w / return_std_52w` (risk-adjusted momentum — return per unit of volatility).
 
 Examples:
 - `change_pct_13w / return_std_52w` — risk-adjusted momentum (default)
@@ -95,16 +95,16 @@ Examples:
 - `slope_pct_13w * r_squared_13w + 0.5 * change_pct_4w` — composite: mid-term trend quality + short-term momentum
 - `change_pct_13w / downside_std_52w` — upside-to-downside ratio
 
-Ranking matters because it determines which stocks get selected when more pass the filter \
-than `max_stocks` allows. Experiment with different rankings alongside rule changes.
+The sort expression matters because it determines which stocks get selected when more pass the filter \
+than `max_stocks` allows. Experiment with different sort expressions alongside rule changes.
 
 ## Available tools
 
 - `list_indicator_fields` — Discover available indicator fields and their ranges.
 - `preview_filter` — Quickly check how many stocks pass a rule at a given date. Accepts an \
-optional `ranking` parameter. Use this to calibrate thresholds before running a full backtest. \
+optional `sort_expr` parameter. Use this to calibrate thresholds before running a full backtest. \
 If too few stocks match (<5), loosen constraints; if too many (>50), tighten them.
-- `run_backtest` — Run a full backtest with a rule and optional `ranking` expression. \
+- `run_backtest` — Run a full backtest with a rule and optional `sort_expr` expression. \
 Returns scores AND diagnostics: worst/best periods, cash periods (where no stocks matched), \
 stock selection stats (unique stocks, top-held symbols). \
 Optionally pass `stop_loss` to set a per-position stop fixed at buy time: \
@@ -138,13 +138,13 @@ before running the next backtest (e.g. "Sharpe dropped when I added max_drawdown
 the filter is too restrictive, causing cash periods. I'll loosen it from 20 to 25.").
 7. Run 5-10 backtest iterations per round. Each iteration should be driven by your \
 observations from the previous result — do not batch changes blindly. \
-Vary across all strategy levers: after a few rule iterations, try different rankings, \
+Vary across all strategy levers: after a few rule iterations, try different sort expressions, \
 max_stocks values, and rebalance intervals to find the optimal combination.
 8. After completing your iterations for this round, present your recommendation: \
-the best-performing configuration (rule, ranking, max_stocks, rebalance_interval_weeks), \
+the best-performing configuration (rule, sort_expr, max_stocks, rebalance_interval_weeks), \
 key performance metrics, and any insights or trade-offs worth noting \
 (e.g. "loosening drawdown improved returns but increased volatility", \
-"ranking by downside_std_52w outperformed the default momentum ranking"). \
+"sorting by downside_std_52w outperformed the default momentum sort"). \
 Then stop and wait for the user's follow-up instruction — they may ask you to explore a \
 different direction, tighten specific constraints, or run another round of iterations based \
 on what they see in the results.
@@ -154,9 +154,9 @@ on what they see in the results.
 You have multiple levers to tune a strategy — not just the filter rule. You may use all of them:
 
 1. **Rule** — the filter expression that selects which stocks qualify. This is the primary lever.
-2. **Ranking** — the expression that prioritizes stocks when more pass the filter than \
-`max_stocks` allows. Different rankings can dramatically change which stocks get picked \
-even with the same rule. Try at least 2-3 different rankings per round.
+2. **Sort expression** — the expression that prioritizes stocks when more pass the filter than \
+`max_stocks` allows. Different sort expressions can dramatically change which stocks get picked \
+even with the same rule. Try at least 2-3 different sort expressions per round.
 3. **max_stocks** — how many stocks to hold simultaneously (default: 3). More stocks = more \
 diversification but diluted conviction. Try values from 2 to 5.
 4. **rebalance_interval_weeks** — how often to rebalance (default: 2). Shorter intervals \
@@ -164,7 +164,7 @@ react faster but incur more trading. Try 1, 2, or 4 weeks.
 5. **index** — the stock universe (SP500 or NASDAQ). Different universes have different \
 characteristics — NASDAQ is more tech/growth-heavy.
 
-Don't just iterate on the rule. After finding a decent rule, also experiment with ranking, \
+Don't just iterate on the rule. After finding a decent rule, also experiment with sort_expr, \
 max_stocks, and rebalance_interval_weeks to optimize the full strategy.
 
 ## Guidelines
