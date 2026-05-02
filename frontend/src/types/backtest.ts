@@ -37,6 +37,8 @@ export interface BacktestConfig {
   index: string
   involved_keys?: string[]
   stop_loss?: StopLossConfig | null
+  sell_timing?: "friday_close" | "monday_open"
+  slippage_pct?: number
 }
 
 export interface BacktestScores {

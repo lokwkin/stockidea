@@ -351,6 +351,12 @@ export function BacktestView() {
                             params.set("stop_loss_ma_period", config.stop_loss.ma_period.toString())
                           }
                         }
+                        if (config.sell_timing) {
+                          params.set("sell_timing", config.sell_timing)
+                        }
+                        if (config.slippage_pct != null) {
+                          params.set("slippage_pct", config.slippage_pct.toString())
+                        }
 
                         navigate(`/backtest/create?${params.toString()}`)
                       }}
@@ -382,6 +388,12 @@ export function BacktestView() {
                               ? `${backtestData.backtest_config.stop_loss.value}% below buy`
                               : `${backtestData.backtest_config.stop_loss.value}% of MA${backtestData.backtest_config.stop_loss.ma_period} at buy`}
                           </span>
+                        </>
+                      )}
+                      {backtestData.backtest_config.slippage_pct != null && (
+                        <>
+                          <span>·</span>
+                          <span>Slippage {backtestData.backtest_config.slippage_pct}%</span>
                         </>
                       )}
                     </>
