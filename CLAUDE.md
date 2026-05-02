@@ -82,10 +82,10 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
 - `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`
 
-**Component modules** — each has `service.py` (business logic), `router.py` (API routes), and `cli.py` (CLI commands):
+**Component modules** — each typically has `cli.py` for CLI commands and either a `service.py` or a domain-named file (`backtester.py`, `agent.py`) for business logic; `router.py` is present only when the module exposes HTTP routes.
 
 - `datasource/` — FMP API client, market data abstraction, SQLAlchemy async models/queries/connection
-  - `router.py` — `GET /snp500`, `GET /stocks/{symbol}/profile`, `GET /stocks/{symbol}/prices`
+  - `router.py` — `GET /snp500`, `GET /stocks/{symbol}/profile`, `GET /stocks/{symbol}/prices`, `GET /stocks/{symbol}/sma`
   - `cli.py` — `fetch-data`, `fetch-prices`, `fetch-index`, `fetch-constituents`
   - `service.py` — High-level fetch orchestration with `refresh_all()` for startup; `SUPPORTED_INDEXES` constant
   - `fmp.py` — FMP API client; API key checked at call time (not import time)
@@ -105,7 +105,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
   - `backtester.py` — Iterates rebalance dates; at each rebalance calls `screener_service.pick(..., portfolio=Portfolio(cash=balance, holdings=[]))` to get pre-sized picks (buy_price, target_quantity, stop_loss_price), then runs the holding-period simulation (stop-loss exit scan + sell-at-period-end)
   - `scoring.py` — Computes objective scores (Sharpe, Sortino, Calmar, win rate, drawdown) from backtest results
 - `agent/` — AI strategy agent supporting both Anthropic Claude and OpenAI GPT
-  - `router.py` — `GET/POST/DELETE /strategies`, `GET /strategies/{id}/notes`, `POST /strategies/{id}/messages`
+  - `router.py` — `GET /strategies`, `GET /strategies/{id}`, `GET /strategies/{id}/notes`, `POST /strategies`, `POST /strategies/{id}/messages`, `DELETE /strategies/{id}`
   - `cli.py` — `agent`
   - `agent.py` — Multi-turn agentic loop with auto-detection of provider from model name; streams SSE events; persists LLM message history for conversation continuation
   - `tools.py` — Tool definitions and executors (run_backtest, list_indicator_fields, preview_filter, write_strategy_notes, read_strategy_notes, lookup_stock); dual format for Anthropic/OpenAI; `strategy_id` is required for all tool executions
@@ -113,7 +113,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
   - `cli.py` — `telegram run-bot` (kept as subgroup, not flattened, to avoid colliding with future `run-bot`-style commands)
   - `service.py` — Builds `_Strategy` once at startup from `STRATEGY_*` env vars; handles `/pick` by parsing a single-line space-delimited message (`/pick [N] [SP500|NASDAQ] [$:cash] [SYMBOL:QTY ...]` — all tokens optional, any order; bare integer overrides max_stocks, `SP500`/`NASDAQ` overrides index, both fall back to strategy defaults), running the screener with `indicators_date=default_indicators_cutoff(now)` + `buy_date=now`, and replying with the active rule/sort/stop-loss/index/max-stocks plus picks. When at least one `SYMBOL:QTY` is supplied the reply adds Sell/Buy sections and pick lines include target quantity; otherwise picks show price only and the buy/sell diff is suppressed. Auth is a single-user gate on `TELEGRAM_CHAT_ID` (silent ignore for everyone else); uses `python-telegram-bot` v22+ with `Application.run_polling()`
 
-**Data storage**: All data lives in PostgreSQL — stock prices, index prices, constituent change history, indicators, backtests, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
+**Data storage**: All data lives in PostgreSQL — stock prices (index price series share the same `DBStockPrice` table, keyed by index symbol), SMA series, constituent change history, indicators, backtests + their rebalances/investments, strategies, strategy messages. Managed via Alembic migrations. Freshness is checked via metadata tables with 1-day TTL.
 
 **Backtest flow**: `POST /backtest` runs `Backtester.backtest()` synchronously inside the request handler, persists the result via `queries.save_backtest_result()`, and returns the full `BacktestResult`. There is no job queue or background worker.
 
