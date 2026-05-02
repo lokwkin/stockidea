@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom"
-import { Copy, Check, TrendingDown, TrendingUp, ExternalLink } from "lucide-react"
+import { Copy, Check, TrendingDown, TrendingUp, ExternalLink, RefreshCw } from "lucide-react"
 import type { Backtest } from "@/types/backtest"
 import { BalanceChart } from "@/components/BalanceChart"
 import { BacktestRebalanceDetailView } from "@/components/BacktestRebalanceDetailView"
@@ -300,33 +300,65 @@ export function BacktestView() {
               <div className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold">Backtest Summary</h2>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!backtestData?.backtest_config) return
-                      const config = backtestData.backtest_config
-                      const dateStart = dateFormat(config.date_start).replace(/-/g, "/")
-                      const dateEnd = dateFormat(config.date_end).replace(/-/g, "/")
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!backtestData?.backtest_config) return
+                        const config = backtestData.backtest_config
 
-                      const params = new URLSearchParams({
-                        max_stocks: config.max_stocks.toString(),
-                        rebalance_interval_weeks: config.rebalance_interval_weeks.toString(),
-                        date_start: dateStart,
-                        date_end: dateEnd,
-                        rule: config.rule,
-                        index: config.index,
-                      })
-                      if (config.ranking) {
-                        params.set("ranking", config.ranking)
-                      }
+                        const params = new URLSearchParams({
+                          rule: config.rule,
+                          max_stocks: config.max_stocks.toString(),
+                          index: config.index,
+                        })
+                        if (config.ranking) {
+                          params.set("ranking", config.ranking)
+                        }
 
-                      navigate(`/backtest/create?${params.toString()}`)
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <Copy className="h-4 w-4" />
-                    Clone Backtest
-                  </Button>
+                        navigate(`/analysis?${params.toString()}`)
+                      }}
+                      className="flex items-center gap-2"
+                      title="Apply this rule + ranking on the latest indicators"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Run on Latest Data
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!backtestData?.backtest_config) return
+                        const config = backtestData.backtest_config
+                        const dateStart = dateFormat(config.date_start).replace(/-/g, "/")
+                        const dateEnd = dateFormat(config.date_end).replace(/-/g, "/")
+
+                        const params = new URLSearchParams({
+                          max_stocks: config.max_stocks.toString(),
+                          rebalance_interval_weeks: config.rebalance_interval_weeks.toString(),
+                          date_start: dateStart,
+                          date_end: dateEnd,
+                          rule: config.rule,
+                          index: config.index,
+                        })
+                        if (config.ranking) {
+                          params.set("ranking", config.ranking)
+                        }
+                        if (config.stop_loss) {
+                          params.set("stop_loss_type", config.stop_loss.type)
+                          params.set("stop_loss_value", config.stop_loss.value.toString())
+                          if (config.stop_loss.ma_period != null) {
+                            params.set("stop_loss_ma_period", config.stop_loss.ma_period.toString())
+                          }
+                        }
+
+                        navigate(`/backtest/create?${params.toString()}`)
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Clone Backtest
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Header line — matches strategy iteration card */}
@@ -340,6 +372,17 @@ export function BacktestView() {
                       <span>Max {backtestData.backtest_config.max_stocks}</span>
                       <span>·</span>
                       <span>Rebal {backtestData.backtest_config.rebalance_interval_weeks}w</span>
+                      {backtestData.backtest_config.stop_loss && (
+                        <>
+                          <span>·</span>
+                          <span>
+                            Stop loss:{" "}
+                            {backtestData.backtest_config.stop_loss.type === "percent"
+                              ? `${backtestData.backtest_config.stop_loss.value}% below buy`
+                              : `${backtestData.backtest_config.stop_loss.value}% of MA${backtestData.backtest_config.stop_loss.ma_period} at buy`}
+                          </span>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

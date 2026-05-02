@@ -77,7 +77,9 @@ export function AnalysisView() {
         } else {
           setSelectedDate(dates[0])
           if (!urlDate || !dates.includes(urlDate)) {
-            navigate(`/analysis/${dates[0]}`, { replace: true })
+            const qs = searchParams.toString()
+            const target = qs ? `/analysis/${dates[0]}?${qs}` : `/analysis/${dates[0]}`
+            navigate(target, { replace: true })
           }
         }
         setLoadingDates(false)
