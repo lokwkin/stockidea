@@ -97,7 +97,7 @@ def backtest_cli():
 @click.option(
     "--slippage-pct",
     type=float,
-    default=0.5,
+    default=0.2,
     show_default=True,
     help="Per-fill slippage friction (% of price). Applied symmetrically: buys "
     "fill above the open, period-end sells below the close, and stop-loss "

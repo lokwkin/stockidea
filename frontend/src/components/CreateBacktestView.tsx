@@ -108,7 +108,7 @@ export function CreateBacktestView() {
       sellTimingParam === "monday_open" ? "monday_open" : "friday_close"
     const slippageRaw = searchParams.get("slippage_pct")
     const slippageParsed = slippageRaw !== null ? parseFloat(slippageRaw) : NaN
-    const slippage = !isNaN(slippageParsed) && slippageParsed >= 0 ? slippageParsed : 0.5
+    const slippage = !isNaN(slippageParsed) && slippageParsed >= 0 ? slippageParsed : 0.2
 
     return {
       max_stocks: maxStocks ? parseInt(maxStocks) : 3,
@@ -384,8 +384,8 @@ export function CreateBacktestView() {
               onBlur={(e) => {
                 const value = e.target.value
                 if (value === "" || isNaN(parseFloat(value)) || parseFloat(value) < 0) {
-                  setSlippagePctInput("0.5")
-                  handleChange("slippage_pct", 0.5)
+                  setSlippagePctInput("0.2")
+                  handleChange("slippage_pct", 0.2)
                 }
               }}
               required
@@ -393,7 +393,7 @@ export function CreateBacktestView() {
             <p className="text-xs text-muted-foreground">
               Per-fill slippage friction. Applied symmetrically to buys (above open),
               period-end sells (below close), stop-loss exits (below stop), and the
-              baseline for an apples-to-apples comparison. Default 0.5%.
+              baseline for an apples-to-apples comparison. Default 0.2%.
             </p>
           </div>
 

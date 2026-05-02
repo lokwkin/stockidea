@@ -54,7 +54,7 @@ class Backtester:
         sort_raw: str,
         stop_loss: StopLossConfig | None = None,
         sell_timing: SellTiming = "friday_close",
-        slippage_pct: float = 0.5,
+        slippage_pct: float = 0.2,
     ):
         self.db_session = db_session
         self.initial_balance = 10000
