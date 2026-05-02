@@ -9,6 +9,7 @@ from pathlib import Path
 
 from stockidea.datasource.database import conn
 from stockidea.datasource import service as datasource_service
+from stockidea.helper import previous_friday
 from stockidea.indicators import service as indicators_service
 from stockidea.rule_engine import (
     DEFAULT_RANKING,
@@ -510,6 +511,11 @@ async def _preview_filter(params: dict) -> str:
     stock_index = StockIndex(index_str)
     involved_keys = set(extract_involved_keys(rule_str))
 
+    # Mirror backtester.pick_stocks: indicators are computed from data through
+    # the prior Friday's close so the preview matches what a Mon-open trader
+    # would actually see when picking stocks on `target_date`.
+    indicators_cutoff = previous_friday(target_date)
+
     try:
         async with conn.get_db_session() as db_session:
             symbols = await datasource_service.get_constituent_at(
@@ -520,7 +526,7 @@ async def _preview_filter(params: dict) -> str:
             indicators_batch = await indicators_service.get_stock_indicators_batch(
                 db_session,
                 symbols=symbols,
-                indicators_date=target_date,
+                indicators_date=indicators_cutoff,
                 back_period_weeks=52,
                 compute_if_not_exists=True,
             )

@@ -133,7 +133,8 @@ def compute_stock_indicators(
     sma_lookup = sma_lookup or {}
     if not prices:
         raise ValueError(
-            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}: "
+            f"no prices in range (likely delisted or never ingested)"
         )
 
     weekly_data = _aggregate_to_weekly(
@@ -142,12 +143,19 @@ def compute_stock_indicators(
 
     if len(weekly_data) < 5:
         raise ValueError(
-            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}: "
+            f"only {len(weekly_data)} weekly bars, need ≥5 "
+            f"(have {len(prices)} daily rows from {prices[-1].date} to {prices[0].date})"
         )
 
-    if weekly_data[-1].week_ending < (to_date - timedelta(weeks=4)).date():
+    cutoff = (to_date - timedelta(weeks=4)).date()
+    last_week_ending = weekly_data[-1].week_ending
+    if last_week_ending < cutoff:
+        weeks_stale = (to_date.date() - last_week_ending).days // 7
         raise ValueError(
-            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}"
+            f"Insufficient data for {symbol} from {from_date.date()} to {to_date.date()}: "
+            f"last weekly bar ends {last_week_ending} ({weeks_stale}w before {to_date.date()}, "
+            f"cutoff is {cutoff} — likely delisted or trading halted)"
         )
 
     total_weeks = len(weekly_data)

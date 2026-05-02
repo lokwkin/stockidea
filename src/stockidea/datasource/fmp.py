@@ -6,7 +6,7 @@ from stockidea.constants import FMP_API_KEY, FMP_BASE_URL
 from stockidea.types import (
     ConstituentChange,
     FMPAdjustedStockPrice,
-    FMPLightPrice,
+    FMPFullPrice,
     StockIndex,
 )
 
@@ -23,7 +23,13 @@ def _require_api_key() -> str:
 
 async def fetch_index_prices(
     index: StockIndex, from_date: date | None = None
-) -> list[FMPLightPrice]:
+) -> list[FMPFullPrice]:
+    """Fetch unadjusted OHLCV for an index from FMP's /historical-price-eod/full.
+
+    Indices are not on FMP's dividend-adjusted endpoint (returns 402), but the
+    full endpoint works and returns OHLC — needed so we can use Monday open /
+    Friday close prices for the baseline.
+    """
     api_key = _require_api_key()
     match index:
         case StockIndex.SP500:
@@ -36,12 +42,12 @@ async def fetch_index_prices(
     logger.info(f"Fetching index prices for {index.value} ({symbol}) from {from_str}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
-            f"{FMP_BASE_URL}/stable/historical-price-eod/light",
+            f"{FMP_BASE_URL}/stable/historical-price-eod/full",
             params={"symbol": symbol.upper(), "apikey": api_key, "from": from_str},
         )
         response.raise_for_status()
         data: list[dict] = response.json()
-        return [FMPLightPrice.model_validate(item) for item in data]
+        return [FMPFullPrice.model_validate(item) for item in data]
 
 
 async def fetch_stock_prices(

@@ -7,13 +7,17 @@ Provides:
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stockidea.datasource import fmp
 from stockidea.datasource.database import conn, queries
 from stockidea.types import ConstituentChange, StockIndex, StockPrice
+
+# Match the staleness threshold in indicators/calculator.py — a constituent
+# whose latest price is older than this is treated as delisted.
+_STALE_PRICE_WEEKS = 4
 
 logger = logging.getLogger(__name__)
 
@@ -160,11 +164,23 @@ async def get_stock_price_at_date(
 
 
 async def get_constituent_at(
-    db_session: AsyncSession, index: StockIndex, target_date: date
+    db_session: AsyncSession,
+    index: StockIndex,
+    target_date: date,
+    active_only: bool = True,
 ) -> list[str]:
     """Get the constituent symbols of the index at the target date.
 
     Loads constituent change history and reconstructs membership at the given date.
+
+    When ``active_only`` is True (default), additionally filter out symbols whose
+    latest price on/before ``target_date`` is missing or older than
+    ``_STALE_PRICE_WEEKS`` — FMP's removal events are incomplete (e.g. HFC merged
+    into DINO in 2022 but still appears in the change history), so a stale price
+    is the practical signal that a ticker has been delisted/merged.
+
+    Pass ``active_only=False`` from data-refresh paths that need the unfiltered
+    membership list to drive FMP fetches.
     """
     changes = await ensure_constituent_data_fresh(db_session, index)
     symbols: set[str] = set()
@@ -175,7 +191,27 @@ async def get_constituent_at(
             symbols.discard(change.removed_symbol)
         if change.added_symbol:
             symbols.add(change.added_symbol)
-    return sorted(symbols)
+
+    if not active_only:
+        return sorted(symbols)
+
+    sorted_symbols = sorted(symbols)
+    latest_dates = await queries.get_latest_price_date_per_symbol(
+        db_session, sorted_symbols, target_date
+    )
+    cutoff = target_date - timedelta(weeks=_STALE_PRICE_WEEKS)
+    active = [
+        sym
+        for sym in sorted_symbols
+        if sym in latest_dates and latest_dates[sym] >= cutoff
+    ]
+    dropped = len(sorted_symbols) - len(active)
+    if dropped:
+        logger.info(
+            f"{index.value} @ {target_date}: filtered {dropped} stale/missing "
+            f"constituents (latest price < {cutoff})"
+        )
+    return active
 
 
 # =============================================================================
@@ -219,7 +255,10 @@ async def fetch_stock_prices(
         Dict mapping symbol to number of prices fetched (0 means already fresh or failed)
     """
     today = date.today()
-    symbols = await get_constituent_at(db_session, index, today)
+    # Use unfiltered membership so newly-added constituents (no price data yet)
+    # still get a fetch attempt. Active-only filtering happens at indicator-
+    # computation time.
+    symbols = await get_constituent_at(db_session, index, today, active_only=False)
     logger.info(f"Fetching prices for {len(symbols)} constituents of {index.value}")
 
     results: dict[str, int] = {}
