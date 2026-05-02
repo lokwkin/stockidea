@@ -100,7 +100,7 @@ The backtest engine that evaluates a strategy over a historical date range. At e
 
 Each position can be exited early by an optional **stop-loss** (`--stop-loss-expr`, an arithmetic expression evaluated at buy time over `buy_price` + `sma_{20,50,100,200}`). End-of-period sells use either the previous Friday's adjusted close or the next-rebalance Monday's open, controlled by `--sell-timing`. The rebalance cadence is set by `--rebalance-interval-weeks` (default 2) and the position count by `--max-stocks` (default 3).
 
-A per-fill **slippage** friction is applied symmetrically to every buy, period-end sell, and stop-loss exit (default 0.5%, configured via `--slippage-pct`) — the same friction is applied to the baseline so the comparison stays apples-to-apples.
+A per-fill **slippage** friction is applied symmetrically to every buy, period-end sell, and stop-loss exit (default 0.2%, configured via `--slippage-pct`) — the same friction is applied to the baseline so the comparison stays apples-to-apples.
 
 The engine tracks portfolio value over time against a baseline index (SP500 proxied by SPY using FMP's dividend-adjusted endpoint, so baseline returns include reinvested dividends like the per-stock returns) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
 
@@ -118,7 +118,7 @@ uv run python -m stockidea.cli backtest \
   --rebalance-interval-weeks 2 \
   --stop-loss-expr 'buy_price * 0.95' \
   --sell-timing friday_close \
-  --slippage-pct 0.5
+  --slippage-pct 0.2
 ```
 
 ### Agent
@@ -138,7 +138,7 @@ Supports both Anthropic Claude and OpenAI GPT models (auto-detected from model n
 ```bash
 # Create a strategy and run the agent (saves to DB)
 uv run python -m stockidea.cli agent -i "I want a momentum strategy that avoids big drops"
-uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.4   # use OpenAI
+uv run python -m stockidea.cli agent -i "momentum strategy" -m gpt-5.5   # use OpenAI
 ```
 
 ### Telegram Bot

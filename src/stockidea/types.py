@@ -209,8 +209,8 @@ class BacktestConfig(BaseModel):
     # Per-fill slippage friction (% of price). Applied symmetrically: buys fill
     # above the open, period-end sells below the close, stop-loss exits below
     # the stop trigger. Same friction is applied to the baseline for
-    # apples-to-apples comparison. Default 0.5%.
-    slippage_pct: float = 0.5
+    # apples-to-apples comparison. Default 0.2%.
+    slippage_pct: float = 0.2
 
 
 class BacktestResult(BaseModel):

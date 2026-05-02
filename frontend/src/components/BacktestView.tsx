@@ -389,6 +389,17 @@ export function BacktestView() {
                       <span>Max {backtestData.backtest_config.max_stocks}</span>
                       <span>·</span>
                       <span>Rebal {backtestData.backtest_config.rebalance_interval_weeks}w</span>
+                      {backtestData.backtest_config.sell_timing && (
+                        <>
+                          <span>·</span>
+                          <span>
+                            Sell{" "}
+                            {backtestData.backtest_config.sell_timing === "monday_open"
+                              ? "Mon open"
+                              : "Fri close"}
+                          </span>
+                        </>
+                      )}
                       {backtestData.backtest_config.slippage_pct != null && (
                         <>
                           <span>·</span>
