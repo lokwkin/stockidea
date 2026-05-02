@@ -95,8 +95,10 @@ The backtest engine that evaluates a strategy over a historical date range. At e
 
 1. Computes indicators for all index constituents at that date
 2. Filters stocks using the user's rule expression
-3. Ranks and selects the top N stocks
-4. Backtests buying equal-weight positions and selling at the next rebalance
+3. Sorts the survivors and selects the top N stocks
+4. Buys equal-weight positions on Monday-open and holds for the rebalance interval, then sells
+
+Each position can be exited early by an optional **stop-loss** (`--stop-loss-pct` for % below buy price, or `--stop-loss-ma PERIOD:PERCENT` for % of an SMA at buy time). End-of-period sells use either the previous Friday's adjusted close or the next-rebalance Monday's open, controlled by `--sell-timing`. The rebalance cadence is set by `--rebalance-interval-weeks` (default 2) and the position count by `--max-stocks` (default 3).
 
 The engine tracks portfolio value over time against a baseline index (S&P 500) and produces objective performance scores including Sharpe ratio, Sortino ratio, Calmar ratio, max drawdown, and win rate.
 
@@ -108,7 +110,12 @@ Backtests submitted through the web dashboard run synchronously inside the `POST
 uv run python -m stockidea.cli backtest \
   --date-start=2022-01-01 \
   --date-end=2026-01-20 \
-  --rule='change_pct_13w > 10 AND max_drop_pct_2w < 15'
+  --rule='change_pct_13w > 10 AND max_drop_pct_2w < 15' \
+  --sort='change_pct_13w / return_std_52w' \
+  --max-stocks 3 \
+  --rebalance-interval-weeks 2 \
+  --stop-loss-pct 5 \
+  --sell-timing friday_close
 ```
 
 ### Agent
