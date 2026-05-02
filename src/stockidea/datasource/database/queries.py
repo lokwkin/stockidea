@@ -512,7 +512,7 @@ async def save_backtest_result(
         rule=result.backtest_config.rule,
         sort_expr=result.backtest_config.sort_expr,
         index=result.backtest_config.index.value,
-        stop_loss_json=result.backtest_config.stop_loss.model_dump_json()
+        stop_loss_expr=result.backtest_config.stop_loss.expression
         if result.backtest_config.stop_loss
         else None,
         sell_timing=result.backtest_config.sell_timing,
@@ -669,8 +669,8 @@ def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:
             else BacktestConfig.model_fields["sort_expr"].default,
             index=StockIndex(db_backtest.index),
             involved_keys=extract_involved_keys(db_backtest.rule),
-            stop_loss=StopLossConfig.model_validate_json(db_backtest.stop_loss_json)
-            if db_backtest.stop_loss_json
+            stop_loss=StopLossConfig(expression=db_backtest.stop_loss_expr)
+            if db_backtest.stop_loss_expr
             else None,
             sell_timing=cast(SellTiming, db_backtest.sell_timing)
             if db_backtest.sell_timing
