@@ -153,16 +153,17 @@ export function BacktestView() {
   }, [searchParams, setSearchParams])
 
   const handleCopyRule = useCallback(async () => {
-    if (!backtestData?.rule_ref) return
+    const rule = backtestData?.backtest_config?.rule ?? backtestData?.rule_ref
+    if (!rule) return
 
     try {
-      await navigator.clipboard.writeText(backtestData.rule_ref)
+      await navigator.clipboard.writeText(rule)
       setRuleCopied(true)
       setTimeout(() => setRuleCopied(false), 2000)
     } catch (err) {
       console.error("Failed to copy rule:", err)
     }
-  }, [backtestData?.rule_ref])
+  }, [backtestData?.backtest_config?.rule, backtestData?.rule_ref])
 
   const handleCopySort = useCallback(async () => {
     const sortExpr = backtestData?.backtest_config?.sort_expr
