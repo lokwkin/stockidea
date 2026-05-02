@@ -148,16 +148,20 @@ Required env vars:
 uv run python -m stockidea.cli telegram run-bot
 ```
 
-Send the bot a multi-line message:
+Send the bot a single-line message — all tokens are optional and order-independent:
 
 ```
-/pick
-cash: 10000
-AAPL 5
-MSFT 10
+/pick 5 NASDAQ $:10000 AAPL:5 MSFT:10
 ```
 
-It replies with the picks (with target quantities + stop-loss prices) and the exact buy/sell orders needed to rebalance from your current holdings.
+| Token          | Meaning                                                  |
+| -------------- | -------------------------------------------------------- |
+| `N` (integer)  | Override `STRATEGY_MAX_STOCKS` for this call             |
+| `SP500`/`NASDAQ` | Override `STRATEGY_INDEX` for this call                |
+| `$:N`          | Cash available                                           |
+| `SYMBOL:QTY`   | Current holding                                          |
+
+The reply echoes the active rule / sort / stop-loss / index / max stocks, then lists the picks. When at least one `SYMBOL:QTY` is provided, the reply also adds Sell/Buy sections with the deltas needed to rebalance — and pick lines include the target quantity. When no holdings are given, picks show only the price (no quantity, no Sell/Buy diff).
 
 ## Setup
 
