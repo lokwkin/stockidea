@@ -4,12 +4,14 @@ Listens for ``/pick`` from the configured chat and replies with the screener's
 buy/sell recommendation against the portfolio supplied in the message.
 """
 
+import html
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from stockidea import constants
@@ -154,7 +156,7 @@ def _format_stop_loss(stop_loss: StopLossConfig | None) -> str:
         return "(none)"
     if stop_loss.type == "percent":
         return f"{stop_loss.value:g}% below buy"
-    return f"{stop_loss.value:g}% of SMA{stop_loss.ma_period} at buy"
+    return f"<b>{stop_loss.value:g}%</b> of <b>SMA{stop_loss.ma_period}</b> at buy"
 
 
 def _format_pick_line(
@@ -167,15 +169,19 @@ def _format_pick_line(
     qty_to_show = quantity if show_quantity else None
     if price is not None:
         head = (
-            f"{symbol} {qty_to_show}@${price:.2f}"
+            f"<b>{symbol}</b> {qty_to_show}@${price:.2f}"
             if qty_to_show is not None
-            else f"{symbol} @${price:.2f}"
+            else f"<b>{symbol}</b> @${price:.2f}"
         )
     else:
-        head = f"{symbol} {qty_to_show}" if qty_to_show is not None else symbol
-    parts = [head, "lmt/mkt"]
+        head = (
+            f"<b>{symbol}</b> {qty_to_show}"
+            if qty_to_show is not None
+            else f"<b>{symbol}</b>"
+        )
+    parts = [head]
     if stop_loss_price is not None:
-        parts.append(f"stop @${stop_loss_price:.2f}")
+        parts.append(f"Stop at ${stop_loss_price:.2f}")
     return "  • " + " ".join(parts)
 
 
@@ -190,11 +196,12 @@ def _format_screener_result(
     show_orders: bool,
 ) -> str:
     lines: list[str] = []
-    lines.append("📊 Screener Result")
+    lines.append(f"📊 <b>Screener Result for {datetime.now().strftime('%Y-%m-%d')}</b>")
     lines.append("")
-    lines.append(f"Index: {from_index.value}    Max stocks: {max_stocks}")
-    lines.append(f"Rule: {rule_str}")
-    lines.append(f"Sort: {sort_str}")
+    lines.append(f"Index: <b>{from_index.value}</b>")
+    lines.append(f"Max stocks: <b>{max_stocks}</b>")
+    lines.append(f"Rule: <code>{html.escape(rule_str)}</code>")
+    lines.append(f"Sort: <code>{html.escape(sort_str)}</code>")
     lines.append(f"Stop loss: {_format_stop_loss(stop_loss)}")
     lines.append("")
     lines.append("Picks:")
@@ -312,7 +319,8 @@ def _make_pick_handler(strategy: _Strategy):
                 max_stocks=max_stocks,
                 from_index=from_index,
                 show_orders=args.has_holdings,
-            )
+            ),
+            parse_mode=ParseMode.HTML,
         )
 
     return _handle_pick
