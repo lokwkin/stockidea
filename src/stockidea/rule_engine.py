@@ -10,6 +10,15 @@ from stockidea.types import StockIndicators
 
 DEFAULT_SORT = "change_pct_13w / return_std_52w"
 
+# Safe builtins exposed to user-written expressions (rules, sort, stop-loss).
+# simpleeval's defaults omit these; we whitelist a small read-only set.
+SAFE_FUNCTIONS: dict[str, Callable] = {
+    "min": min,
+    "max": max,
+    "abs": abs,
+    "round": round,
+}
+
 
 class RuleEngine:
     """Engine for parsing and evaluating string-based rules on StockIndicators objects."""
@@ -52,7 +61,7 @@ class RuleEngine:
             }
             try:
                 # SimpleEval automatically validates the expression and only allows safe operations
-                evaluator = SimpleEval(names=names)
+                evaluator = SimpleEval(names=names, functions=SAFE_FUNCTIONS)
                 result = evaluator.eval(normalized_rule)
 
                 # Validate that the result is not a string (simpleeval should catch this, but double-check)
@@ -159,7 +168,7 @@ def compile_sort(sort_expr: str) -> Callable[[StockIndicators], float]:
     def evaluate(indicators: StockIndicators) -> float:
         names = {name: getattr(indicators, name) for name in field_names}
         try:
-            evaluator = SimpleEval(names=names)
+            evaluator = SimpleEval(names=names, functions=SAFE_FUNCTIONS)
             result = evaluator.eval(sort_expr)
             return float(result)
         except Exception:

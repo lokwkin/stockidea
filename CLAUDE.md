@@ -80,7 +80,7 @@ FastAPI app where backtests execute synchronously inside the request that trigge
 - `constants.py` — All environment variables loaded via `dotenv` in one place (FMP keys, DB credentials, LLM API keys, Telegram bot credentials, `STRATEGY_*` knobs for the bot, including `STRATEGY_STOP_LOSS_EXPR`)
 - `config.py` — Logging setup only (FlushHandler, setup_logging)
 - `types.py` — All Pydantic v2 models shared across the app (including `BacktestScores`, `StrategyCreate`, `StrategySummary`, `StrategyDetail`); `StockIndex` enum covers SP500 and NASDAQ only
-- `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`
+- `rule_engine.py` — Compiles user-written filter strings (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`) into callables using `simpleeval`. Exposes `SAFE_FUNCTIONS` (`min`, `max`, `abs`, `round`) — registered on every `SimpleEval` instance across rules, sort expressions, and stop-loss expressions
 
 **Component modules** — each typically has `cli.py` for CLI commands and either a `service.py` or a domain-named file (`backtester.py`, `agent.py`) for business logic; `router.py` is present only when the module exposes HTTP routes.
 

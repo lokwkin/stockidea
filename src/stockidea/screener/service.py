@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stockidea.datasource import service as datasource_service
 from stockidea.helper import previous_friday
 from stockidea.indicators import service as indicators_service
+from stockidea.rule_engine import SAFE_FUNCTIONS
 from stockidea.screener.types import (
     OrderItem,
     Pick,
@@ -72,7 +73,9 @@ async def resolve_stop_loss_price(
         context[f"sma_{period}"] = value
 
     try:
-        result = SimpleEval(names=context).eval(stop_loss.expression)
+        result = SimpleEval(names=context, functions=SAFE_FUNCTIONS).eval(
+            stop_loss.expression
+        )
         stop_price = float(result)
     except Exception as e:
         logger.warning(
