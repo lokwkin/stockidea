@@ -70,7 +70,7 @@ export interface Backtest {
 }
 
 export interface BacktestSummary {
-  id: number
+  id: string
   strategy_id?: string | null
   date_start: string
   date_end: string
