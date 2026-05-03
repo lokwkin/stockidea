@@ -53,7 +53,7 @@ Computes per-stock performance indicators from raw price data. Daily prices are 
 - **Stability** -- Maximum drawdown across windows (4w, 13w, 26w, 52w), fraction of positive weeks across windows
 - **Moving average structure** -- Price vs 20/50/100/200-day SMAs and the 50/200 cross ratio (golden/death cross territory)
 
-Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`). Rules support comparison operators and `AND`/`OR` logic.
+Users can write **rule expressions** against any of these fields to filter stocks (e.g. `change_pct_13w > 10 AND max_drop_pct_2w < 15`). Rules support comparison operators, `AND`/`OR` logic, and the helper functions `min`, `max`, `abs`, `round` (also available in sort and stop-loss expressions).
 
 After filtering, the remaining stocks are sorted by a **sort expression** — a numeric formula over the same indicator fields, where higher scores rank higher. The default is `change_pct_13w / return_std_52w` (risk-adjusted momentum). Pass `--sort` (or `-s`) to override it: e.g. `--sort 'slope_pct_52w * r_squared_52w'` for trend quality, or `--sort 'change_pct_26w / max_drawdown_pct_52w'` for return per unit of drawdown. The sort expression matters whenever more stocks pass the filter than `--max-stocks` allows.
 
