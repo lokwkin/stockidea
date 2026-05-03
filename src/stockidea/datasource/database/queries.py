@@ -599,20 +599,31 @@ async def list_backtests(
     result = await db_session.execute(stmt)
     backtests = result.scalars().all()
 
-    return [
-        {
-            "id": sim.id,
-            "strategy_id": sim.strategy_id,
-            "date_start": sim.date_start.isoformat(),
-            "date_end": sim.date_end.isoformat(),
-            "profit_pct": sim.profit_pct,
-            "profit": sim.profit,
-            "baseline_profit_pct": sim.baseline_profit_pct,
-            "index": sim.index,
-            "created_at": sim.created_at.isoformat(),
-        }
-        for sim in backtests
-    ]
+    summaries: list[dict] = []
+    for sim in backtests:
+        scores = (
+            BacktestScores.model_validate_json(sim.scores_json)
+            if sim.scores_json
+            else None
+        )
+        summaries.append(
+            {
+                "id": sim.id,
+                "strategy_id": sim.strategy_id,
+                "date_start": sim.date_start.isoformat(),
+                "date_end": sim.date_end.isoformat(),
+                "profit_pct": sim.profit_pct,
+                "profit": sim.profit,
+                "baseline_profit_pct": sim.baseline_profit_pct,
+                "index": sim.index,
+                "max_stocks": sim.max_stocks,
+                "rebalance_interval_weeks": sim.rebalance_interval_weeks,
+                "win_rate": scores.win_rate if scores else None,
+                "max_drawdown_pct": scores.max_drawdown_pct if scores else None,
+                "created_at": sim.created_at.isoformat(),
+            }
+        )
+    return summaries
 
 
 def _db_backtest_to_result(db_backtest: DBBacktest) -> BacktestResult:

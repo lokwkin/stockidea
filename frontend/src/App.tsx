@@ -10,7 +10,7 @@ import { StrategyView } from "@/components/StrategyView"
 import { StockChartView } from "@/components/StockChartView"
 import { BacktestSummary } from "@/types/backtest"
 import { StrategySummary } from "@/types/strategy"
-import { cn, dateFormat } from "@/lib/utils"
+import { cn, dateFormat, relativeTimeShort } from "@/lib/utils"
 
 const STRATEGY_STATUS_COLORS: Record<string, string> = {
   idle: "bg-positive",
@@ -115,32 +115,53 @@ function Sidebar() {
     const indexLabel = sim.index === "NASDAQ" ? "NASDAQ" : sim.index === "SP500" ? "S&P500" : sim.index
     const isAi = !!sim.strategy_id
     const owner = isAi ? strategyNameById.get(String(sim.strategy_id)) ?? "AI Strategy" : "User Triggered"
-    const fullTitle = `${dateFormat(sim.date_start)} - ${dateFormat(sim.date_end)} (${indexLabel}) — ${owner}`
+    const ago = relativeTimeShort(sim.created_at)
+    const fullTitle = `${dateFormat(sim.date_start)} - ${dateFormat(sim.date_end)} (${indexLabel}) — ${owner} — ${ago}`
+    const sizingStr =
+      sim.max_stocks != null && sim.rebalance_interval_weeks != null
+        ? `${sim.max_stocks}×${sim.rebalance_interval_weeks}w`
+        : null
+    const winRateStr = sim.win_rate != null ? `${(sim.win_rate * 100).toFixed(0)}%` : null
+    const maxDdStr = sim.max_drawdown_pct != null ? `-${sim.max_drawdown_pct.toFixed(1)}%` : null
     return (
       <Link
         key={sim.id}
         to={`/backtest/${sim.id}`}
         className={cn(
-          "flex items-center gap-2 w-full px-3 py-1 rounded-md text-xs transition-colors",
+          "flex flex-col gap-0.5 w-full px-3 py-1 rounded-md text-xs transition-colors",
           currentBacktestId === String(sim.id)
             ? "bg-accent text-foreground font-medium border-l-2 border-primary"
             : "text-muted-foreground hover:text-foreground hover:bg-accent"
         )}
         title={fullTitle}
       >
-        <span className="flex-shrink-0 text-muted-foreground" title={owner}>
-          {isAi ? <Bot className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
-        </span>
-        <span
-          className={cn(
-            "font-mono tabular-nums flex-shrink-0",
-            profit > 0 ? "text-positive" : profit < 0 ? "text-negative" : ""
+        <div className="flex items-center gap-2">
+          <span className="flex-shrink-0 text-muted-foreground" title={owner}>
+            {isAi ? <Bot className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
+          </span>
+          <span
+            className={cn(
+              "font-mono tabular-nums flex-shrink-0",
+              profit > 0 ? "text-positive" : profit < 0 ? "text-negative" : ""
+            )}
+          >
+            [{profitStr}]
+          </span>
+          <span className="font-mono tabular-nums flex-shrink-0 text-muted-foreground">{period}</span>
+          <span className="flex-shrink-0 text-muted-foreground">({indexLabel})</span>
+        </div>
+        <div className="flex items-center gap-2 pl-[22px] text-[10px] text-muted-foreground/80 font-mono tabular-nums">
+          {sizingStr && <span title="max stocks × rebalance weeks">{sizingStr}</span>}
+          {winRateStr && (
+            <span title="win rate">
+              W:<span className={cn(sim.win_rate != null && sim.win_rate >= 0.5 ? "text-positive" : "")}>{winRateStr}</span>
+            </span>
           )}
-        >
-          [{profitStr}]
-        </span>
-        <span className="font-mono tabular-nums flex-shrink-0 text-muted-foreground">{period}</span>
-        <span className="flex-shrink-0 text-muted-foreground">({indexLabel})</span>
+          {maxDdStr && (
+            <span title="max drawdown" className="text-negative">DD:{maxDdStr}</span>
+          )}
+          <span className="ml-auto">{ago}</span>
+        </div>
       </Link>
     )
   }

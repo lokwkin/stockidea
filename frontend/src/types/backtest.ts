@@ -78,6 +78,10 @@ export interface BacktestSummary {
   profit: number
   baseline_profit_pct: number
   index: string
+  max_stocks?: number
+  rebalance_interval_weeks?: number
+  win_rate?: number | null
+  max_drawdown_pct?: number | null
   created_at: string
 }
 
