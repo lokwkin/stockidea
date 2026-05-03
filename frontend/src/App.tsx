@@ -36,22 +36,22 @@ function formatMonthYear(dateStr: string): string {
 
 const BOOKMARK_STORAGE_KEY = "stockidea.bookmarkedBacktests.v1"
 
-function loadBookmarks(): Set<number> {
+function loadBookmarks(): Set<string> {
   try {
     const raw = localStorage.getItem(BOOKMARK_STORAGE_KEY)
     if (!raw) return new Set()
     const arr = JSON.parse(raw)
     if (!Array.isArray(arr)) return new Set()
-    return new Set(arr.filter((x): x is number => typeof x === "number"))
+    return new Set(arr.map((x) => String(x)))
   } catch {
     return new Set()
   }
 }
 
 function useBookmarkedBacktests() {
-  const [bookmarked, setBookmarked] = useState<Set<number>>(() => loadBookmarks())
+  const [bookmarked, setBookmarked] = useState<Set<string>>(() => loadBookmarks())
 
-  const toggle = useCallback((id: number) => {
+  const toggle = useCallback((id: string) => {
     setBookmarked((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -163,7 +163,8 @@ function Sidebar() {
         : null
     const winRateStr = sim.win_rate != null ? `${(sim.win_rate * 100).toFixed(0)}%` : null
     const maxDdStr = sim.max_drawdown_pct != null ? `-${sim.max_drawdown_pct.toFixed(1)}%` : null
-    const isBookmarked = bookmarked.has(sim.id)
+    const simId = String(sim.id)
+    const isBookmarked = bookmarked.has(simId)
     return (
       <Link
         key={sim.id}
@@ -181,7 +182,7 @@ function Sidebar() {
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              toggleBookmark(sim.id)
+              toggleBookmark(simId)
             }}
             className={cn(
               "flex-shrink-0 transition-colors",
@@ -236,7 +237,7 @@ function Sidebar() {
       (a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf()
     )
     return sorted.filter((sim) => {
-      if (bookmarkedOnly && !bookmarked.has(sim.id)) return false
+      if (bookmarkedOnly && !bookmarked.has(String(sim.id))) return false
       if (minReturnNum != null && !Number.isNaN(minReturnNum) && sim.profit_pct < minReturnNum) return false
       if (minWinRateNum != null && !Number.isNaN(minWinRateNum)) {
         if (sim.win_rate == null || sim.win_rate * 100 < minWinRateNum) return false
