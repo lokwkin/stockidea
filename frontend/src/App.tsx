@@ -1,6 +1,6 @@
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom"
-import { useState, useEffect, useRef, useCallback } from "react"
-import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, BarChart3, Bot, User } from "lucide-react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { ChevronDown, ChevronRight, Plus, FolderTree, TrendingUp, BarChart3, Bot, User, Star, SlidersHorizontal, X } from "lucide-react"
 import dayjs from "dayjs"
 import { AnalysisView } from "@/components/AnalysisView"
 import { BacktestView } from "@/components/BacktestView"
@@ -34,6 +34,40 @@ function formatMonthYear(dateStr: string): string {
   return d.isValid() ? d.format("MMMYY") : ""
 }
 
+const BOOKMARK_STORAGE_KEY = "stockidea.bookmarkedBacktests.v1"
+
+function loadBookmarks(): Set<number> {
+  try {
+    const raw = localStorage.getItem(BOOKMARK_STORAGE_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr.filter((x): x is number => typeof x === "number"))
+  } catch {
+    return new Set()
+  }
+}
+
+function useBookmarkedBacktests() {
+  const [bookmarked, setBookmarked] = useState<Set<number>>(() => loadBookmarks())
+
+  const toggle = useCallback((id: number) => {
+    setBookmarked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      try {
+        localStorage.setItem(BOOKMARK_STORAGE_KEY, JSON.stringify([...next]))
+      } catch {
+        // ignore quota / disabled storage
+      }
+      return next
+    })
+  }, [])
+
+  return { bookmarked, toggle }
+}
+
 function Sidebar() {
   const location = useLocation()
   const [strategies, setStrategies] = useState<StrategySummary[]>([])
@@ -41,6 +75,12 @@ function Sidebar() {
   const [strategiesExpanded, setStrategiesExpanded] = useState(true)
   const [backtestsExpanded, setBacktestsExpanded] = useState(true)
   const [loadingBacktests, setLoadingBacktests] = useState(true)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [bookmarkedOnly, setBookmarkedOnly] = useState(false)
+  const [minReturn, setMinReturn] = useState("")
+  const [minWinRate, setMinWinRate] = useState("")
+  const [maxDrawdown, setMaxDrawdown] = useState("")
+  const { bookmarked, toggle: toggleBookmark } = useBookmarkedBacktests()
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isBacktestPath = location.pathname.startsWith("/backtest") && location.pathname !== "/backtest/create"
@@ -123,6 +163,7 @@ function Sidebar() {
         : null
     const winRateStr = sim.win_rate != null ? `${(sim.win_rate * 100).toFixed(0)}%` : null
     const maxDdStr = sim.max_drawdown_pct != null ? `-${sim.max_drawdown_pct.toFixed(1)}%` : null
+    const isBookmarked = bookmarked.has(sim.id)
     return (
       <Link
         key={sim.id}
@@ -136,6 +177,21 @@ function Sidebar() {
         title={fullTitle}
       >
         <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggleBookmark(sim.id)
+            }}
+            className={cn(
+              "flex-shrink-0 transition-colors",
+              isBookmarked ? "text-yellow-500" : "text-muted-foreground/40 hover:text-muted-foreground"
+            )}
+            title={isBookmarked ? "Remove bookmark" : "Bookmark"}
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
+          >
+            <Star className={cn("h-3.5 w-3.5", isBookmarked && "fill-current")} />
+          </button>
           <span className="flex-shrink-0 text-muted-foreground" title={owner}>
             {isAi ? <Bot className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
           </span>
@@ -150,7 +206,7 @@ function Sidebar() {
           <span className="font-mono tabular-nums flex-shrink-0 text-muted-foreground">{period}</span>
           <span className="flex-shrink-0 text-muted-foreground">({indexLabel})</span>
         </div>
-        <div className="flex items-center gap-2 pl-[22px] text-[10px] text-muted-foreground/80 font-mono tabular-nums">
+        <div className="flex items-center gap-2 pl-[38px] text-[10px] text-muted-foreground/80 font-mono tabular-nums">
           {sizingStr && <span title="max stocks × rebalance weeks">{sizingStr}</span>}
           {winRateStr && (
             <span title="win rate">
@@ -164,6 +220,39 @@ function Sidebar() {
         </div>
       </Link>
     )
+  }
+
+  const minReturnNum = minReturn === "" ? null : parseFloat(minReturn)
+  const minWinRateNum = minWinRate === "" ? null : parseFloat(minWinRate)
+  const maxDrawdownNum = maxDrawdown === "" ? null : parseFloat(maxDrawdown)
+  const hasNumericFilter =
+    (minReturnNum != null && !Number.isNaN(minReturnNum)) ||
+    (minWinRateNum != null && !Number.isNaN(minWinRateNum)) ||
+    (maxDrawdownNum != null && !Number.isNaN(maxDrawdownNum))
+  const filtersActive = bookmarkedOnly || hasNumericFilter
+
+  const visibleBacktests = useMemo(() => {
+    const sorted = [...backtests].sort(
+      (a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf()
+    )
+    return sorted.filter((sim) => {
+      if (bookmarkedOnly && !bookmarked.has(sim.id)) return false
+      if (minReturnNum != null && !Number.isNaN(minReturnNum) && sim.profit_pct < minReturnNum) return false
+      if (minWinRateNum != null && !Number.isNaN(minWinRateNum)) {
+        if (sim.win_rate == null || sim.win_rate * 100 < minWinRateNum) return false
+      }
+      if (maxDrawdownNum != null && !Number.isNaN(maxDrawdownNum)) {
+        if (sim.max_drawdown_pct == null || sim.max_drawdown_pct > maxDrawdownNum) return false
+      }
+      return true
+    })
+  }, [backtests, bookmarked, bookmarkedOnly, minReturnNum, minWinRateNum, maxDrawdownNum])
+
+  const clearFilters = () => {
+    setBookmarkedOnly(false)
+    setMinReturn("")
+    setMinWinRate("")
+    setMaxDrawdown("")
   }
 
   return (
@@ -254,10 +343,28 @@ function Sidebar() {
                 <FolderTree className="h-4 w-4" />
                 Backtests
                 {backtests.length > 0 && (
-                  <span className="text-xs text-muted-foreground/60">{backtests.length}</span>
+                  <span className="text-xs text-muted-foreground/60">
+                    {filtersActive ? `${visibleBacktests.length}/${backtests.length}` : backtests.length}
+                  </span>
                 )}
               </span>
               {backtestsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={() => setFiltersOpen((v) => !v)}
+              className={cn(
+                "flex items-center justify-center h-7 w-7 rounded-md transition-colors relative",
+                filtersOpen || filtersActive
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              )}
+              title="Filter backtests"
+              aria-label="Filter backtests"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {filtersActive && (
+                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
             </button>
             <Link
               to="/backtest/create"
@@ -272,16 +379,71 @@ function Sidebar() {
               <Plus className="h-4 w-4" />
             </Link>
           </div>
+          {backtestsExpanded && filtersOpen && (
+            <div className="ml-4 mt-1 mb-1 px-3 py-2 rounded-md border border-sidebar-border bg-background/50 space-y-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={bookmarkedOnly}
+                  onChange={(e) => setBookmarkedOnly(e.target.checked)}
+                  className="h-3.5 w-3.5 cursor-pointer"
+                />
+                <Star className={cn("h-3.5 w-3.5", bookmarkedOnly ? "text-yellow-500 fill-current" : "text-muted-foreground")} />
+                <span>Bookmarked only</span>
+              </label>
+              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 items-center">
+                <span className="text-muted-foreground" title="Minimum total return %">Return ≥</span>
+                <input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={minReturn}
+                  onChange={(e) => setMinReturn(e.target.value)}
+                  placeholder="%"
+                  className="w-full rounded border bg-background px-2 py-1 text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+                <span className="text-muted-foreground" title="Minimum win rate (0–100)">Win rate ≥</span>
+                <input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={minWinRate}
+                  onChange={(e) => setMinWinRate(e.target.value)}
+                  placeholder="%"
+                  className="w-full rounded border bg-background px-2 py-1 text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+                <span className="text-muted-foreground" title="Maximum drawdown % (positive number)">Max DD ≤</span>
+                <input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={maxDrawdown}
+                  onChange={(e) => setMaxDrawdown(e.target.value)}
+                  placeholder="%"
+                  className="w-full rounded border bg-background px-2 py-1 text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+              </div>
+              {filtersActive && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                  <span>Clear filters</span>
+                </button>
+              )}
+            </div>
+          )}
           {backtestsExpanded && (
             <div className="ml-4 mt-0.5 space-y-0.5">
               {loadingBacktests ? (
                 <div className="px-3 py-1 text-xs text-muted-foreground">Loading...</div>
               ) : backtests.length === 0 ? (
                 <div className="px-3 py-1 text-xs text-muted-foreground">No backtests</div>
+              ) : visibleBacktests.length === 0 ? (
+                <div className="px-3 py-1 text-xs text-muted-foreground">No backtests match filters</div>
               ) : (
-                [...backtests]
-                  .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf())
-                  .map(renderBacktestLink)
+                visibleBacktests.map(renderBacktestLink)
               )}
             </div>
           )}
