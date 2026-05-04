@@ -259,6 +259,7 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "date": "Indicator computation date (not usable in rules)",
     "total_weeks": "Number of weeks of data available (integer)",
     # Linear regression slope (% per week)
+    "slope_pct_4w": "Linear slope over last 4 weeks as % of starting price per week. Very noisy — pair with r_squared_4w if used",
     "slope_pct_13w": "Linear slope over last 13 weeks as % of starting price per week",
     "slope_pct_26w": "Linear slope over last 26 weeks as % of starting price per week",
     "slope_pct_52w": "Linear slope over the full 52-week series as % of starting price per week. Positive = uptrend. Typical range: -2 to +3",
@@ -302,7 +303,10 @@ INDICATOR_FIELD_DESCRIPTIONS: dict[str, str] = {
     "pct_weeks_positive_26w": "Fraction of weeks with positive return over last 26 weeks (0.0-1.0)",
     "pct_weeks_positive_52w": "Fraction of weeks with positive return over full series (0.0-1.0). >0.55 is good",
     # Momentum shape
+    "acceleration_pct_4w": "Momentum acceleration over 4 weeks (recent-half slope minus earlier-half slope, as % per week). Very short window — noisy. Positive = speeding up",
     "acceleration_pct_13w": "Momentum acceleration over 13 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = speeding up, negative = slowing down. Typical: -1 to +1",
+    "acceleration_pct_26w": "Momentum acceleration over 26 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = speeding up over the half-year window",
+    "acceleration_pct_52w": "Momentum acceleration over 52 weeks (recent-half slope minus earlier-half slope, as % per week). Positive = year-long trend speeding up",
     "from_high_pct_4w": "Distance from 4-week high in %. Always <= 0. Typical: -10 to 0. Closer to 0 = near recent high",
     # Moving average structure (price vs SMA, %)
     "price_vs_ma20_pct": "Current price vs 20-day SMA in % ((price/MA - 1) * 100). >0 = above MA. Typical: -10 to +10",

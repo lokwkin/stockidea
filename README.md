@@ -224,6 +224,7 @@ All indicator fields follow a `<metric>_<unit>_<window>` naming convention so yo
 | `change_pct_26w` | Percentage change over 26 weeks (~6 months) |
 | `change_pct_52w` | Percentage change over 52 weeks (~1 year) |
 | **Trend indicators (linear regression)** | |
+| `slope_pct_4w` | Linear slope over last 4 weeks (% per week, very noisy) |
 | `slope_pct_13w` | Linear slope over last 13 weeks (% per week) |
 | `slope_pct_26w` | Linear slope over last 26 weeks (% per week) |
 | `slope_pct_52w` | Linear slope over last 52 weeks (% per week) |
@@ -260,7 +261,10 @@ All indicator fields follow a `<metric>_<unit>_<window>` naming convention so yo
 | `pct_weeks_positive_52w` | Fraction of up-weeks over last 52 weeks (0.0--1.0) |
 | `total_weeks` | Total number of weeks analyzed |
 | **Momentum shape** | |
+| `acceleration_pct_4w` | Momentum acceleration over 4 weeks (recent-half slope minus earlier-half slope, very noisy) |
 | `acceleration_pct_13w` | Momentum acceleration over 13 weeks (positive = speeding up) |
+| `acceleration_pct_26w` | Momentum acceleration over 26 weeks |
+| `acceleration_pct_52w` | Momentum acceleration over 52 weeks |
 | `from_high_pct_4w` | Distance from 4-week high in % (always <= 0, closer to 0 = near recent high) |
 | **Moving average structure** | |
 | `price_vs_ma20_pct` | Current price vs 20-day SMA in % (positive = above MA) |

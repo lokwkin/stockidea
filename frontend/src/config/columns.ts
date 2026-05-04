@@ -68,6 +68,14 @@ export const COLUMNS: ColumnConfig[] = [
   },
   // Trend — linear regression
   {
+    key: "slope_pct_4w",
+    displayName: getColumnDisplayName("slope_pct_4w"),
+    filterName: "Slope 4W",
+    type: "number",
+    decimals: 3,
+    group: "Trend",
+  },
+  {
     key: "slope_pct_13w",
     displayName: getColumnDisplayName("slope_pct_13w"),
     filterName: "Slope 13W",
@@ -306,9 +314,33 @@ export const COLUMNS: ColumnConfig[] = [
   },
   // Momentum shape
   {
+    key: "acceleration_pct_4w",
+    displayName: getColumnDisplayName("acceleration_pct_4w"),
+    filterName: "Acceleration 4W",
+    type: "number",
+    decimals: 3,
+    group: "Momentum",
+  },
+  {
     key: "acceleration_pct_13w",
     displayName: getColumnDisplayName("acceleration_pct_13w"),
     filterName: "Acceleration 13W",
+    type: "number",
+    decimals: 3,
+    group: "Momentum",
+  },
+  {
+    key: "acceleration_pct_26w",
+    displayName: getColumnDisplayName("acceleration_pct_26w"),
+    filterName: "Acceleration 26W",
+    type: "number",
+    decimals: 3,
+    group: "Momentum",
+  },
+  {
+    key: "acceleration_pct_52w",
+    displayName: getColumnDisplayName("acceleration_pct_52w"),
+    filterName: "Acceleration 52W",
     type: "number",
     decimals: 3,
     group: "Momentum",

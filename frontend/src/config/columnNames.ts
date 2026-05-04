@@ -8,6 +8,7 @@ export const COLUMN_NAMES: Record<string, string> = {
   symbol: "Symbol",
   total_weeks: "Weeks",
   // Slope
+  slope_pct_4w: "Slope 4W",
   slope_pct_13w: "Slope 13W",
   slope_pct_26w: "Slope 26W",
   slope_pct_52w: "Slope 52W",
@@ -51,7 +52,10 @@ export const COLUMN_NAMES: Record<string, string> = {
   pct_weeks_positive_26w: "% Wks + 26W",
   pct_weeks_positive_52w: "% Wks +",
   // Momentum shape
+  acceleration_pct_4w: "Accel 4W",
   acceleration_pct_13w: "Accel 13W",
+  acceleration_pct_26w: "Accel 26W",
+  acceleration_pct_52w: "Accel 52W",
   from_high_pct_4w: "From 4W High",
   // Moving average structure
   price_vs_ma20_pct: "Px vs MA20",

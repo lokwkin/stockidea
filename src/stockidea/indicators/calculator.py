@@ -117,6 +117,25 @@ def _tail(seq: list, n: int) -> list:
     return seq[-min(n, len(seq)) :] if seq else []
 
 
+def _acceleration_pct(window: list[WeeklyData]) -> float:
+    """Recent-half slope minus earlier-half slope, scaled by window's starting price.
+
+    Returns 0.0 if the window has fewer than 4 weeks (each half needs ≥2 points).
+    """
+    if len(window) < 4:
+        return 0.0
+    mid = len(window) // 2
+    early, late = window[:mid], window[mid:]
+    x_e = np.arange(len(early))
+    y_e = np.array([w.closing_price for w in early])
+    s_e, _, _, _, _ = stats.linregress(x_e, y_e)
+    x_l = np.arange(len(late))
+    y_l = np.array([w.closing_price for w in late])
+    s_l, _, _, _, _ = stats.linregress(x_l, y_l)
+    base = window[0].closing_price
+    return float(((s_l - s_e) / base) * 100) if base != 0 else 0.0
+
+
 def compute_stock_indicators(
     symbol: str,
     prices: list[StockPrice],
@@ -182,9 +201,11 @@ def compute_stock_indicators(
     ]
 
     # Slope & R² per window (linear)
+    w4 = _tail(weekly_data, 4)
     w13 = _tail(weekly_data, 13)
     w26 = _tail(weekly_data, 26)
     w52 = weekly_data
+    slope_pct_4w, r_squared_4w = _linregress_slope_pct_r2(w4)
     slope_pct_13w, r_squared_13w = _linregress_slope_pct_r2(w13)
     slope_pct_26w, r_squared_26w = _linregress_slope_pct_r2(w26)
     slope_pct_52w, r_squared_52w = _linregress_slope_pct_r2(w52)
@@ -193,10 +214,6 @@ def compute_stock_indicators(
     log_slope_13w, log_r_squared_13w = _log_slope_r2(w13)
     log_slope_26w, log_r_squared_26w = _log_slope_r2(w26)
     log_slope_52w, log_r_squared_52w = _log_slope_r2(w52)
-
-    # 4-week R² (short-term trend consistency); slope at 4w is too noisy to keep
-    w4 = _tail(weekly_data, 4)
-    _, r_squared_4w = _linregress_slope_pct_r2(w4)
 
     # Max drawdown per window
     max_drawdown_pct_4w = _max_drawdown_pct(weekly_close[-min(4, len(weekly_close)) :])
@@ -219,23 +236,11 @@ def compute_stock_indicators(
     negative_changes = [c for c in weekly_changes if c < 0]
     downside_std_52w = float(np.std(negative_changes)) if negative_changes else 0.0
 
-    # Momentum acceleration over 13 weeks (recent half slope minus earlier half slope)
-    if len(w13) >= 6:
-        mid = len(w13) // 2
-        w13_early = w13[:mid]
-        w13_late = w13[mid:]
-        x_early = np.arange(len(w13_early))
-        y_early = np.array([w.closing_price for w in w13_early])
-        s_early, _, _, _, _ = stats.linregress(x_early, y_early)
-        x_late = np.arange(len(w13_late))
-        y_late = np.array([w.closing_price for w in w13_late])
-        s_late, _, _, _, _ = stats.linregress(x_late, y_late)
-        base_price = w13[0].closing_price
-        acceleration_pct_13w = (
-            float(((s_late - s_early) / base_price) * 100) if base_price != 0 else 0.0
-        )
-    else:
-        acceleration_pct_13w = 0.0
+    # Momentum acceleration per window (recent-half slope minus earlier-half slope)
+    acceleration_pct_4w = _acceleration_pct(w4)
+    acceleration_pct_13w = _acceleration_pct(w13)
+    acceleration_pct_26w = _acceleration_pct(w26)
+    acceleration_pct_52w = _acceleration_pct(w52)
 
     # Distance from 4-week high (always <= 0)
     w4_prices = np.array([w.closing_price for w in w4]) if w4 else weekly_close[-1:]
@@ -269,6 +274,7 @@ def compute_stock_indicators(
         date=to_date.date(),
         total_weeks=total_weeks,
         # Slope
+        slope_pct_4w=slope_pct_4w,
         slope_pct_13w=slope_pct_13w,
         slope_pct_26w=slope_pct_26w,
         slope_pct_52w=slope_pct_52w,
@@ -312,7 +318,10 @@ def compute_stock_indicators(
         pct_weeks_positive_26w=pct_weeks_positive_26w,
         pct_weeks_positive_52w=pct_weeks_positive_52w,
         # Momentum shape
+        acceleration_pct_4w=acceleration_pct_4w,
         acceleration_pct_13w=acceleration_pct_13w,
+        acceleration_pct_26w=acceleration_pct_26w,
+        acceleration_pct_52w=acceleration_pct_52w,
         from_high_pct_4w=from_high_pct_4w,
         # MA structure
         price_vs_ma20_pct=price_vs_ma20_pct,

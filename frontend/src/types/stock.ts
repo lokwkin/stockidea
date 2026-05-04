@@ -4,6 +4,7 @@ export interface StockIndicators {
   date: string;
   total_weeks: number;
   // Linear regression slope (% per week)
+  slope_pct_4w: number;
   slope_pct_13w: number;
   slope_pct_26w: number;
   slope_pct_52w: number;
@@ -47,7 +48,10 @@ export interface StockIndicators {
   pct_weeks_positive_26w: number;
   pct_weeks_positive_52w: number;
   // Momentum shape
+  acceleration_pct_4w: number;
   acceleration_pct_13w: number;
+  acceleration_pct_26w: number;
+  acceleration_pct_52w: number;
   from_high_pct_4w: number;
   // Moving average structure (price vs SMA, %)
   price_vs_ma20_pct?: number;

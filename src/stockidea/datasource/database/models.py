@@ -302,6 +302,9 @@ class DBStockIndicators(Base):
     date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
     total_weeks: Mapped[int] = mapped_column(Integer, nullable=False)
     # Slope (linear regression, % per week) per window
+    slope_pct_4w: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
     slope_pct_13w: Mapped[float] = mapped_column(Float, nullable=False)
     slope_pct_26w: Mapped[float] = mapped_column(Float, nullable=False)
     slope_pct_52w: Mapped[float] = mapped_column(Float, nullable=False)
@@ -345,7 +348,16 @@ class DBStockIndicators(Base):
     pct_weeks_positive_26w: Mapped[float] = mapped_column(Float, nullable=False)
     pct_weeks_positive_52w: Mapped[float] = mapped_column(Float, nullable=False)
     # Momentum shape
+    acceleration_pct_4w: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
     acceleration_pct_13w: Mapped[float] = mapped_column(Float, nullable=False)
+    acceleration_pct_26w: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    acceleration_pct_52w: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
     from_high_pct_4w: Mapped[float] = mapped_column(Float, nullable=False)
     # Moving average structure (price relative to SMA, %)
     price_vs_ma20_pct: Mapped[float] = mapped_column(

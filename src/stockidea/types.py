@@ -58,6 +58,7 @@ class StockIndicators(BaseModel):
     date: date
     total_weeks: int
     # Linear regression slope (% of starting price per week) per window
+    slope_pct_4w: float
     slope_pct_13w: float
     slope_pct_26w: float
     slope_pct_52w: float
@@ -100,10 +101,11 @@ class StockIndicators(BaseModel):
     pct_weeks_positive_13w: float
     pct_weeks_positive_26w: float
     pct_weeks_positive_52w: float
-    # Momentum shape
-    acceleration_pct_13w: (
-        float  # recent-half slope minus earlier-half slope over 13w (% per week)
-    )
+    # Momentum shape (recent-half slope minus earlier-half slope, % per week)
+    acceleration_pct_4w: float
+    acceleration_pct_13w: float
+    acceleration_pct_26w: float
+    acceleration_pct_52w: float
     from_high_pct_4w: float  # distance from 4-week high (always <= 0)
     # Moving average structure (price relative to SMA, %)
     price_vs_ma20_pct: float = 0.0
